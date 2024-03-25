@@ -206,6 +206,15 @@ func installPackage(filename, installDir string) error {
 	return nil
 }
 
+func isPackageInstalled(pkg string) bool {
+	dataDir := path.Join(rootDir, "var/lib/bpm/installed/")
+	pkgDir := path.Join(dataDir, pkg)
+	if _, err := os.Stat(pkgDir); err != nil {
+		return false
+	}
+	return true
+}
+
 func getInstalledPackages() ([]string, error) {
 	dataDir := path.Join(rootDir, "var/lib/bpm/installed/")
 	items, err := os.ReadDir(dataDir)
@@ -276,6 +285,9 @@ func removePackage(pkg string) error {
 	for _, file := range files {
 		file = path.Join(rootDir, file)
 		stat, err := os.Stat(file)
+		if os.IsNotExist(err) {
+			continue
+		}
 		if err != nil {
 			return err
 		}
