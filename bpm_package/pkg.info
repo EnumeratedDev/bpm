@@ -1,0 +1,4 @@
+name: bpm
+description: The Bubble Package Manager
+version: 0.0.1
+type: binary
