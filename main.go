@@ -6,7 +6,9 @@ import (
 	"fmt"
 	"log"
 	"os"
+	"path"
 	"slices"
+	"strconv"
 	"strings"
 )
 
@@ -15,10 +17,22 @@ import (
 /*   A simple-to-use package manager  */
 /* ---------------------------------- */
 
-var bpmVer = "0.0.5"
+var bpmVer = "0.0.6"
 var rootDir = "/"
 
 func main() {
+	errs, fixed := bpm_utils.FixInstalledPackages(rootDir)
+	if len(errs) != 0 {
+		for pkg, err := range errs {
+			fmt.Printf("Package (%s) could not be read properly\nError: %s\n", pkg, err.Error())
+		}
+		fmt.Println("The aforementioned packages require manual fixing. Make sure their info files are valid in " + path.Join(rootDir, "var/lib/bpm/installed"))
+		os.Exit(1)
+	} else {
+		if fixed != 0 {
+			fmt.Println("Fixed " + strconv.Itoa(fixed) + " outdated package info files")
+		}
+	}
 	if os.Getuid() != 0 {
 		fmt.Println("BPM needs to be run with superuser permissions")
 		os.Exit(0)
@@ -80,7 +94,7 @@ func resolveCommand() {
 			return
 		}
 		for n, pkg := range packages {
-			info := bpm_utils.GetPackageInfo(pkg, rootDir)
+			info := bpm_utils.GetPackageInfo(pkg, rootDir, false)
 			if info == nil {
 				fmt.Printf("Package (%s) could not be found\n", pkg)
 				continue
@@ -102,7 +116,7 @@ func resolveCommand() {
 			return
 		}
 		for n, pkg := range packages {
-			info := bpm_utils.GetPackageInfo(pkg, rootDir)
+			info := bpm_utils.GetPackageInfo(pkg, rootDir, false)
 			if info == nil {
 				fmt.Printf("Package (%s) could not be found\n", pkg)
 				continue
@@ -127,13 +141,18 @@ func resolveCommand() {
 			fmt.Print("----------------\n" + bpm_utils.CreateInfoFile(*pkgInfo))
 			fmt.Println("----------------")
 			if !slices.Contains(flags, "f") {
+				if pkgInfo.Arch != bpm_utils.GetArch() {
+					fmt.Println("skipping... cannot install a package with a different architecture")
+					continue
+				}
 				if unresolved := bpm_utils.CheckDependencies(pkgInfo, rootDir); len(unresolved) != 0 {
-					log.Fatalf("Cannot install package (%s) due to missing dependencies: %s\n", pkgInfo.Name, strings.Join(unresolved, ", "))
+					fmt.Printf("skipping... cannot install package (%s) due to missing dependencies: %s\n", pkgInfo.Name, strings.Join(unresolved, ", "))
+					continue
 				}
 			}
 			if bpm_utils.IsPackageInstalled(pkgInfo.Name, rootDir) {
 				if !slices.Contains(flags, "y") {
-					installedInfo := bpm_utils.GetPackageInfo(pkgInfo.Name, rootDir)
+					installedInfo := bpm_utils.GetPackageInfo(pkgInfo.Name, rootDir, false)
 					if strings.Compare(pkgInfo.Version, installedInfo.Version) > 0 {
 						fmt.Println("This file contains a newer version of this package (" + installedInfo.Version + " -> " + pkgInfo.Version + ")")
 						fmt.Print("Do you wish to update this package? [y\\N] ")
@@ -179,7 +198,7 @@ func resolveCommand() {
 			return
 		}
 		for _, pkg := range packages {
-			pkgInfo := bpm_utils.GetPackageInfo(pkg, rootDir)
+			pkgInfo := bpm_utils.GetPackageInfo(pkg, rootDir, false)
 			if pkgInfo == nil {
 				fmt.Printf("Package (%s) could not be found\n", pkg)
 				continue
@@ -210,7 +229,7 @@ func resolveCommand() {
 		fmt.Println("-> bpm version | shows information on the installed version of bpm")
 		fmt.Println("-> bpm info | shows information on an installed package")
 		fmt.Println("-> bpm list | lists all installed packages")
-		fmt.Println("-> bpm install [-y, -f] <files...> | installs the following files. -y skips the confirmation prompt. -f skips dependency resolution")
+		fmt.Println("-> bpm install [-y, -f] <files...> | installs the following files. -y skips the confirmation prompt. -f skips dependency and architecture checking")
 		fmt.Println("-> bpm remove [-y] <packages...> | removes the following packages. -y skips the confirmation prompt")
 		fmt.Println("-> bpm cleanup | removes all unneeded dependencies")
 		fmt.Println("\033[1m----------------\033[0m")

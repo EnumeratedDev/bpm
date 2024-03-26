@@ -7,6 +7,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"log"
 	"os"
 	"path"
 	"slices"
@@ -18,6 +19,7 @@ type PackageInfo struct {
 	Name        string
 	Description string
 	Version     string
+	Arch        string
 	Type        string
 	Depends     []string
 	Provides    []string
@@ -50,7 +52,7 @@ func ReadPackage(filename string) (*PackageInfo, error) {
 			if err != nil {
 				return nil, err
 			}
-			pkgInfo, err := ReadPackageInfo(string(bs))
+			pkgInfo, err := ReadPackageInfo(string(bs), false)
 			if err != nil {
 				return nil, err
 			}
@@ -60,8 +62,16 @@ func ReadPackage(filename string) (*PackageInfo, error) {
 	return nil, errors.New("pkg.info not found in archive")
 }
 
-func ReadPackageInfo(contents string) (*PackageInfo, error) {
-	pkgInfo := PackageInfo{}
+func ReadPackageInfo(contents string, defaultValues bool) (*PackageInfo, error) {
+	pkgInfo := PackageInfo{
+		Name:        "",
+		Description: "",
+		Version:     "",
+		Arch:        "",
+		Type:        "",
+		Depends:     nil,
+		Provides:    nil,
+	}
 	lines := strings.Split(contents, "\n")
 	for num, line := range lines {
 		if len(strings.TrimSpace(line)) == 0 {
@@ -80,6 +90,8 @@ func ReadPackageInfo(contents string) (*PackageInfo, error) {
 			pkgInfo.Description = split[1]
 		case "version":
 			pkgInfo.Version = split[1]
+		case "architecture":
+			pkgInfo.Arch = split[1]
 		case "type":
 			pkgInfo.Type = split[1]
 		case "depends":
@@ -90,6 +102,19 @@ func ReadPackageInfo(contents string) (*PackageInfo, error) {
 			pkgInfo.Provides = stringSliceRemoveEmpty(pkgInfo.Depends)
 		}
 	}
+	if !defaultValues {
+		if pkgInfo.Name == "" {
+			return nil, errors.New("this package contains no name")
+		} else if pkgInfo.Description == "" {
+			return nil, errors.New("this package contains no description")
+		} else if pkgInfo.Version == "" {
+			return nil, errors.New("this package contains no version")
+		} else if pkgInfo.Arch == "" {
+			return nil, errors.New("this package contains no architecture")
+		} else if pkgInfo.Type == "" {
+			return nil, errors.New("this package contains no type")
+		}
+	}
 	return &pkgInfo, nil
 }
 
@@ -98,6 +123,7 @@ func CreateInfoFile(pkgInfo PackageInfo) string {
 	ret = ret + "name: " + pkgInfo.Name + "\n"
 	ret = ret + "description: " + pkgInfo.Description + "\n"
 	ret = ret + "version: " + pkgInfo.Version + "\n"
+	ret = ret + "architecture: " + pkgInfo.Arch + "\n"
 	ret = ret + "type: " + pkgInfo.Type + "\n"
 	if len(pkgInfo.Depends) > 0 {
 		ret = ret + "depends (" + strconv.Itoa(len(pkgInfo.Depends)) + "): " + strings.Join(pkgInfo.Depends, ",") + "\n"
@@ -127,6 +153,9 @@ func InstallPackage(filename, installDir string, force bool) error {
 		return err
 	}
 	if !force {
+		if pkgInfo.Arch != GetArch() {
+			return errors.New("cannot install a package with a different architecture")
+		}
 		if unresolved := CheckDependencies(pkgInfo, installDir); len(unresolved) != 0 {
 			return errors.New("Could not resolve all dependencies. Missing " + strings.Join(unresolved, ", "))
 		}
@@ -298,7 +327,7 @@ func GetPackageFiles(pkg, rootDir string) []string {
 	return ret
 }
 
-func GetPackageInfo(pkg, rootDir string) *PackageInfo {
+func GetPackageInfo(pkg, rootDir string, defaultValues bool) *PackageInfo {
 	installedDir := path.Join(rootDir, "var/lib/bpm/installed/")
 	pkgDir := path.Join(installedDir, pkg)
 	files := path.Join(pkgDir, "info")
@@ -316,11 +345,29 @@ func GetPackageInfo(pkg, rootDir string) *PackageInfo {
 	if err != nil {
 		return nil
 	}
-	info, err := ReadPackageInfo(string(bs))
+	info, err := ReadPackageInfo(string(bs), defaultValues)
 	if err != nil {
 		return nil
 	}
 	return info
+}
+
+func setPackageInfo(pkg, contents, rootDir string) error {
+	installedDir := path.Join(rootDir, "var/lib/bpm/installed/")
+	pkgDir := path.Join(installedDir, pkg)
+	info := path.Join(pkgDir, "info")
+	if _, err := os.Stat(installedDir); os.IsNotExist(err) {
+		return err
+	}
+	if _, err := os.Stat(pkgDir); os.IsNotExist(err) {
+		return err
+	}
+	bs := []byte(contents)
+	err := os.WriteFile(info, bs, 0644)
+	if err != nil {
+		return err
+	}
+	return nil
 }
 
 func RemovePackage(pkg, rootDir string) error {
@@ -362,4 +409,45 @@ func RemovePackage(pkg, rootDir string) error {
 	}
 	fmt.Println("Removing: " + pkgDir)
 	return nil
+}
+
+func FixInstalledPackages(rootDir string) (map[string]error, int) {
+	var errs map[string]error
+	totalFixed := 0
+	pkgs, err := GetInstalledPackages(rootDir)
+	if err != nil {
+		log.Fatalf("Could not check if installed package info files are formatted correctly\nError: %s", err.Error())
+	}
+	for _, pkg := range pkgs {
+		fixed := false
+		pkgInfo := GetPackageInfo(pkg, "/", true)
+		if pkgInfo.Name == "" {
+			errs[pkg] = errors.New("this package contains no name")
+			continue
+		}
+		if pkgInfo.Description == "" {
+			pkgInfo.Description = "Default Description"
+			fixed = true
+		}
+		if pkgInfo.Version == "" {
+			errs[pkg] = errors.New("this package contains no version")
+			continue
+		}
+		if pkgInfo.Arch == "" {
+			pkgInfo.Arch = GetArch()
+			fixed = true
+		}
+		if pkgInfo.Type == "" {
+			errs[pkg] = errors.New("this package contains no type")
+			continue
+		}
+		if fixed {
+			totalFixed++
+		}
+		err := setPackageInfo(pkg, CreateInfoFile(*pkgInfo), rootDir)
+		if err != nil {
+			log.Fatalf("Could not check if installed package info files are formatted correctly\nError: %s", err.Error())
+		}
+	}
+	return errs, totalFixed
 }

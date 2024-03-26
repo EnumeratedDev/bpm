@@ -1,23 +1,16 @@
 package bpm_utils
 
-import "syscall"
+import (
+	"os/exec"
+	"strings"
+)
 
-func getArch() string {
-	u := syscall.Utsname{}
-	err := syscall.Uname(&u)
+func GetArch() string {
+	output, err := exec.Command("/usr/bin/uname", "-m").Output()
 	if err != nil {
-		return "unknown"
+		return ""
 	}
-	return byteArrayToString(u.Machine[:])
-}
-
-func getKernel() string {
-	u := syscall.Utsname{}
-	err := syscall.Uname(&u)
-	if err != nil {
-		return "unknown"
-	}
-	return byteArrayToString(u.Sysname[:]) + " " + byteArrayToString(u.Release[:])
+	return strings.TrimSpace(byteArrayToString(output))
 }
 
 func stringSliceRemove(s []string, r string) []string {
@@ -39,10 +32,10 @@ func stringSliceRemoveEmpty(s []string) []string {
 	return r
 }
 
-func byteArrayToString(bs []int8) string {
+func byteArrayToString(bs []byte) string {
 	b := make([]byte, len(bs))
 	for i, v := range bs {
-		b[i] = byte(v)
+		b[i] = v
 	}
 	return string(b)
 }

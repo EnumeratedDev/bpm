@@ -1,4 +1,5 @@
 name: hello
 description: A simple hello world program
 version: 1.0
+architecture: x86_64
 type: binary
