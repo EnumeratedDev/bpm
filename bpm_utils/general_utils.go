@@ -1,4 +1,4 @@
-package main
+package bpm_utils
 
 import "syscall"
 
@@ -18,6 +18,25 @@ func getKernel() string {
 		return "unknown"
 	}
 	return byteArrayToString(u.Sysname[:]) + " " + byteArrayToString(u.Release[:])
+}
+
+func stringSliceRemove(s []string, r string) []string {
+	for i, v := range s {
+		if v == r {
+			return append(s[:i], s[i+1:]...)
+		}
+	}
+	return s
+}
+
+func stringSliceRemoveEmpty(s []string) []string {
+	var r []string
+	for _, str := range s {
+		if str != "" {
+			r = append(r, str)
+		}
+	}
+	return r
 }
 
 func byteArrayToString(bs []int8) string {

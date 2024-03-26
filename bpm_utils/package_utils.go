@@ -1,4 +1,4 @@
-package main
+package bpm_utils
 
 import (
 	"archive/tar"
@@ -14,16 +14,16 @@ import (
 	"strings"
 )
 
-type packageInfo struct {
-	name        string
-	description string
-	version     string
-	pkgType     string
-	depends     []string
-	provides    []string
+type PackageInfo struct {
+	Name        string
+	Description string
+	Version     string
+	Type        string
+	Depends     []string
+	Provides    []string
 }
 
-func readPackage(filename string) (*packageInfo, error) {
+func ReadPackage(filename string) (*PackageInfo, error) {
 	if _, err := os.Stat(filename); os.IsNotExist(err) {
 		return nil, err
 	}
@@ -50,7 +50,7 @@ func readPackage(filename string) (*packageInfo, error) {
 			if err != nil {
 				return nil, err
 			}
-			pkgInfo, err := readPackageInfo(string(bs))
+			pkgInfo, err := ReadPackageInfo(string(bs))
 			if err != nil {
 				return nil, err
 			}
@@ -60,8 +60,8 @@ func readPackage(filename string) (*packageInfo, error) {
 	return nil, errors.New("pkg.info not found in archive")
 }
 
-func readPackageInfo(contents string) (*packageInfo, error) {
-	pkgInfo := packageInfo{}
+func ReadPackageInfo(contents string) (*PackageInfo, error) {
+	pkgInfo := PackageInfo{}
 	lines := strings.Split(contents, "\n")
 	for num, line := range lines {
 		if len(strings.TrimSpace(line)) == 0 {
@@ -75,28 +75,40 @@ func readPackageInfo(contents string) (*packageInfo, error) {
 		split[1] = strings.Trim(split[1], " ")
 		switch split[0] {
 		case "name":
-			pkgInfo.name = split[1]
+			pkgInfo.Name = split[1]
 		case "description":
-			pkgInfo.description = split[1]
+			pkgInfo.Description = split[1]
 		case "version":
-			pkgInfo.version = split[1]
+			pkgInfo.Version = split[1]
 		case "type":
-			pkgInfo.pkgType = split[1]
+			pkgInfo.Type = split[1]
+		case "depends":
+			pkgInfo.Depends = strings.Split(strings.Replace(split[1], " ", "", -1), ",")
+			pkgInfo.Depends = stringSliceRemoveEmpty(pkgInfo.Depends)
+		case "provides":
+			pkgInfo.Provides = strings.Split(strings.Replace(split[1], " ", "", -1), ",")
+			pkgInfo.Provides = stringSliceRemoveEmpty(pkgInfo.Depends)
 		}
 	}
 	return &pkgInfo, nil
 }
 
-func createInfoFile(pkgInfo packageInfo) string {
+func CreateInfoFile(pkgInfo PackageInfo) string {
 	ret := ""
-	ret = ret + "name: " + pkgInfo.name + "\n"
-	ret = ret + "description: " + pkgInfo.description + "\n"
-	ret = ret + "version: " + pkgInfo.version + "\n"
-	ret = ret + "type: " + pkgInfo.pkgType + "\n"
+	ret = ret + "name: " + pkgInfo.Name + "\n"
+	ret = ret + "description: " + pkgInfo.Description + "\n"
+	ret = ret + "version: " + pkgInfo.Version + "\n"
+	ret = ret + "type: " + pkgInfo.Type + "\n"
+	if len(pkgInfo.Depends) > 0 {
+		ret = ret + "depends (" + strconv.Itoa(len(pkgInfo.Depends)) + "): " + strings.Join(pkgInfo.Depends, ",") + "\n"
+	}
+	if len(pkgInfo.Provides) > 0 {
+		ret = ret + "provides (" + strconv.Itoa(len(pkgInfo.Provides)) + "): " + strings.Join(pkgInfo.Provides, ",") + "\n"
+	}
 	return ret
 }
 
-func installPackage(filename, installDir string) error {
+func InstallPackage(filename, installDir string, force bool) error {
 	if _, err := os.Stat(filename); os.IsNotExist(err) {
 		return err
 	}
@@ -110,7 +122,15 @@ func installPackage(filename, installDir string) error {
 	}
 	tr := tar.NewReader(archive)
 	var files []string
-	var pkgInfo *packageInfo
+	pkgInfo, err := ReadPackage(filename)
+	if err != nil {
+		return err
+	}
+	if !force {
+		if unresolved := CheckDependencies(pkgInfo, installDir); len(unresolved) != 0 {
+			return errors.New("Could not resolve all dependencies. Missing " + strings.Join(unresolved, ", "))
+		}
+	}
 	for {
 		header, err := tr.Next()
 		if err == io.EOF {
@@ -118,16 +138,6 @@ func installPackage(filename, installDir string) error {
 		}
 		if err != nil {
 			return err
-		}
-		if header.Name == "pkg.info" {
-			bs, _ := io.ReadAll(tr)
-			if err != nil {
-				return err
-			}
-			pkgInfo, err = readPackageInfo(string(bs))
-			if err != nil {
-				return err
-			}
 		}
 		if strings.HasPrefix(header.Name, "files/") && header.Name != "files/" {
 			extractFilename := path.Join(installDir, strings.TrimPrefix(header.Name, "files/"))
@@ -164,12 +174,12 @@ func installPackage(filename, installDir string) error {
 	slices.Sort(files)
 	slices.Reverse(files)
 
-	dataDir := path.Join(installDir, "var/lib/bpm/installed/")
-	err = os.MkdirAll(dataDir, 755)
+	installedDir := path.Join(installDir, "var/lib/bpm/installed/")
+	err = os.MkdirAll(installedDir, 755)
 	if err != nil {
 		return err
 	}
-	pkgDir := path.Join(dataDir, pkgInfo.name)
+	pkgDir := path.Join(installedDir, pkgInfo.Name)
 	err = os.RemoveAll(pkgDir)
 	if err != nil {
 		return err
@@ -189,35 +199,70 @@ func installPackage(filename, installDir string) error {
 			return err
 		}
 	}
-	f.Close()
+	err = f.Close()
+	if err != nil {
+		return err
+	}
 
 	f, err = os.Create(path.Join(pkgDir, "info"))
 	if err != nil {
 		return err
 	}
-	_, err = f.WriteString(createInfoFile(*pkgInfo))
+	_, err = f.WriteString(CreateInfoFile(*pkgInfo))
 	if err != nil {
 		return err
 	}
-	f.Close()
+	err = f.Close()
+	if err != nil {
+		return err
+	}
 
-	archive.Close()
-	file.Close()
+	err = archive.Close()
+	if err != nil {
+		return err
+	}
+	err = file.Close()
+	if err != nil {
+		return err
+	}
 	return nil
 }
 
-func isPackageInstalled(pkg string) bool {
-	dataDir := path.Join(rootDir, "var/lib/bpm/installed/")
-	pkgDir := path.Join(dataDir, pkg)
+func CheckDependencies(pkgInfo *PackageInfo, rootDir string) []string {
+	unresolved := make([]string, len(pkgInfo.Depends))
+	copy(unresolved, pkgInfo.Depends)
+	installedDir := path.Join(rootDir, "var/lib/bpm/installed/")
+	if _, err := os.Stat(installedDir); err != nil {
+		return nil
+	}
+	items, err := os.ReadDir(installedDir)
+	if err != nil {
+		return nil
+	}
+
+	for _, item := range items {
+		if !item.IsDir() {
+			continue
+		}
+		if slices.Contains(unresolved, item.Name()) {
+			unresolved = stringSliceRemove(unresolved, item.Name())
+		}
+	}
+	return unresolved
+}
+
+func IsPackageInstalled(pkg, rootDir string) bool {
+	installedDir := path.Join(rootDir, "var/lib/bpm/installed/")
+	pkgDir := path.Join(installedDir, pkg)
 	if _, err := os.Stat(pkgDir); err != nil {
 		return false
 	}
 	return true
 }
 
-func getInstalledPackages() ([]string, error) {
-	dataDir := path.Join(rootDir, "var/lib/bpm/installed/")
-	items, err := os.ReadDir(dataDir)
+func GetInstalledPackages(rootDir string) ([]string, error) {
+	installedDir := path.Join(rootDir, "var/lib/bpm/installed/")
+	items, err := os.ReadDir(installedDir)
 	if os.IsNotExist(err) {
 		return nil, nil
 	}
@@ -231,12 +276,12 @@ func getInstalledPackages() ([]string, error) {
 	return ret, nil
 }
 
-func getPackageFiles(pkg string) []string {
+func GetPackageFiles(pkg, rootDir string) []string {
 	var ret []string
-	dataDir := path.Join(rootDir, "var/lib/bpm/installed/")
-	pkgDir := path.Join(dataDir, pkg)
+	installedDir := path.Join(rootDir, "var/lib/bpm/installed/")
+	pkgDir := path.Join(installedDir, pkg)
 	files := path.Join(pkgDir, "files")
-	if _, err := os.Stat(dataDir); os.IsNotExist(err) {
+	if _, err := os.Stat(installedDir); os.IsNotExist(err) {
 		return nil
 	}
 	if _, err := os.Stat(pkgDir); os.IsNotExist(err) {
@@ -253,11 +298,11 @@ func getPackageFiles(pkg string) []string {
 	return ret
 }
 
-func getPackageInfo(pkg string) *packageInfo {
-	dataDir := path.Join(rootDir, "var/lib/bpm/installed/")
-	pkgDir := path.Join(dataDir, pkg)
+func GetPackageInfo(pkg, rootDir string) *PackageInfo {
+	installedDir := path.Join(rootDir, "var/lib/bpm/installed/")
+	pkgDir := path.Join(installedDir, pkg)
 	files := path.Join(pkgDir, "info")
-	if _, err := os.Stat(dataDir); os.IsNotExist(err) {
+	if _, err := os.Stat(installedDir); os.IsNotExist(err) {
 		return nil
 	}
 	if _, err := os.Stat(pkgDir); os.IsNotExist(err) {
@@ -271,17 +316,17 @@ func getPackageInfo(pkg string) *packageInfo {
 	if err != nil {
 		return nil
 	}
-	info, err := readPackageInfo(string(bs))
+	info, err := ReadPackageInfo(string(bs))
 	if err != nil {
 		return nil
 	}
 	return info
 }
 
-func removePackage(pkg string) error {
-	dataDir := path.Join(rootDir, "var/lib/bpm/installed/")
-	pkgDir := path.Join(dataDir, pkg)
-	files := getPackageFiles(pkg)
+func RemovePackage(pkg, rootDir string) error {
+	installedDir := path.Join(rootDir, "var/lib/bpm/installed/")
+	pkgDir := path.Join(installedDir, pkg)
+	files := GetPackageFiles(pkg, rootDir)
 	for _, file := range files {
 		file = path.Join(rootDir, file)
 		stat, err := os.Stat(file)

@@ -1,0 +1,4 @@
+name: bpm-utils
+description: Utilities to create BPM packages
+version: 1.0.0
+type: binary

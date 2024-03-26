@@ -1,0 +1,28 @@
+#!/bin/bash
+if [ $# -eq 0 ]
+then
+  echo "No output package name given!"
+  exit 1
+fi
+
+output=$1
+
+echo "Creating package with the name $output..."
+
+if [ -d files ]; then
+  echo "files/ directory found"
+else
+  echo "files/ directory not found in $PWD"
+  exit 1
+fi
+
+if [ -f pkg.info ]; then
+  echo "pkg.info file found"
+else
+  echo "pkg.info file not found in $PWD"
+  exit 1
+fi
+
+echo "Creating $output.bpm package..."
+
+tar -czf $output.bpm files/ pkg.info

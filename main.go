@@ -2,6 +2,7 @@ package main
 
 import (
 	"bufio"
+	"capcreepergr.me/bpm/bpm_utils"
 	"fmt"
 	"log"
 	"os"
@@ -14,11 +15,14 @@ import (
 /*   A simple-to-use package manager  */
 /* ---------------------------------- */
 
-var bpmVer = "0.0.3"
-var rootDir string = "/"
+var bpmVer = "0.0.5"
+var rootDir = "/"
 
 func main() {
-	//fmt.Printf("Running %s %s\n", getKernel(), getArch())
+	if os.Getuid() != 0 {
+		fmt.Println("BPM needs to be run with superuser permissions")
+		os.Exit(0)
+	}
 	resolveCommand()
 }
 
@@ -76,19 +80,19 @@ func resolveCommand() {
 			return
 		}
 		for n, pkg := range packages {
-			info := getPackageInfo(pkg)
+			info := bpm_utils.GetPackageInfo(pkg, rootDir)
 			if info == nil {
 				fmt.Printf("Package (%s) could not be found\n", pkg)
 				continue
 			}
-			fmt.Print("----------------\n" + createInfoFile(*info))
+			fmt.Print("----------------\n" + bpm_utils.CreateInfoFile(*info))
 			if n == len(packages)-1 {
 				fmt.Println("----------------")
 			}
 		}
 	case list:
 		resolveFlags()
-		packages, err := getInstalledPackages()
+		packages, err := bpm_utils.GetInstalledPackages(rootDir)
 		if err != nil {
 			log.Fatalf("Could not get installed packages\nError: %s", err.Error())
 			return
@@ -98,12 +102,12 @@ func resolveCommand() {
 			return
 		}
 		for n, pkg := range packages {
-			info := getPackageInfo(pkg)
+			info := bpm_utils.GetPackageInfo(pkg, rootDir)
 			if info == nil {
 				fmt.Printf("Package (%s) could not be found\n", pkg)
 				continue
 			}
-			fmt.Print("----------------\n" + createInfoFile(*info))
+			fmt.Print("----------------\n" + bpm_utils.CreateInfoFile(*info))
 			if n == len(packages)-1 {
 				fmt.Println("----------------")
 			}
@@ -116,33 +120,38 @@ func resolveCommand() {
 			return
 		}
 		for _, file := range files {
-			pkgInfo, err := readPackage(file)
+			pkgInfo, err := bpm_utils.ReadPackage(file)
 			if err != nil {
 				log.Fatalf("Could not read package\nError: %s\n", err)
 			}
-			fmt.Print("----------------\n" + createInfoFile(*pkgInfo))
+			fmt.Print("----------------\n" + bpm_utils.CreateInfoFile(*pkgInfo))
 			fmt.Println("----------------")
-			if isPackageInstalled(pkgInfo.name) {
+			if !slices.Contains(flags, "f") {
+				if unresolved := bpm_utils.CheckDependencies(pkgInfo, rootDir); len(unresolved) != 0 {
+					log.Fatalf("Cannot install package (%s) due to missing dependencies: %s\n", pkgInfo.Name, strings.Join(unresolved, ", "))
+				}
+			}
+			if bpm_utils.IsPackageInstalled(pkgInfo.Name, rootDir) {
 				if !slices.Contains(flags, "y") {
-					installedInfo := getPackageInfo(pkgInfo.name)
-					if strings.Compare(pkgInfo.version, installedInfo.version) > 0 {
-						fmt.Println("This file contains a newer version of this package (" + installedInfo.version + " -> " + pkgInfo.version + ")")
+					installedInfo := bpm_utils.GetPackageInfo(pkgInfo.Name, rootDir)
+					if strings.Compare(pkgInfo.Version, installedInfo.Version) > 0 {
+						fmt.Println("This file contains a newer version of this package (" + installedInfo.Version + " -> " + pkgInfo.Version + ")")
 						fmt.Print("Do you wish to update this package? [y\\N] ")
-					} else if strings.Compare(pkgInfo.version, installedInfo.version) < 0 {
-						fmt.Println("This file contains an older version of this package (" + installedInfo.version + " -> " + pkgInfo.version + ")")
+					} else if strings.Compare(pkgInfo.Version, installedInfo.Version) < 0 {
+						fmt.Println("This file contains an older version of this package (" + installedInfo.Version + " -> " + pkgInfo.Version + ")")
 						fmt.Print("Do you wish to downgrade this package? (Not recommended) [y\\N] ")
-					} else if strings.Compare(pkgInfo.version, installedInfo.version) == 0 {
+					} else if strings.Compare(pkgInfo.Version, installedInfo.Version) == 0 {
 						fmt.Println("This package is already installed on the system and is up to date")
 						fmt.Print("Do you wish to reinstall this package? [y\\N] ")
 					}
 					reader := bufio.NewReader(os.Stdin)
 					text, _ := reader.ReadString('\n')
 					if strings.TrimSpace(strings.ToLower(text)) != "y" && strings.TrimSpace(strings.ToLower(text)) != "yes" {
-						fmt.Printf("Skipping package (%s)...\n", pkgInfo.name)
+						fmt.Printf("Skipping package (%s)...\n", pkgInfo.Name)
 						continue
 					}
 				}
-				err := removePackage(pkgInfo.name)
+				err := bpm_utils.RemovePackage(pkgInfo.Name, rootDir)
 				if err != nil {
 					log.Fatalf("Could not remove current version of the package\nError: %s\n", err)
 				}
@@ -151,16 +160,16 @@ func resolveCommand() {
 				reader := bufio.NewReader(os.Stdin)
 				text, _ := reader.ReadString('\n')
 				if strings.TrimSpace(strings.ToLower(text)) != "y" && strings.TrimSpace(strings.ToLower(text)) != "yes" {
-					fmt.Printf("Skipping package (%s)...\n", pkgInfo.name)
+					fmt.Printf("Skipping package (%s)...\n", pkgInfo.Name)
 					continue
 				}
 			}
 
-			err = installPackage(file, rootDir)
+			err = bpm_utils.InstallPackage(file, rootDir, slices.Contains(flags, "f"))
 			if err != nil {
 				log.Fatalf("Could not install package\nError: %s\n", err)
 			}
-			fmt.Printf("Package (%s) was successfully installed!\n", pkgInfo.name)
+			fmt.Printf("Package (%s) was successfully installed!\n", pkgInfo.Name)
 		}
 	case remove:
 		flags, i := resolveFlags()
@@ -170,37 +179,41 @@ func resolveCommand() {
 			return
 		}
 		for _, pkg := range packages {
-			pkgInfo := getPackageInfo(pkg)
+			pkgInfo := bpm_utils.GetPackageInfo(pkg, rootDir)
 			if pkgInfo == nil {
 				fmt.Printf("Package (%s) could not be found\n", pkg)
 				continue
 			}
-			fmt.Print("----------------\n" + createInfoFile(*pkgInfo))
+			fmt.Print("----------------\n" + bpm_utils.CreateInfoFile(*pkgInfo))
 			fmt.Println("----------------")
 			if !slices.Contains(flags, "y") {
 				reader := bufio.NewReader(os.Stdin)
 				fmt.Print("Do you wish to remove this package? [y\\N] ")
 				text, _ := reader.ReadString('\n')
 				if strings.TrimSpace(strings.ToLower(text)) != "y" && strings.TrimSpace(strings.ToLower(text)) != "yes" {
-					fmt.Printf("Skipping package (%s)...\n", pkgInfo.name)
+					fmt.Printf("Skipping package (%s)...\n", pkgInfo.Name)
 					continue
 				}
 			}
-			err := removePackage(pkg)
+			err := bpm_utils.RemovePackage(pkg, rootDir)
 			if err != nil {
 				log.Fatalf("Could not remove package\nError: %s\n", err)
 			}
-			fmt.Printf("Package (%s) was successfully removed!\n", pkgInfo.name)
+			fmt.Printf("Package (%s) was successfully removed!\n", pkgInfo.Name)
 		}
 	default:
-		fmt.Println("------Help------")
-		fmt.Println("bpm version | shows information on the installed version of bpm")
-		fmt.Println("bpm info | shows information on an installed package")
-		fmt.Println("bpm list [-e] | lists all installed packages. -e lists only explicitly installed packages")
-		fmt.Println("bpm install [-y] <files...> | installs the following files. -y skips the confirmation prompt")
-		fmt.Println("bpm remove [-y] <packages...> | removes the following packages. -y skips the confirmation prompt")
-		fmt.Println("bpm cleanup | removes all unneeded dependencies")
-		fmt.Println("----------------")
+		fmt.Println("\033[1m------Help------\033[0m")
+		fmt.Println("\033[1m\\ Command Format /\033[0m")
+		fmt.Println("-> command format: bpm <subcommand> [-flags]...")
+		fmt.Println("-> flags will be read if passed right after the subcommand otherwise they will be read as subcommand arguments")
+		fmt.Println("\033[1m\\ Command List /\033[0m")
+		fmt.Println("-> bpm version | shows information on the installed version of bpm")
+		fmt.Println("-> bpm info | shows information on an installed package")
+		fmt.Println("-> bpm list | lists all installed packages")
+		fmt.Println("-> bpm install [-y, -f] <files...> | installs the following files. -y skips the confirmation prompt. -f skips dependency resolution")
+		fmt.Println("-> bpm remove [-y] <packages...> | removes the following packages. -y skips the confirmation prompt")
+		fmt.Println("-> bpm cleanup | removes all unneeded dependencies")
+		fmt.Println("\033[1m----------------\033[0m")
 	}
 }
 
@@ -213,14 +226,8 @@ func resolveFlags() ([]string, int) {
 			switch getCommandType() {
 			default:
 				log.Fatalf("Invalid flag " + flag)
-			case list:
-				v := [...]string{"e"}
-				if !slices.Contains(v[:], f) {
-					log.Fatalf("Invalid flag " + flag)
-				}
-				ret = append(ret, f)
 			case install:
-				v := [...]string{"y"}
+				v := [...]string{"y", "f"}
 				if !slices.Contains(v[:], f) {
 					log.Fatalf("Invalid flag " + flag)
 				}
