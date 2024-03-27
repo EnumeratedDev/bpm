@@ -1,5 +1,5 @@
 name: bpm
 description: The Bubble Package Manager
-version: 0.0.6
+version: 0.0.7
 architecture: x86_64
 type: binary

@@ -17,7 +17,7 @@ import (
 /*   A simple-to-use package manager  */
 /* ---------------------------------- */
 
-var bpmVer = "0.0.6"
+var bpmVer = "0.0.7"
 var rootDir = "/"
 
 func main() {
@@ -215,6 +215,7 @@ func resolveCommand() {
 				}
 			}
 			err := bpm_utils.RemovePackage(pkg, rootDir)
+
 			if err != nil {
 				log.Fatalf("Could not remove package\nError: %s\n", err)
 			}

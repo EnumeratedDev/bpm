@@ -192,6 +192,13 @@ func InstallPackage(filename, installDir string, force bool) error {
 				if err != nil {
 					return err
 				}
+			case tar.TypeSymlink:
+				fmt.Println("old name: " + header.Linkname)
+				fmt.Println("new name: " + header.Name)
+				err := os.Symlink(header.Linkname, extractFilename)
+				if err != nil {
+					return err
+				}
 			default:
 				return errors.New("ExtractTarGz: uknown type: " + strconv.Itoa(int(header.Typeflag)) + " in " + extractFilename)
 			}
@@ -376,7 +383,7 @@ func RemovePackage(pkg, rootDir string) error {
 	files := GetPackageFiles(pkg, rootDir)
 	for _, file := range files {
 		file = path.Join(rootDir, file)
-		stat, err := os.Stat(file)
+		stat, err := os.Lstat(file)
 		if os.IsNotExist(err) {
 			continue
 		}
