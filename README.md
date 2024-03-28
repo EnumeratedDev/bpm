@@ -5,7 +5,7 @@ BPM is a simple package manager for Linux systems
 
 ## Features
 - Simple to use subcommands
-- Can install binary and source packages (source packages are still under development)
+- Can install binary and source packages
 - Can be easily installed on practically any system
 - No bloat
 
@@ -47,3 +47,48 @@ For information on the rest of the commands simply use the help command or pass 
 ```
 bpm help
 ```
+
+## Package Creation
+
+Creating a package for BPM is simple
+
+To create a package you need to
+1) Create a working directory
+```
+mkdir my_bpm_package
+```
+2) Create a pkg.info file following this format (You can find examples in the test_packages directory)
+```
+name: my_package
+description: My package's description
+version: 1.0
+architecture: x86_64
+type: <binary/source>
+depends: dependency1,dependency2
+make_depends: make_depend1,make_depend2
+```
+depends and make depends are optional fields, you may skip them if you'd like
+### Binary Packages
+3) If you are making a binary package, simply create a 'files' directory
+```
+mkdir files
+```
+4) Copy all your binaries along with the directories they reside in (i.e files/usr/bin/my_binary)
+5) Either copy the bpm-create script from the bpm-utils test package into your /usr/local/bin directory or install the bpm-utils.bpm package
+6) Run the following
+```
+bpm-create <filename_without_extension>
+```
+7) It's done! You now hopefully have a working BPM package!
+### Source Packages
+3) If you are making a source package, you need to create a 'source.sh' file
+```
+touch source.sh
+```
+4) You are able to run bash code in this file. BPM will extract this file in a directory under /tmp and it will be ran there
+5) Your goal is to download your program's source code with either git, wget, curl, etc. and put the binaries under a folder called 'output' in the root of the temp directory. There is a simple example script with helpful comments in the htop-src test package
+6) As of this moment there is no script to automate package compression like for binary packages. You will need to create the archive manually
+```
+tar -czvf my_package-src.bpm pkg.info source.sh
+```
+7) That's it! Your source package should now be compiling correctly!

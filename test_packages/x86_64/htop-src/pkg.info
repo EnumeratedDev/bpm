@@ -1,0 +1,5 @@
+name: htop
+description: An interactive process viewer
+version: 3.3.0
+architecture: x86_64
+type: source

@@ -10,7 +10,7 @@ func GetArch() string {
 	if err != nil {
 		return ""
 	}
-	return strings.TrimSpace(byteArrayToString(output))
+	return strings.TrimSpace(string(output))
 }
 
 func stringSliceRemove(s []string, r string) []string {

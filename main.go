@@ -17,7 +17,7 @@ import (
 /*   A simple-to-use package manager  */
 /* ---------------------------------- */
 
-var bpmVer = "0.0.7"
+var bpmVer = "0.0.8"
 var rootDir = "/"
 
 func main() {
@@ -105,7 +105,7 @@ func resolveCommand() {
 			}
 		}
 	case list:
-		resolveFlags()
+		flags, _ := resolveFlags()
 		packages, err := bpm_utils.GetInstalledPackages(rootDir)
 		if err != nil {
 			log.Fatalf("Could not get installed packages\nError: %s", err.Error())
@@ -115,15 +115,23 @@ func resolveCommand() {
 			fmt.Println("No packages have been installed")
 			return
 		}
-		for n, pkg := range packages {
-			info := bpm_utils.GetPackageInfo(pkg, rootDir, false)
-			if info == nil {
-				fmt.Printf("Package (%s) could not be found\n", pkg)
-				continue
+		if slices.Contains(flags, "n") {
+			fmt.Println(len(packages))
+		} else if slices.Contains(flags, "l") {
+			for _, pkg := range packages {
+				fmt.Println(pkg)
 			}
-			fmt.Print("----------------\n" + bpm_utils.CreateInfoFile(*info))
-			if n == len(packages)-1 {
-				fmt.Println("----------------")
+		} else {
+			for n, pkg := range packages {
+				info := bpm_utils.GetPackageInfo(pkg, rootDir, false)
+				if info == nil {
+					fmt.Printf("Package (%s) could not be found\n", pkg)
+					continue
+				}
+				fmt.Print("----------------\n" + bpm_utils.CreateInfoFile(*info))
+				if n == len(packages)-1 {
+					fmt.Println("----------------")
+				}
 			}
 		}
 	case install:
@@ -140,14 +148,24 @@ func resolveCommand() {
 			}
 			fmt.Print("----------------\n" + bpm_utils.CreateInfoFile(*pkgInfo))
 			fmt.Println("----------------")
+			verb := "install"
+			if pkgInfo.Type == "source" {
+				verb = "build"
+			}
 			if !slices.Contains(flags, "f") {
 				if pkgInfo.Arch != bpm_utils.GetArch() {
-					fmt.Println("skipping... cannot install a package with a different architecture")
+					fmt.Printf("skipping... cannot %s a package with a different architecture\n", verb)
 					continue
 				}
 				if unresolved := bpm_utils.CheckDependencies(pkgInfo, rootDir); len(unresolved) != 0 {
-					fmt.Printf("skipping... cannot install package (%s) due to missing dependencies: %s\n", pkgInfo.Name, strings.Join(unresolved, ", "))
+					fmt.Printf("skipping... cannot %s package (%s) due to missing dependencies: %s\n", verb, pkgInfo.Name, strings.Join(unresolved, ", "))
 					continue
+				}
+				if pkgInfo.Type == "source" {
+					if unresolved := bpm_utils.CheckMakeDependencies(pkgInfo, rootDir); len(unresolved) != 0 {
+						fmt.Printf("skipping... cannot %s package (%s) due to missing make dependencies: %s\n", verb, pkgInfo.Name, strings.Join(unresolved, ", "))
+						continue
+					}
 				}
 			}
 			if bpm_utils.IsPackageInstalled(pkgInfo.Name, rootDir) {
@@ -161,7 +179,7 @@ func resolveCommand() {
 						fmt.Print("Do you wish to downgrade this package? (Not recommended) [y\\N] ")
 					} else if strings.Compare(pkgInfo.Version, installedInfo.Version) == 0 {
 						fmt.Println("This package is already installed on the system and is up to date")
-						fmt.Print("Do you wish to reinstall this package? [y\\N] ")
+						fmt.Printf("Do you wish to re%s this package? [y\\N] ", verb)
 					}
 					reader := bufio.NewReader(os.Stdin)
 					text, _ := reader.ReadString('\n')
@@ -175,8 +193,21 @@ func resolveCommand() {
 					log.Fatalf("Could not remove current version of the package\nError: %s\n", err)
 				}
 			} else if !slices.Contains(flags, "y") {
-				fmt.Print("Do you wish to install this package? [y\\N] ")
 				reader := bufio.NewReader(os.Stdin)
+				if pkgInfo.Type == "source" {
+					fmt.Print("Would you like to view the source.sh file of this package? [Y\\n]")
+					text, _ := reader.ReadString('\n')
+					if strings.TrimSpace(strings.ToLower(text)) != "n" && strings.TrimSpace(strings.ToLower(text)) != "no" {
+						script, err := bpm_utils.GetSourceScript(file)
+						if err != nil {
+							log.Fatalf("Could not read source script\nError: %s\n", err)
+						}
+						fmt.Println(script)
+						fmt.Println("-------EOF-------")
+					}
+				}
+				fmt.Printf("Do you wish to %s this package? [y\\N] ", verb)
+
 				text, _ := reader.ReadString('\n')
 				if strings.TrimSpace(strings.ToLower(text)) != "y" && strings.TrimSpace(strings.ToLower(text)) != "yes" {
 					fmt.Printf("Skipping package (%s)...\n", pkgInfo.Name)
@@ -229,7 +260,7 @@ func resolveCommand() {
 		fmt.Println("\033[1m\\ Command List /\033[0m")
 		fmt.Println("-> bpm version | shows information on the installed version of bpm")
 		fmt.Println("-> bpm info | shows information on an installed package")
-		fmt.Println("-> bpm list | lists all installed packages")
+		fmt.Println("-> bpm list [-n, -l] | lists all installed packages. -n shows the number of packages. -l lists package names only")
 		fmt.Println("-> bpm install [-y, -f] <files...> | installs the following files. -y skips the confirmation prompt. -f skips dependency and architecture checking")
 		fmt.Println("-> bpm remove [-y] <packages...> | removes the following packages. -y skips the confirmation prompt")
 		fmt.Println("-> bpm cleanup | removes all unneeded dependencies")
@@ -246,6 +277,12 @@ func resolveFlags() ([]string, int) {
 			switch getCommandType() {
 			default:
 				log.Fatalf("Invalid flag " + flag)
+			case list:
+				v := [...]string{"l", "n"}
+				if !slices.Contains(v[:], f) {
+					log.Fatalf("Invalid flag " + flag)
+				}
+				ret = append(ret, f)
 			case install:
 				v := [...]string{"y", "f"}
 				if !slices.Contains(v[:], f) {

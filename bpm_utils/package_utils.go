@@ -7,9 +7,12 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"io/fs"
 	"log"
 	"os"
+	"os/exec"
 	"path"
+	"path/filepath"
 	"slices"
 	"strconv"
 	"strings"
@@ -22,6 +25,7 @@ type PackageInfo struct {
 	Arch        string
 	Type        string
 	Depends     []string
+	MakeDepends []string
 	Provides    []string
 }
 
@@ -70,6 +74,7 @@ func ReadPackageInfo(contents string, defaultValues bool) (*PackageInfo, error) 
 		Arch:        "",
 		Type:        "",
 		Depends:     nil,
+		MakeDepends: nil,
 		Provides:    nil,
 	}
 	lines := strings.Split(contents, "\n")
@@ -97,9 +102,12 @@ func ReadPackageInfo(contents string, defaultValues bool) (*PackageInfo, error) 
 		case "depends":
 			pkgInfo.Depends = strings.Split(strings.Replace(split[1], " ", "", -1), ",")
 			pkgInfo.Depends = stringSliceRemoveEmpty(pkgInfo.Depends)
+		case "make_depends":
+			pkgInfo.MakeDepends = strings.Split(strings.Replace(split[1], " ", "", -1), ",")
+			pkgInfo.MakeDepends = stringSliceRemoveEmpty(pkgInfo.MakeDepends)
 		case "provides":
 			pkgInfo.Provides = strings.Split(strings.Replace(split[1], " ", "", -1), ",")
-			pkgInfo.Provides = stringSliceRemoveEmpty(pkgInfo.Depends)
+			pkgInfo.Provides = stringSliceRemoveEmpty(pkgInfo.Provides)
 		}
 	}
 	if !defaultValues {
@@ -160,52 +168,164 @@ func InstallPackage(filename, installDir string, force bool) error {
 			return errors.New("Could not resolve all dependencies. Missing " + strings.Join(unresolved, ", "))
 		}
 	}
-	for {
-		header, err := tr.Next()
-		if err == io.EOF {
-			break
-		}
-		if err != nil {
-			return err
-		}
-		if strings.HasPrefix(header.Name, "files/") && header.Name != "files/" {
-			extractFilename := path.Join(installDir, strings.TrimPrefix(header.Name, "files/"))
-			switch header.Typeflag {
-			case tar.TypeDir:
-				files = append(files, strings.TrimPrefix(header.Name, "files/"))
-				if err := os.Mkdir(extractFilename, 0755); err != nil && !os.IsExist(err) {
-					return err
+	if pkgInfo.Type == "binary" {
+		for {
+			header, err := tr.Next()
+			if err == io.EOF {
+				break
+			}
+			if err != nil {
+				return err
+			}
+			if strings.HasPrefix(header.Name, "files/") && header.Name != "files/" {
+				extractFilename := path.Join(installDir, strings.TrimPrefix(header.Name, "files/"))
+				switch header.Typeflag {
+				case tar.TypeDir:
+					files = append(files, strings.TrimPrefix(header.Name, "files/"))
+					if err := os.Mkdir(extractFilename, 0755); err != nil {
+						if !os.IsExist(err) {
+							return err
+						}
+					} else {
+						fmt.Println("Creating Directory: " + extractFilename)
+					}
+				case tar.TypeReg:
+					outFile, err := os.Create(extractFilename)
+					fmt.Println("Creating File: " + extractFilename)
+					files = append(files, strings.TrimPrefix(header.Name, "files/"))
+					if err != nil {
+						return err
+					}
+					if _, err := io.Copy(outFile, tr); err != nil {
+						return err
+					}
+					if err := os.Chmod(extractFilename, header.FileInfo().Mode()); err != nil {
+						return err
+					}
+					err = outFile.Close()
+					if err != nil {
+						return err
+					}
+				case tar.TypeSymlink:
+					fmt.Println("Creating Symlink: "+extractFilename, " -> "+header.Linkname)
+					files = append(files, strings.TrimPrefix(header.Name, "files/"))
+					err := os.Symlink(header.Linkname, extractFilename)
+					if err != nil {
+						return err
+					}
+				default:
+					return errors.New("ExtractTarGz: unknown type: " + strconv.Itoa(int(header.Typeflag)) + " in " + extractFilename)
 				}
-			case tar.TypeReg:
-				outFile, err := os.Create(extractFilename)
-				files = append(files, strings.TrimPrefix(header.Name, "files/"))
-				if err != nil {
-					return err
-				}
-				if _, err := io.Copy(outFile, tr); err != nil {
-					return err
-				}
-				if err := os.Chmod(extractFilename, header.FileInfo().Mode()); err != nil {
-					return err
-				}
-				err = outFile.Close()
-				if err != nil {
-					return err
-				}
-			case tar.TypeSymlink:
-				fmt.Println("old name: " + header.Linkname)
-				fmt.Println("new name: " + header.Name)
-				err := os.Symlink(header.Linkname, extractFilename)
-				if err != nil {
-					return err
-				}
-			default:
-				return errors.New("ExtractTarGz: uknown type: " + strconv.Itoa(int(header.Typeflag)) + " in " + extractFilename)
 			}
 		}
-	}
-	if pkgInfo == nil {
-		return errors.New("pkg.info not found in archive")
+	} else if pkgInfo.Type == "source" {
+		for {
+			header, err := tr.Next()
+			if err == io.EOF {
+				break
+			}
+			if err != nil {
+				return err
+			}
+			if header.Name == "source.sh" {
+				bs, err := io.ReadAll(tr)
+				if err != nil {
+					return err
+				}
+				temp, err := os.MkdirTemp("/tmp/", "bpm_source-")
+				fmt.Println("Creating temp directory at: " + temp)
+				if err != nil {
+					return err
+				}
+				err = os.WriteFile(path.Join(temp, "source.sh"), bs, 0644)
+				if err != nil {
+					return err
+				}
+				fmt.Println("Running source.sh file...")
+				cmd := exec.Command("/usr/bin/sh", "source.sh")
+				cmd.Stdin = os.Stdin
+				cmd.Stdout = os.Stdout
+				cmd.Stderr = os.Stderr
+				cmd.Dir = temp
+				err = cmd.Run()
+				if err != nil {
+					return err
+				}
+				if _, err := os.Stat(path.Join(temp, "/output/")); err != nil {
+					if os.IsNotExist(err) {
+						return errors.New("Output directory not be found at " + path.Join(temp, "/output/"))
+					}
+					return err
+				}
+				fmt.Println("Copying all files...")
+				err = filepath.WalkDir(path.Join(temp, "/output/"), func(fullpath string, d fs.DirEntry, err error) error {
+					relFilename, err := filepath.Rel(path.Join(temp, "/output/"), fullpath)
+					if relFilename == "." {
+						return nil
+					}
+					extractFilename := path.Join(installDir, relFilename)
+					if err != nil {
+						return err
+					}
+					if d.Type() == os.ModeDir {
+						files = append(files, relFilename+"/")
+						if err := os.Mkdir(extractFilename, 0755); err != nil {
+							if !os.IsExist(err) {
+								return err
+							}
+						} else {
+							fmt.Println("Creating Directory: " + extractFilename)
+						}
+					} else if d.Type().IsRegular() {
+						outFile, err := os.Create(extractFilename)
+						fmt.Println("Creating File: " + extractFilename)
+						files = append(files, relFilename)
+						if err != nil {
+							return err
+						}
+						f, err := os.Open(fullpath)
+						if err != nil {
+							return err
+						}
+						if _, err := io.Copy(outFile, f); err != nil {
+							return err
+						}
+						info, err := os.Stat(fullpath)
+						if err != nil {
+							return err
+						}
+						if err := os.Chmod(extractFilename, info.Mode()); err != nil {
+							return err
+						}
+						err = outFile.Close()
+						if err != nil {
+							return err
+						}
+						err = f.Close()
+						if err != nil {
+							return err
+						}
+					} else if d.Type() == os.ModeSymlink {
+						link, err := os.Readlink(fullpath)
+						if err != nil {
+							return err
+						}
+						fmt.Println("Creating Symlink: "+extractFilename, " -> "+link)
+						files = append(files, relFilename)
+						err = os.Symlink(link, extractFilename)
+						if err != nil {
+							return err
+						}
+					}
+					return nil
+				})
+				if err != nil {
+					return err
+				}
+			}
+		}
+	} else {
+		return errors.New("Unknown package type: " + pkgInfo.Type)
 	}
 	slices.Sort(files)
 	slices.Reverse(files)
@@ -264,9 +384,73 @@ func InstallPackage(filename, installDir string, force bool) error {
 	return nil
 }
 
+func GetSourceScript(filename string) (string, error) {
+	pkgInfo, err := ReadPackage(filename)
+	if err != nil {
+		return "", err
+	}
+	if pkgInfo.Type != "source" {
+		return "", errors.New("package not of source type")
+	}
+	file, err := os.Open(filename)
+	if err != nil {
+		return "", err
+	}
+	archive, err := gzip.NewReader(file)
+	if err != nil {
+		return "", err
+	}
+	tr := tar.NewReader(archive)
+	for {
+		header, err := tr.Next()
+		if err == io.EOF {
+			break
+		}
+		if header.Name == "source.sh" {
+			err := archive.Close()
+			if err != nil {
+				return "", err
+			}
+			err = file.Close()
+			if err != nil {
+				return "", err
+			}
+			bs, err := io.ReadAll(tr)
+			if err != nil {
+				return "", err
+			}
+			return string(bs), nil
+		}
+	}
+	return "", errors.New("package does not contain a source.sh file")
+}
+
 func CheckDependencies(pkgInfo *PackageInfo, rootDir string) []string {
 	unresolved := make([]string, len(pkgInfo.Depends))
 	copy(unresolved, pkgInfo.Depends)
+	installedDir := path.Join(rootDir, "var/lib/bpm/installed/")
+	if _, err := os.Stat(installedDir); err != nil {
+		return nil
+	}
+	items, err := os.ReadDir(installedDir)
+	if err != nil {
+		return nil
+	}
+
+	for _, item := range items {
+		if !item.IsDir() {
+			continue
+		}
+		if slices.Contains(unresolved, item.Name()) {
+			unresolved = stringSliceRemove(unresolved, item.Name())
+		}
+	}
+	return unresolved
+}
+
+func CheckMakeDependencies(pkgInfo *PackageInfo, rootDir string) []string {
+	unresolved := make([]string, len(pkgInfo.MakeDepends))
+	copy(unresolved, pkgInfo.MakeDepends)
 	installedDir := path.Join(rootDir, "var/lib/bpm/installed/")
 	if _, err := os.Stat(installedDir); err != nil {
 		return nil
