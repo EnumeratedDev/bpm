@@ -22,11 +22,46 @@ type PackageInfo struct {
 	Name        string
 	Description string
 	Version     string
+	Url         string
+	License     string
 	Arch        string
 	Type        string
 	Depends     []string
 	MakeDepends []string
 	Provides    []string
+}
+
+func GetPackageInfoRaw(filename string) (string, error) {
+	if _, err := os.Stat(filename); os.IsNotExist(err) {
+		return "", err
+	}
+	file, err := os.Open(filename)
+	if err != nil {
+		return "", err
+	}
+	archive, err := gzip.NewReader(file)
+	if err != nil {
+		return "", err
+	}
+	tr := tar.NewReader(archive)
+	for {
+		header, err := tr.Next()
+		if err == io.EOF {
+			break
+		}
+		if err != nil {
+			return "", err
+		}
+		if header.Name == "pkg.info" {
+			bs, _ := io.ReadAll(tr)
+			err := file.Close()
+			if err != nil {
+				return "", err
+			}
+			return string(bs), nil
+		}
+	}
+	return "", errors.New("pkg.info not found in archive")
 }
 
 func ReadPackage(filename string) (*PackageInfo, error) {
@@ -71,6 +106,8 @@ func ReadPackageInfo(contents string, defaultValues bool) (*PackageInfo, error) 
 		Name:        "",
 		Description: "",
 		Version:     "",
+		Url:         "",
+		License:     "",
 		Arch:        "",
 		Type:        "",
 		Depends:     nil,
@@ -80,6 +117,9 @@ func ReadPackageInfo(contents string, defaultValues bool) (*PackageInfo, error) 
 	lines := strings.Split(contents, "\n")
 	for num, line := range lines {
 		if len(strings.TrimSpace(line)) == 0 {
+			continue
+		}
+		if line[0] == '#' {
 			continue
 		}
 		split := strings.SplitN(line, ":", 2)
@@ -95,6 +135,10 @@ func ReadPackageInfo(contents string, defaultValues bool) (*PackageInfo, error) 
 			pkgInfo.Description = split[1]
 		case "version":
 			pkgInfo.Version = split[1]
+		case "url":
+			pkgInfo.Url = split[1]
+		case "license":
+			pkgInfo.License = split[1]
 		case "architecture":
 			pkgInfo.Arch = split[1]
 		case "type":
@@ -131,6 +175,12 @@ func CreateInfoFile(pkgInfo PackageInfo) string {
 	ret = ret + "name: " + pkgInfo.Name + "\n"
 	ret = ret + "description: " + pkgInfo.Description + "\n"
 	ret = ret + "version: " + pkgInfo.Version + "\n"
+	if pkgInfo.Url != "" {
+		ret = ret + "url: " + pkgInfo.Url + "\n"
+	}
+	if pkgInfo.License != "" {
+		ret = ret + "license: " + pkgInfo.License + "\n"
+	}
 	ret = ret + "architecture: " + pkgInfo.Arch + "\n"
 	ret = ret + "type: " + pkgInfo.Type + "\n"
 	if len(pkgInfo.Depends) > 0 {
@@ -168,7 +218,9 @@ func InstallPackage(filename, installDir string, force bool) error {
 			return errors.New("Could not resolve all dependencies. Missing " + strings.Join(unresolved, ", "))
 		}
 	}
+
 	if pkgInfo.Type == "binary" {
+		seenHardlinks := make(map[string]string)
 		for {
 			header, err := tr.Next()
 			if err == io.EOF {
@@ -190,6 +242,10 @@ func InstallPackage(filename, installDir string, force bool) error {
 						fmt.Println("Creating Directory: " + extractFilename)
 					}
 				case tar.TypeReg:
+					err := os.Remove(extractFilename)
+					if err != nil && !os.IsNotExist(err) {
+						return err
+					}
 					outFile, err := os.Create(extractFilename)
 					fmt.Println("Creating File: " + extractFilename)
 					files = append(files, strings.TrimPrefix(header.Name, "files/"))
@@ -207,15 +263,34 @@ func InstallPackage(filename, installDir string, force bool) error {
 						return err
 					}
 				case tar.TypeSymlink:
-					fmt.Println("Creating Symlink: "+extractFilename, " -> "+header.Linkname)
+					fmt.Println("Creating Symlink: " + extractFilename + " -> " + header.Linkname)
 					files = append(files, strings.TrimPrefix(header.Name, "files/"))
-					err := os.Symlink(header.Linkname, extractFilename)
+					err := os.Remove(extractFilename)
+					if err != nil && !os.IsNotExist(err) {
+						return err
+					}
+					err = os.Symlink(header.Linkname, extractFilename)
 					if err != nil {
+						return err
+					}
+				case tar.TypeLink:
+					fmt.Println("Detected Hard Link: " + extractFilename + " -> " + path.Join(installDir, strings.TrimPrefix(header.Linkname, "files/")))
+					files = append(files, strings.TrimPrefix(header.Name, "files/"))
+					seenHardlinks[extractFilename] = path.Join(strings.TrimPrefix(header.Linkname, "files/"))
+					err := os.Remove(extractFilename)
+					if err != nil && !os.IsNotExist(err) {
 						return err
 					}
 				default:
 					return errors.New("ExtractTarGz: unknown type: " + strconv.Itoa(int(header.Typeflag)) + " in " + extractFilename)
 				}
+			}
+		}
+		for extractFilename, destination := range seenHardlinks {
+			fmt.Println("Creating Hard Link: " + extractFilename + " -> " + path.Join(installDir, destination))
+			err := os.Link(path.Join(installDir, destination), extractFilename)
+			if err != nil {
+				return err
 			}
 		}
 	} else if pkgInfo.Type == "source" {
@@ -232,7 +307,7 @@ func InstallPackage(filename, installDir string, force bool) error {
 				if err != nil {
 					return err
 				}
-				temp, err := os.MkdirTemp("/tmp/", "bpm_source-")
+				temp, err := os.MkdirTemp("/var/tmp/", "bpm_source-")
 				fmt.Println("Creating temp directory at: " + temp)
 				if err != nil {
 					return err
@@ -364,7 +439,11 @@ func InstallPackage(filename, installDir string, force bool) error {
 	if err != nil {
 		return err
 	}
-	_, err = f.WriteString(CreateInfoFile(*pkgInfo))
+	raw, err := GetPackageInfoRaw(filename)
+	if err != nil {
+		return err
+	}
+	_, err = f.WriteString(raw)
 	if err != nil {
 		return err
 	}
@@ -441,8 +520,25 @@ func CheckDependencies(pkgInfo *PackageInfo, rootDir string) []string {
 		if !item.IsDir() {
 			continue
 		}
-		if slices.Contains(unresolved, item.Name()) {
-			unresolved = stringSliceRemove(unresolved, item.Name())
+		_, err := os.Stat(path.Join(installedDir, item.Name(), "/info"))
+		if err != nil {
+			return nil
+		}
+		bs, err := os.ReadFile(path.Join(installedDir, item.Name(), "/info"))
+		if err != nil {
+			return nil
+		}
+		info, err := ReadPackageInfo(string(bs), false)
+		if err != nil {
+			return nil
+		}
+		if slices.Contains(unresolved, info.Name) {
+			unresolved = stringSliceRemove(unresolved, info.Name)
+		}
+		for _, prov := range info.Provides {
+			if slices.Contains(unresolved, prov) {
+				unresolved = stringSliceRemove(unresolved, prov)
+			}
 		}
 	}
 	return unresolved
@@ -464,8 +560,25 @@ func CheckMakeDependencies(pkgInfo *PackageInfo, rootDir string) []string {
 		if !item.IsDir() {
 			continue
 		}
-		if slices.Contains(unresolved, item.Name()) {
-			unresolved = stringSliceRemove(unresolved, item.Name())
+		_, err := os.Stat(path.Join(installedDir, item.Name(), "/info"))
+		if err != nil {
+			return nil
+		}
+		bs, err := os.ReadFile(path.Join(installedDir, item.Name(), "/info"))
+		if err != nil {
+			return nil
+		}
+		info, err := ReadPackageInfo(string(bs), false)
+		if err != nil {
+			return nil
+		}
+		if slices.Contains(unresolved, info.Name) {
+			unresolved = stringSliceRemove(unresolved, info.Name)
+		}
+		for _, prov := range info.Provides {
+			if slices.Contains(unresolved, prov) {
+				unresolved = stringSliceRemove(unresolved, prov)
+			}
 		}
 	}
 	return unresolved

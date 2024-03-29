@@ -17,7 +17,7 @@ import (
 /*   A simple-to-use package manager  */
 /* ---------------------------------- */
 
-var bpmVer = "0.0.8"
+var bpmVer = "0.0.9"
 var rootDir = "/"
 
 func main() {
@@ -168,6 +168,21 @@ func resolveCommand() {
 					}
 				}
 			}
+			if !slices.Contains(flags, "y") {
+				reader := bufio.NewReader(os.Stdin)
+				if pkgInfo.Type == "source" {
+					fmt.Print("Would you like to view the source.sh file of this package? [Y\\n] ")
+					text, _ := reader.ReadString('\n')
+					if strings.TrimSpace(strings.ToLower(text)) != "n" && strings.TrimSpace(strings.ToLower(text)) != "no" {
+						script, err := bpm_utils.GetSourceScript(file)
+						if err != nil {
+							log.Fatalf("Could not read source script\nError: %s\n", err)
+						}
+						fmt.Println(script)
+						fmt.Println("-------EOF-------")
+					}
+				}
+			}
 			if bpm_utils.IsPackageInstalled(pkgInfo.Name, rootDir) {
 				if !slices.Contains(flags, "y") {
 					installedInfo := bpm_utils.GetPackageInfo(pkgInfo.Name, rootDir, false)
@@ -194,20 +209,7 @@ func resolveCommand() {
 				}
 			} else if !slices.Contains(flags, "y") {
 				reader := bufio.NewReader(os.Stdin)
-				if pkgInfo.Type == "source" {
-					fmt.Print("Would you like to view the source.sh file of this package? [Y\\n]")
-					text, _ := reader.ReadString('\n')
-					if strings.TrimSpace(strings.ToLower(text)) != "n" && strings.TrimSpace(strings.ToLower(text)) != "no" {
-						script, err := bpm_utils.GetSourceScript(file)
-						if err != nil {
-							log.Fatalf("Could not read source script\nError: %s\n", err)
-						}
-						fmt.Println(script)
-						fmt.Println("-------EOF-------")
-					}
-				}
 				fmt.Printf("Do you wish to %s this package? [y\\N] ", verb)
-
 				text, _ := reader.ReadString('\n')
 				if strings.TrimSpace(strings.ToLower(text)) != "y" && strings.TrimSpace(strings.ToLower(text)) != "yes" {
 					fmt.Printf("Skipping package (%s)...\n", pkgInfo.Name)
@@ -217,9 +219,15 @@ func resolveCommand() {
 
 			err = bpm_utils.InstallPackage(file, rootDir, slices.Contains(flags, "f"))
 			if err != nil {
+				if pkgInfo.Type == "source" {
+					fmt.Println("** It is recommended you delete the temporary bpm folder in /var/tmp **")
+				}
 				log.Fatalf("Could not install package\nError: %s\n", err)
 			}
 			fmt.Printf("Package (%s) was successfully installed!\n", pkgInfo.Name)
+			if pkgInfo.Type == "source" {
+				fmt.Println("** It is recommended you delete the temporary bpm folder in /var/tmp **")
+			}
 		}
 	case remove:
 		flags, i := resolveFlags()

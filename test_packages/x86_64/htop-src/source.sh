@@ -1,5 +1,5 @@
 # This file is read and executed by BPM to compile htop. It will run inside a temporary folder in /tmp during execution
-echo "Building htop..."
+echo "Compiling htop..."
 # Creating 'source' directory
 mkdir source
 # Cloning the git repository into the 'source' directory

@@ -1,5 +1,7 @@
 name: bpm
 description: The Bubble Package Manager
-version: 0.0.8
+version: 0.0.9
+url: https://gitlab.com/bubble-package-manager/bpm/
+license: GPL3
 architecture: x86_64
 type: binary
