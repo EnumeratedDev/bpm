@@ -6,9 +6,7 @@ import (
 	"fmt"
 	"log"
 	"os"
-	"path"
 	"slices"
-	"strconv"
 	"strings"
 )
 
@@ -17,11 +15,11 @@ import (
 /*   A simple-to-use package manager  */
 /* ---------------------------------- */
 
-var bpmVer = "0.0.9"
+var bpmVer = "0.1.0"
 var rootDir = "/"
 
 func main() {
-	errs, fixed := bpm_utils.FixInstalledPackages(rootDir)
+	/*errs, fixed := bpm_utils.FixInstalledPackages(rootDir)
 	if len(errs) != 0 {
 		for pkg, err := range errs {
 			fmt.Printf("Package (%s) could not be read properly\nError: %s\n", pkg, err.Error())
@@ -32,11 +30,7 @@ func main() {
 		if fixed != 0 {
 			fmt.Println("Fixed " + strconv.Itoa(fixed) + " outdated package info files")
 		}
-	}
-	if os.Getuid() != 0 {
-		fmt.Println("BPM needs to be run with superuser permissions")
-		os.Exit(0)
-	}
+	}*/
 	resolveCommand()
 }
 
@@ -135,6 +129,10 @@ func resolveCommand() {
 			}
 		}
 	case install:
+		if os.Getuid() != 0 {
+			fmt.Println("This subcommand needs to be run with superuser permissions")
+			os.Exit(0)
+		}
 		flags, i := resolveFlags()
 		files := getArgs()[1+i:]
 		if len(files) == 0 {
@@ -153,7 +151,7 @@ func resolveCommand() {
 				verb = "build"
 			}
 			if !slices.Contains(flags, "f") {
-				if pkgInfo.Arch != bpm_utils.GetArch() {
+				if pkgInfo.Arch != "any" && pkgInfo.Arch != bpm_utils.GetArch() {
 					fmt.Printf("skipping... cannot %s a package with a different architecture\n", verb)
 					continue
 				}
@@ -203,10 +201,6 @@ func resolveCommand() {
 						continue
 					}
 				}
-				err := bpm_utils.RemovePackage(pkgInfo.Name, rootDir)
-				if err != nil {
-					log.Fatalf("Could not remove current version of the package\nError: %s\n", err)
-				}
 			} else if !slices.Contains(flags, "y") {
 				reader := bufio.NewReader(os.Stdin)
 				fmt.Printf("Do you wish to %s this package? [y\\N] ", verb)
@@ -217,19 +211,23 @@ func resolveCommand() {
 				}
 			}
 
-			err = bpm_utils.InstallPackage(file, rootDir, slices.Contains(flags, "f"))
+			err = bpm_utils.InstallPackage(file, rootDir, slices.Contains(flags, "f"), slices.Contains(flags, "b"), slices.Contains(flags, "k"))
 			if err != nil {
-				if pkgInfo.Type == "source" {
-					fmt.Println("** It is recommended you delete the temporary bpm folder in /var/tmp **")
+				if pkgInfo.Type == "source" && slices.Contains(flags, "k") {
+					fmt.Println("BPM temp directory was created at /var/tmp/bpm_source-" + pkgInfo.Name)
 				}
 				log.Fatalf("Could not install package\nError: %s\n", err)
 			}
 			fmt.Printf("Package (%s) was successfully installed!\n", pkgInfo.Name)
-			if pkgInfo.Type == "source" {
+			if pkgInfo.Type == "source" && slices.Contains(flags, "k") {
 				fmt.Println("** It is recommended you delete the temporary bpm folder in /var/tmp **")
 			}
 		}
 	case remove:
+		if os.Getuid() != 0 {
+			fmt.Println("This subcommand needs to be run with superuser permissions")
+			os.Exit(0)
+		}
 		flags, i := resolveFlags()
 		packages := getArgs()[1+i:]
 		if len(packages) == 0 {
@@ -268,9 +266,16 @@ func resolveCommand() {
 		fmt.Println("\033[1m\\ Command List /\033[0m")
 		fmt.Println("-> bpm version | shows information on the installed version of bpm")
 		fmt.Println("-> bpm info | shows information on an installed package")
-		fmt.Println("-> bpm list [-n, -l] | lists all installed packages. -n shows the number of packages. -l lists package names only")
-		fmt.Println("-> bpm install [-y, -f] <files...> | installs the following files. -y skips the confirmation prompt. -f skips dependency and architecture checking")
-		fmt.Println("-> bpm remove [-y] <packages...> | removes the following packages. -y skips the confirmation prompt")
+		fmt.Println("-> bpm list [-n, -l] | lists all installed packages")
+		fmt.Println("       -n shows the number of packages")
+		fmt.Println("       -l lists package names only")
+		fmt.Println("-> bpm install [-y, -f, -b] <files...> | installs the following files")
+		fmt.Println("       -y skips the confirmation prompt")
+		fmt.Println("       -f skips dependency and architecture checking")
+		fmt.Println("       -b creates a binary package for a source package after compilation and saves it in /var/lib/bpm/compiled")
+		fmt.Println("       -k keeps the temp directory created by BPM after source package installation")
+		fmt.Println("-> bpm remove [-y] <packages...> | removes the following packages")
+		fmt.Println("       -y skips the confirmation prompt")
 		fmt.Println("-> bpm cleanup | removes all unneeded dependencies")
 		fmt.Println("\033[1m----------------\033[0m")
 	}
@@ -292,7 +297,7 @@ func resolveFlags() ([]string, int) {
 				}
 				ret = append(ret, f)
 			case install:
-				v := [...]string{"y", "f"}
+				v := [...]string{"y", "f", "b", "k"}
 				if !slices.Contains(v[:], f) {
 					log.Fatalf("Invalid flag " + flag)
 				}

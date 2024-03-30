@@ -7,13 +7,25 @@ fi
 
 output=$1
 
+if [[ ! "$output" =~ ^[a-zA-Z0-9_-]{1,}$ ]]; then
+  echo "Invalid output name! The name must only contain letters, numbers, hyphens or underscores!"
+  exit 1
+fi
+
+type="binary"
+
 echo "Creating package with the name $output..."
 
 if [ -d files ]; then
   echo "files/ directory found"
 else
-  echo "files/ directory not found in $PWD"
-  exit 1
+  if [ -f source.sh ]; then
+    type="source"
+    echo "source.sh file found"
+  else
+    echo "files/ directory or source.sh file not found in $PWD"
+    exit 1
+  fi
 fi
 
 if [ -f pkg.info ]; then
@@ -23,6 +35,10 @@ else
   exit 1
 fi
 
-echo "Creating $output.bpm package..."
+echo "Creating $type package as $output.bpm"
 
-tar -czf $output.bpm files/ pkg.info
+if [[ "$type" == "binary" ]]; then
+  tar -czf "$output".bpm files/ pkg.info
+else
+  tar -czf "$output".bpm source.sh pkg.info
+fi

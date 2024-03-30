@@ -130,10 +130,16 @@ func ReadPackageInfo(contents string, defaultValues bool) (*PackageInfo, error) 
 		split[1] = strings.Trim(split[1], " ")
 		switch split[0] {
 		case "name":
+			if strings.Contains(split[1], " ") {
+				return nil, errors.New("the " + split[0] + " field cannot contain spaces")
+			}
 			pkgInfo.Name = split[1]
 		case "description":
 			pkgInfo.Description = split[1]
 		case "version":
+			if strings.Contains(split[1], " ") {
+				return nil, errors.New("the " + split[0] + " field cannot contain spaces")
+			}
 			pkgInfo.Version = split[1]
 		case "url":
 			pkgInfo.Url = split[1]
@@ -192,7 +198,7 @@ func CreateInfoFile(pkgInfo PackageInfo) string {
 	return ret
 }
 
-func InstallPackage(filename, installDir string, force bool) error {
+func InstallPackage(filename, installDir string, force, binaryPkgFromSrc, keepTempDir bool) error {
 	if _, err := os.Stat(filename); os.IsNotExist(err) {
 		return err
 	}
@@ -205,13 +211,17 @@ func InstallPackage(filename, installDir string, force bool) error {
 		return err
 	}
 	tr := tar.NewReader(archive)
+	var oldFiles []string
 	var files []string
 	pkgInfo, err := ReadPackage(filename)
 	if err != nil {
 		return err
 	}
+	if IsPackageInstalled(pkgInfo.Name, installDir) {
+		oldFiles = GetPackageFiles(pkgInfo.Name, installDir)
+	}
 	if !force {
-		if pkgInfo.Arch != GetArch() {
+		if pkgInfo.Arch != "any" && pkgInfo.Arch != GetArch() {
 			return errors.New("cannot install a package with a different architecture")
 		}
 		if unresolved := CheckDependencies(pkgInfo, installDir); len(unresolved) != 0 {
@@ -307,7 +317,12 @@ func InstallPackage(filename, installDir string, force bool) error {
 				if err != nil {
 					return err
 				}
-				temp, err := os.MkdirTemp("/var/tmp/", "bpm_source-")
+				temp := "/var/tmp/bpm_source-" + pkgInfo.Name
+				err = os.RemoveAll(temp)
+				if err != nil {
+					return err
+				}
+				err = os.Mkdir(temp, 0755)
 				fmt.Println("Creating temp directory at: " + temp)
 				if err != nil {
 					return err
@@ -352,6 +367,10 @@ func InstallPackage(filename, installDir string, force bool) error {
 							fmt.Println("Creating Directory: " + extractFilename)
 						}
 					} else if d.Type().IsRegular() {
+						err := os.Remove(extractFilename)
+						if err != nil && !os.IsNotExist(err) {
+							return err
+						}
 						outFile, err := os.Create(extractFilename)
 						fmt.Println("Creating File: " + extractFilename)
 						files = append(files, relFilename)
@@ -385,6 +404,10 @@ func InstallPackage(filename, installDir string, force bool) error {
 						if err != nil {
 							return err
 						}
+						err = os.Remove(extractFilename)
+						if err != nil && !os.IsNotExist(err) {
+							return err
+						}
 						fmt.Println("Creating Symlink: "+extractFilename, " -> "+link)
 						files = append(files, relFilename)
 						err = os.Symlink(link, extractFilename)
@@ -397,6 +420,39 @@ func InstallPackage(filename, installDir string, force bool) error {
 				if err != nil {
 					return err
 				}
+				if binaryPkgFromSrc {
+					compiledDir := path.Join(installDir, "var/lib/bpm/compiled/")
+					err = os.MkdirAll(compiledDir, 755)
+					compiledInfo := PackageInfo{}
+					compiledInfo = *pkgInfo
+					compiledInfo.Type = "binary"
+					compiledInfo.Arch = GetArch()
+					err = os.WriteFile(path.Join(compiledDir, "pkg.info"), []byte(CreateInfoFile(compiledInfo)), 0644)
+					if err != nil {
+						return err
+					}
+					sed := fmt.Sprintf("s/%s/files/", strings.Replace(strings.TrimPrefix(path.Join(temp, "/output/"), "/"), "/", `\/`, -1))
+					cmd := exec.Command("/usr/bin/tar", "-czvf", compiledInfo.Name+".bpm", "pkg.info", path.Join(temp, "/output/"), "--transform", sed)
+					cmd.Stdin = os.Stdin
+					cmd.Stdout = os.Stdout
+					cmd.Stderr = os.Stderr
+					cmd.Dir = compiledDir
+					fmt.Printf("running command: %s %s\n", cmd.Path, strings.Join(cmd.Args, " "))
+					err := cmd.Run()
+					if err != nil {
+						return err
+					}
+					err = os.Remove(path.Join(compiledDir, "pkg.info"))
+					if err != nil {
+						return err
+					}
+				}
+				if !keepTempDir {
+					err := os.RemoveAll(temp)
+					if err != nil {
+						return err
+					}
+				}
 			}
 		}
 	} else {
@@ -404,6 +460,10 @@ func InstallPackage(filename, installDir string, force bool) error {
 	}
 	slices.Sort(files)
 	slices.Reverse(files)
+
+	filesDiff := slices.DeleteFunc(oldFiles, func(f string) bool {
+		return slices.Contains(files, f)
+	})
 
 	installedDir := path.Join(installDir, "var/lib/bpm/installed/")
 	err = os.MkdirAll(installedDir, 755)
@@ -459,6 +519,12 @@ func InstallPackage(filename, installDir string, force bool) error {
 	err = file.Close()
 	if err != nil {
 		return err
+	}
+	if len(filesDiff) != 0 {
+		fmt.Println("Removing obsolete files")
+		for _, f := range filesDiff {
+			fmt.Println("Removing: " + path.Join(installedDir, f))
+		}
 	}
 	return nil
 }

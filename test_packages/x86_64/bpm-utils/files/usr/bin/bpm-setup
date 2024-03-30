@@ -1,0 +1,66 @@
+#!/bin/bash
+if [ $# -lt 2 ]; then
+  echo "Arguments missing! Try 'bpm-setup <directory> <binary/source>'"
+  exit 1
+fi
+
+output=$1
+type=$2
+
+if [[ ! "$output" =~ ^[a-zA-Z0-9_-]{1,}$ ]]; then
+  echo "Invalid output name! The name must only contain letters, numbers, hyphens or underscores!"
+  exit 1
+fi
+
+if [[ "$type" != "binary" ]] && [[ "$type" != "source" ]]; then
+  echo "Invalid package type! Package type must be either 'binary' or 'source'"
+  exit 1
+fi
+
+mkdir -pv $output
+cd $output
+
+if [[ "$type" == "binary" ]]; then
+  cat > pkg.info << EOF
+name: package_name
+description: Package Description
+version: 1.0
+url: your package's website/repository url. Optonal
+license: your package's license. Optional  
+architecture: $(uname -m)
+type: binary
+EOF
+  mkdir -pv files
+  echo "Package directory created successfully!"
+  echo "Make sure to edit the pkg.info file with the appropriate information for your package"
+  echo "Add your binaries under the files/ directory. For example a binary called 'my_binary' should go under files/usr/bin/my_binary"
+  echo "You can turn your package into a .bpm file use the 'bpm-create <name>' command"
+else
+  cat > pkg.info << EOF
+name: package_name
+description: Package Description
+version: 1.0
+url: your package's website/repository url. Optional
+license: your package's license. Optional
+architecture: any
+type: source
+EOF
+  cat > source.sh << 'EOF'
+# This is the source.sh script. It is executed by BPM in a temporary directory when compiling a source package
+# BPM expects there to be an 'output' directory under the root of the temporary directory after this script finishes executing, otherwise your program may not be correctly installed
+# It is recommended you create the 'output' directory along with a 'source' directory in the root of the temporary directory like this
+echo "Compiling my_program..."
+# Creating 'source' and 'output' directory variables
+source=$(pwd)/source
+output=$(pwd)/output
+# Creating the 'source' and 'output' directories
+mkdir $source
+mkdir $output
+# Downloading files
+git clone https://myrepo.com/repo.git source
+EOF
+  echo "Package directory created successfully!"
+  echo "Make sure to edit the pkg.info file with the appropriate information for your package"
+  echo "Add your compilation code in the source.sh file. Follow the instructions on the template file on how to do properly compile your program"
+  echo "You can turn your package into a .bpm file use the 'bpm-create <name>' command"
+fi
