@@ -453,6 +453,9 @@ func InstallPackage(filename, installDir string, force, binaryPkgFromSrc, keepTe
 						return err
 					}
 				}
+				if len(files) == 0 {
+					return errors.New("no output files for source package. Cancelling package installation")
+				}
 			}
 		}
 	} else {

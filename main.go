@@ -3,10 +3,10 @@ package main
 import (
 	"bufio"
 	"capcreepergr.me/bpm/bpm_utils"
+	"flag"
 	"fmt"
 	"log"
 	"os"
-	"slices"
 	"strings"
 )
 
@@ -15,27 +15,23 @@ import (
 /*   A simple-to-use package manager  */
 /* ---------------------------------- */
 
-var bpmVer = "0.1.0"
+var bpmVer = "0.1.1"
+
+var subcommand = "help"
+var subcommandArgs []string
+
+// Flags
 var rootDir = "/"
+var yesAll = false
+var buildSource = false
+var keepTempDir = false
+var forceInstall = false
+var pkgListNumbers = false
+var pkgListNames = false
 
 func main() {
-	/*errs, fixed := bpm_utils.FixInstalledPackages(rootDir)
-	if len(errs) != 0 {
-		for pkg, err := range errs {
-			fmt.Printf("Package (%s) could not be read properly\nError: %s\n", pkg, err.Error())
-		}
-		fmt.Println("The aforementioned packages require manual fixing. Make sure their info files are valid in " + path.Join(rootDir, "var/lib/bpm/installed"))
-		os.Exit(1)
-	} else {
-		if fixed != 0 {
-			fmt.Println("Fixed " + strconv.Itoa(fixed) + " outdated package info files")
-		}
-	}*/
+	resolveFlags()
 	resolveCommand()
-}
-
-func getArgs() []string {
-	return os.Args[1:]
 }
 
 type commandType uint8
@@ -51,11 +47,7 @@ const (
 )
 
 func getCommandType() commandType {
-	if len(getArgs()) == 0 {
-		return help
-	}
-	cmd := getArgs()[0]
-	switch cmd {
+	switch subcommand {
 	case "version":
 		return version
 	case "info":
@@ -77,12 +69,10 @@ func getCommandType() commandType {
 func resolveCommand() {
 	switch getCommandType() {
 	case version:
-		resolveFlags()
 		fmt.Println("Bubble Package Manager (BPM)")
 		fmt.Println("Version: " + bpmVer)
 	case info:
-		_, i := resolveFlags()
-		packages := getArgs()[1+i:]
+		packages := subcommandArgs
 		if len(packages) == 0 {
 			fmt.Println("No packages were given")
 			return
@@ -99,7 +89,6 @@ func resolveCommand() {
 			}
 		}
 	case list:
-		flags, _ := resolveFlags()
 		packages, err := bpm_utils.GetInstalledPackages(rootDir)
 		if err != nil {
 			log.Fatalf("Could not get installed packages\nError: %s", err.Error())
@@ -109,9 +98,9 @@ func resolveCommand() {
 			fmt.Println("No packages have been installed")
 			return
 		}
-		if slices.Contains(flags, "n") {
+		if pkgListNumbers {
 			fmt.Println(len(packages))
-		} else if slices.Contains(flags, "l") {
+		} else if pkgListNames {
 			for _, pkg := range packages {
 				fmt.Println(pkg)
 			}
@@ -133,8 +122,7 @@ func resolveCommand() {
 			fmt.Println("This subcommand needs to be run with superuser permissions")
 			os.Exit(0)
 		}
-		flags, i := resolveFlags()
-		files := getArgs()[1+i:]
+		files := subcommandArgs
 		if len(files) == 0 {
 			fmt.Println("No files were given to install")
 			return
@@ -150,7 +138,7 @@ func resolveCommand() {
 			if pkgInfo.Type == "source" {
 				verb = "build"
 			}
-			if !slices.Contains(flags, "f") {
+			if !forceInstall {
 				if pkgInfo.Arch != "any" && pkgInfo.Arch != bpm_utils.GetArch() {
 					fmt.Printf("skipping... cannot %s a package with a different architecture\n", verb)
 					continue
@@ -166,7 +154,10 @@ func resolveCommand() {
 					}
 				}
 			}
-			if !slices.Contains(flags, "y") {
+			if rootDir != "/" {
+				fmt.Println("Warning: Installing to " + rootDir)
+			}
+			if !yesAll {
 				reader := bufio.NewReader(os.Stdin)
 				if pkgInfo.Type == "source" {
 					fmt.Print("Would you like to view the source.sh file of this package? [Y\\n] ")
@@ -182,7 +173,7 @@ func resolveCommand() {
 				}
 			}
 			if bpm_utils.IsPackageInstalled(pkgInfo.Name, rootDir) {
-				if !slices.Contains(flags, "y") {
+				if !yesAll {
 					installedInfo := bpm_utils.GetPackageInfo(pkgInfo.Name, rootDir, false)
 					if strings.Compare(pkgInfo.Version, installedInfo.Version) > 0 {
 						fmt.Println("This file contains a newer version of this package (" + installedInfo.Version + " -> " + pkgInfo.Version + ")")
@@ -201,7 +192,7 @@ func resolveCommand() {
 						continue
 					}
 				}
-			} else if !slices.Contains(flags, "y") {
+			} else if !yesAll {
 				reader := bufio.NewReader(os.Stdin)
 				fmt.Printf("Do you wish to %s this package? [y\\N] ", verb)
 				text, _ := reader.ReadString('\n')
@@ -211,15 +202,15 @@ func resolveCommand() {
 				}
 			}
 
-			err = bpm_utils.InstallPackage(file, rootDir, slices.Contains(flags, "f"), slices.Contains(flags, "b"), slices.Contains(flags, "k"))
+			err = bpm_utils.InstallPackage(file, rootDir, forceInstall, buildSource, keepTempDir)
 			if err != nil {
-				if pkgInfo.Type == "source" && slices.Contains(flags, "k") {
+				if pkgInfo.Type == "source" && keepTempDir {
 					fmt.Println("BPM temp directory was created at /var/tmp/bpm_source-" + pkgInfo.Name)
 				}
 				log.Fatalf("Could not install package\nError: %s\n", err)
 			}
 			fmt.Printf("Package (%s) was successfully installed!\n", pkgInfo.Name)
-			if pkgInfo.Type == "source" && slices.Contains(flags, "k") {
+			if pkgInfo.Type == "source" && keepTempDir {
 				fmt.Println("** It is recommended you delete the temporary bpm folder in /var/tmp **")
 			}
 		}
@@ -228,8 +219,7 @@ func resolveCommand() {
 			fmt.Println("This subcommand needs to be run with superuser permissions")
 			os.Exit(0)
 		}
-		flags, i := resolveFlags()
-		packages := getArgs()[1+i:]
+		packages := subcommandArgs
 		if len(packages) == 0 {
 			fmt.Println("No packages were given")
 			return
@@ -242,7 +232,10 @@ func resolveCommand() {
 			}
 			fmt.Print("----------------\n" + bpm_utils.CreateInfoFile(*pkgInfo))
 			fmt.Println("----------------")
-			if !slices.Contains(flags, "y") {
+			if rootDir != "/" {
+				fmt.Println("Warning: Installing to " + rootDir)
+			}
+			if !yesAll {
 				reader := bufio.NewReader(os.Stdin)
 				fmt.Print("Do you wish to remove this package? [y\\N] ")
 				text, _ := reader.ReadString('\n')
@@ -259,29 +252,91 @@ func resolveCommand() {
 			fmt.Printf("Package (%s) was successfully removed!\n", pkgInfo.Name)
 		}
 	default:
-		fmt.Println("\033[1m------Help------\033[0m")
-		fmt.Println("\033[1m\\ Command Format /\033[0m")
-		fmt.Println("-> command format: bpm <subcommand> [-flags]...")
-		fmt.Println("-> flags will be read if passed right after the subcommand otherwise they will be read as subcommand arguments")
-		fmt.Println("\033[1m\\ Command List /\033[0m")
-		fmt.Println("-> bpm version | shows information on the installed version of bpm")
-		fmt.Println("-> bpm info | shows information on an installed package")
-		fmt.Println("-> bpm list [-n, -l] | lists all installed packages")
-		fmt.Println("       -n shows the number of packages")
-		fmt.Println("       -l lists package names only")
-		fmt.Println("-> bpm install [-y, -f, -b] <files...> | installs the following files")
-		fmt.Println("       -y skips the confirmation prompt")
-		fmt.Println("       -f skips dependency and architecture checking")
-		fmt.Println("       -b creates a binary package for a source package after compilation and saves it in /var/lib/bpm/compiled")
-		fmt.Println("       -k keeps the temp directory created by BPM after source package installation")
-		fmt.Println("-> bpm remove [-y] <packages...> | removes the following packages")
-		fmt.Println("       -y skips the confirmation prompt")
-		fmt.Println("-> bpm cleanup | removes all unneeded dependencies")
-		fmt.Println("\033[1m----------------\033[0m")
+		printHelp()
 	}
 }
 
-func resolveFlags() ([]string, int) {
+func printHelp() {
+	fmt.Println("\033[1m------Help------\033[0m")
+	fmt.Println("\033[1m\\ Command Format /\033[0m")
+	fmt.Println("-> command format: bpm <subcommand> [-flags]...")
+	fmt.Println("-> flags will be read if passed right after the subcommand otherwise they will be read as subcommand arguments")
+	fmt.Println("\033[1m\\ Command List /\033[0m")
+	fmt.Println("-> bpm version | shows information on the installed version of bpm")
+	fmt.Println("-> bpm info | shows information on an installed package")
+	fmt.Println("-> bpm list [-n, -l] | lists all installed packages")
+	fmt.Println("       -n shows the number of packages")
+	fmt.Println("       -l lists package names only")
+	fmt.Println("-> bpm install [-y, -f, -b] <files...> | installs the following files")
+	fmt.Println("       -y skips the confirmation prompt")
+	fmt.Println("       -f skips dependency and architecture checking")
+	fmt.Println("       -b creates a binary package for a source package after compilation and saves it in /var/lib/bpm/compiled")
+	fmt.Println("       -k keeps the temp directory created by BPM after source package installation")
+	fmt.Println("-> bpm remove [-y] <packages...> | removes the following packages")
+	fmt.Println("       -y skips the confirmation prompt")
+	//fmt.Println("-> bpm cleanup | removes all unneeded dependencies")
+	fmt.Println("\033[1m----------------\033[0m")
+}
+
+func resolveFlags() {
+	// List flags
+	listFlagSet := flag.NewFlagSet("List flags", flag.ExitOnError)
+	listFlagSet.Usage = printHelp
+	listFlagSet.StringVar(&rootDir, "R", "/", "Set the destination root")
+	listFlagSet.BoolVar(&yesAll, "y", false, "Skip confirmation prompts")
+	listFlagSet.BoolVar(&pkgListNumbers, "n", false, "List the number of all packages installed with BPM")
+	listFlagSet.BoolVar(&pkgListNames, "l", false, "List the names of all packages installed with BPM")
+	// Info flags
+	infoFlagSet := flag.NewFlagSet("Info flags", flag.ExitOnError)
+	infoFlagSet.StringVar(&rootDir, "R", "/", "Set the destination root")
+	infoFlagSet.Usage = printHelp
+	// Install flags
+	installFlagSet := flag.NewFlagSet("Install flags", flag.ExitOnError)
+	installFlagSet.StringVar(&rootDir, "R", "/", "Set the destination root")
+	installFlagSet.BoolVar(&yesAll, "y", false, "Skip confirmation prompts")
+	installFlagSet.BoolVar(&buildSource, "b", false, "Build binary package from source package")
+	installFlagSet.BoolVar(&keepTempDir, "k", false, "Keep temporary directory after source compilation")
+	installFlagSet.BoolVar(&forceInstall, "f", false, "Force installation by skipping architecture and dependency resolution")
+	installFlagSet.Usage = printHelp
+	// Remove flags
+	removeFlagSet := flag.NewFlagSet("Remove flags", flag.ExitOnError)
+	removeFlagSet.StringVar(&rootDir, "R", "/", "Set the destination root")
+	removeFlagSet.BoolVar(&yesAll, "y", false, "Skip confirmation prompts")
+	removeFlagSet.Usage = printHelp
+	if len(os.Args[1:]) <= 0 {
+		subcommand = "help"
+	} else {
+		subcommand = os.Args[1]
+		subcommandArgs = os.Args[2:]
+		if getCommandType() == list {
+			err := listFlagSet.Parse(subcommandArgs)
+			if err != nil {
+				return
+			}
+			subcommandArgs = listFlagSet.Args()
+		} else if getCommandType() == info {
+			err := infoFlagSet.Parse(subcommandArgs)
+			if err != nil {
+				return
+			}
+			subcommandArgs = infoFlagSet.Args()
+		} else if getCommandType() == install {
+			err := installFlagSet.Parse(subcommandArgs)
+			if err != nil {
+				return
+			}
+			subcommandArgs = installFlagSet.Args()
+		} else if getCommandType() == remove {
+			err := removeFlagSet.Parse(subcommandArgs)
+			if err != nil {
+				return
+			}
+			subcommandArgs = removeFlagSet.Args()
+		}
+	}
+}
+
+/*func resolveFlags() ([]string, int) {
 	flags := getArgs()[1:]
 	var ret []string
 	for _, flag := range flags {
@@ -303,7 +358,13 @@ func resolveFlags() ([]string, int) {
 				}
 				ret = append(ret, f)
 			case remove:
-				v := [...]string{"y"}
+				v := [...]string{"y", "r"}
+				if !slices.Contains(v[:], f) {
+					log.Fatalf("Invalid flag " + flag)
+				}
+				ret = append(ret, f)
+			case info:
+				v := [...]string{"r"}
 				if !slices.Contains(v[:], f) {
 					log.Fatalf("Invalid flag " + flag)
 				}
@@ -314,4 +375,4 @@ func resolveFlags() ([]string, int) {
 		}
 	}
 	return ret, len(ret)
-}
+}*/
