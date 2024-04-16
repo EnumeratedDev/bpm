@@ -304,6 +304,16 @@ func InstallPackage(filename, installDir string, force, binaryPkgFromSrc, keepTe
 			}
 		}
 	} else if pkgInfo.Type == "source" {
+		temp := "/var/tmp/bpm_source-" + pkgInfo.Name
+		err = os.RemoveAll(temp)
+		if err != nil {
+			return err
+		}
+		err = os.Mkdir(temp, 0755)
+		fmt.Println("Creating temp directory at: " + temp)
+		if err != nil {
+			return err
+		}
 		for {
 			header, err := tr.Next()
 			if err == io.EOF {
@@ -312,18 +322,47 @@ func InstallPackage(filename, installDir string, force, binaryPkgFromSrc, keepTe
 			if err != nil {
 				return err
 			}
+			if strings.HasPrefix(header.Name, "source-files/") && header.Name != "source-files/" {
+				extractFilename := path.Join(temp, strings.TrimPrefix(header.Name, "source-files/"))
+				switch header.Typeflag {
+				case tar.TypeDir:
+					if err := os.Mkdir(extractFilename, 0755); err != nil {
+						if !os.IsExist(err) {
+							return err
+						}
+					} else {
+						fmt.Println("Creating Directory: " + extractFilename)
+					}
+				case tar.TypeReg:
+					err := os.Remove(extractFilename)
+					if err != nil && !os.IsNotExist(err) {
+						return err
+					}
+					outFile, err := os.Create(extractFilename)
+					fmt.Println("Creating File: " + extractFilename)
+					if err != nil {
+						return err
+					}
+					if _, err := io.Copy(outFile, tr); err != nil {
+						return err
+					}
+					if err := os.Chmod(extractFilename, header.FileInfo().Mode()); err != nil {
+						return err
+					}
+					err = outFile.Close()
+					if err != nil {
+						return err
+					}
+				case tar.TypeSymlink:
+					fmt.Println("Skipping symlink (Bundling symlinks in source packages is not supported)")
+				case tar.TypeLink:
+					fmt.Println("Skipping hard link (Bundling hard links in source packages is not supported)")
+				default:
+					return errors.New("ExtractTarGz: unknown type: " + strconv.Itoa(int(header.Typeflag)) + " in " + extractFilename)
+				}
+			}
 			if header.Name == "source.sh" {
 				bs, err := io.ReadAll(tr)
-				if err != nil {
-					return err
-				}
-				temp := "/var/tmp/bpm_source-" + pkgInfo.Name
-				err = os.RemoveAll(temp)
-				if err != nil {
-					return err
-				}
-				err = os.Mkdir(temp, 0755)
-				fmt.Println("Creating temp directory at: " + temp)
 				if err != nil {
 					return err
 				}
@@ -331,132 +370,138 @@ func InstallPackage(filename, installDir string, force, binaryPkgFromSrc, keepTe
 				if err != nil {
 					return err
 				}
-				fmt.Println("Running source.sh file...")
-				cmd := exec.Command("/usr/bin/sh", "source.sh")
-				cmd.Stdin = os.Stdin
-				cmd.Stdout = os.Stdout
-				cmd.Stderr = os.Stderr
-				cmd.Dir = temp
-				err = cmd.Run()
+			}
+		}
+		if _, err := os.Stat(path.Join("source.sh")); os.IsNotExist(err) {
+			return errors.New("source.sh file could not be found in the temporary build directory")
+		}
+		if err != nil {
+			return err
+		}
+		fmt.Println("Running source.sh file...")
+		cmd := exec.Command("/usr/bin/sh", "source.sh")
+		cmd.Stdin = os.Stdin
+		cmd.Stdout = os.Stdout
+		cmd.Stderr = os.Stderr
+		cmd.Dir = temp
+		err = cmd.Run()
+		if err != nil {
+			return err
+		}
+		if _, err := os.Stat(path.Join(temp, "/output/")); err != nil {
+			if os.IsNotExist(err) {
+				return errors.New("Output directory not be found at " + path.Join(temp, "/output/"))
+			}
+			return err
+		}
+		fmt.Println("Copying all files...")
+		err = filepath.WalkDir(path.Join(temp, "/output/"), func(fullpath string, d fs.DirEntry, err error) error {
+			relFilename, err := filepath.Rel(path.Join(temp, "/output/"), fullpath)
+			if relFilename == "." {
+				return nil
+			}
+			extractFilename := path.Join(installDir, relFilename)
+			if err != nil {
+				return err
+			}
+			if d.Type() == os.ModeDir {
+				files = append(files, relFilename+"/")
+				if err := os.Mkdir(extractFilename, 0755); err != nil {
+					if !os.IsExist(err) {
+						return err
+					}
+				} else {
+					fmt.Println("Creating Directory: " + extractFilename)
+				}
+			} else if d.Type().IsRegular() {
+				err := os.Remove(extractFilename)
+				if err != nil && !os.IsNotExist(err) {
+					return err
+				}
+				outFile, err := os.Create(extractFilename)
+				fmt.Println("Creating File: " + extractFilename)
+				files = append(files, relFilename)
 				if err != nil {
 					return err
 				}
-				if _, err := os.Stat(path.Join(temp, "/output/")); err != nil {
-					if os.IsNotExist(err) {
-						return errors.New("Output directory not be found at " + path.Join(temp, "/output/"))
-					}
-					return err
-				}
-				fmt.Println("Copying all files...")
-				err = filepath.WalkDir(path.Join(temp, "/output/"), func(fullpath string, d fs.DirEntry, err error) error {
-					relFilename, err := filepath.Rel(path.Join(temp, "/output/"), fullpath)
-					if relFilename == "." {
-						return nil
-					}
-					extractFilename := path.Join(installDir, relFilename)
-					if err != nil {
-						return err
-					}
-					if d.Type() == os.ModeDir {
-						files = append(files, relFilename+"/")
-						if err := os.Mkdir(extractFilename, 0755); err != nil {
-							if !os.IsExist(err) {
-								return err
-							}
-						} else {
-							fmt.Println("Creating Directory: " + extractFilename)
-						}
-					} else if d.Type().IsRegular() {
-						err := os.Remove(extractFilename)
-						if err != nil && !os.IsNotExist(err) {
-							return err
-						}
-						outFile, err := os.Create(extractFilename)
-						fmt.Println("Creating File: " + extractFilename)
-						files = append(files, relFilename)
-						if err != nil {
-							return err
-						}
-						f, err := os.Open(fullpath)
-						if err != nil {
-							return err
-						}
-						if _, err := io.Copy(outFile, f); err != nil {
-							return err
-						}
-						info, err := os.Stat(fullpath)
-						if err != nil {
-							return err
-						}
-						if err := os.Chmod(extractFilename, info.Mode()); err != nil {
-							return err
-						}
-						err = outFile.Close()
-						if err != nil {
-							return err
-						}
-						err = f.Close()
-						if err != nil {
-							return err
-						}
-					} else if d.Type() == os.ModeSymlink {
-						link, err := os.Readlink(fullpath)
-						if err != nil {
-							return err
-						}
-						err = os.Remove(extractFilename)
-						if err != nil && !os.IsNotExist(err) {
-							return err
-						}
-						fmt.Println("Creating Symlink: "+extractFilename, " -> "+link)
-						files = append(files, relFilename)
-						err = os.Symlink(link, extractFilename)
-						if err != nil {
-							return err
-						}
-					}
-					return nil
-				})
+				f, err := os.Open(fullpath)
 				if err != nil {
 					return err
 				}
-				if binaryPkgFromSrc {
-					compiledDir := path.Join(installDir, "var/lib/bpm/compiled/")
-					err = os.MkdirAll(compiledDir, 755)
-					compiledInfo := PackageInfo{}
-					compiledInfo = *pkgInfo
-					compiledInfo.Type = "binary"
-					compiledInfo.Arch = GetArch()
-					err = os.WriteFile(path.Join(compiledDir, "pkg.info"), []byte(CreateInfoFile(compiledInfo)), 0644)
-					if err != nil {
-						return err
-					}
-					sed := fmt.Sprintf("s/%s/files/", strings.Replace(strings.TrimPrefix(path.Join(temp, "/output/"), "/"), "/", `\/`, -1))
-					cmd := exec.Command("/usr/bin/tar", "-czvf", compiledInfo.Name+".bpm", "pkg.info", path.Join(temp, "/output/"), "--transform", sed)
-					cmd.Stdin = os.Stdin
-					cmd.Stdout = os.Stdout
-					cmd.Stderr = os.Stderr
-					cmd.Dir = compiledDir
-					fmt.Printf("running command: %s %s\n", cmd.Path, strings.Join(cmd.Args, " "))
-					err := cmd.Run()
-					if err != nil {
-						return err
-					}
-					err = os.Remove(path.Join(compiledDir, "pkg.info"))
-					if err != nil {
-						return err
-					}
+				if _, err := io.Copy(outFile, f); err != nil {
+					return err
 				}
-				if !keepTempDir {
-					err := os.RemoveAll(temp)
-					if err != nil {
-						return err
-					}
+				info, err := os.Stat(fullpath)
+				if err != nil {
+					return err
 				}
-				if len(files) == 0 {
-					return errors.New("no output files for source package. Cancelling package installation")
+				if err := os.Chmod(extractFilename, info.Mode()); err != nil {
+					return err
+				}
+				err = outFile.Close()
+				if err != nil {
+					return err
+				}
+				err = f.Close()
+				if err != nil {
+					return err
+				}
+			} else if d.Type() == os.ModeSymlink {
+				link, err := os.Readlink(fullpath)
+				if err != nil {
+					return err
+				}
+				err = os.Remove(extractFilename)
+				if err != nil && !os.IsNotExist(err) {
+					return err
+				}
+				fmt.Println("Creating Symlink: "+extractFilename, " -> "+link)
+				files = append(files, relFilename)
+				err = os.Symlink(link, extractFilename)
+				if err != nil {
+					return err
 				}
 			}
+			return nil
+		})
+		if err != nil {
+			return err
+		}
+		if binaryPkgFromSrc {
+			compiledDir := path.Join(installDir, "var/lib/bpm/compiled/")
+			err = os.MkdirAll(compiledDir, 755)
+			compiledInfo := PackageInfo{}
+			compiledInfo = *pkgInfo
+			compiledInfo.Type = "binary"
+			compiledInfo.Arch = GetArch()
+			err = os.WriteFile(path.Join(compiledDir, "pkg.info"), []byte(CreateInfoFile(compiledInfo)), 0644)
+			if err != nil {
+				return err
+			}
+			sed := fmt.Sprintf("s/%s/files/", strings.Replace(strings.TrimPrefix(path.Join(temp, "/output/"), "/"), "/", `\/`, -1))
+			cmd := exec.Command("/usr/bin/tar", "-czvf", compiledInfo.Name+".bpm", "pkg.info", path.Join(temp, "/output/"), "--transform", sed)
+			cmd.Stdin = os.Stdin
+			cmd.Stdout = os.Stdout
+			cmd.Stderr = os.Stderr
+			cmd.Dir = compiledDir
+			fmt.Printf("running command: %s %s\n", cmd.Path, strings.Join(cmd.Args, " "))
+			err := cmd.Run()
+			if err != nil {
+				return err
+			}
+			err = os.Remove(path.Join(compiledDir, "pkg.info"))
+			if err != nil {
+				return err
+			}
+		}
+		if !keepTempDir {
+			err := os.RemoveAll(temp)
+			if err != nil {
+				return err
+			}
+		}
+		if len(files) == 0 {
+			return errors.New("no output files for source package. Cancelling package installation")
 		}
 	} else {
 		return errors.New("Unknown package type: " + pkgInfo.Type)

@@ -77,7 +77,7 @@ mkdir files
 5) Either copy the bpm-create script from the bpm-utils test package into your /usr/local/bin directory or install the bpm-utils.bpm package
 6) Run the following
 ```
-bpm-create <filename_without_extension>
+bpm-create <filename.bpm>
 ```
 7) It's done! You now hopefully have a working BPM package!
 ### Source Packages
@@ -85,10 +85,11 @@ bpm-create <filename_without_extension>
 ```
 touch source.sh
 ```
-4) You are able to run bash code in this file. BPM will extract this file in a directory under /tmp and it will be ran there
-5) Your goal is to download your program's source code with either git, wget, curl, etc. and put the binaries under a folder called 'output' in the root of the temp directory. There is a simple example script with helpful comments in the htop-src test package
-6) As of this moment there is no script to automate package compression like for binary packages. You will need to create the archive manually
+4) If you would like to bundle patches or other files with your source package create a 'source-files' directory and place your files in there. They will be extracted to the same location as the source.sh file during compilation
+5) You are able to run bash code in source.sh. BPM will extract this file in a directory under /tmp and it will be run there
+6) Your goal is to download your program's source code with either git, wget, curl, etc. and put the binaries under a folder called 'output' in the root of the temp directory. There is a simple example script with helpful comments in the htop-src test package
+7) When you are done making your source.sh script run the following to create a package archive
 ```
-tar -czvf my_package-src.bpm pkg.info source.sh
+bpm-create <filename.bpm>
 ```
-7) That's it! Your source package should now be compiling correctly!
+8) That's it! Your source package should now be compiling correctly!
