@@ -15,7 +15,7 @@ import (
 /*   A simple-to-use package manager  */
 /* ---------------------------------- */
 
-var bpmVer = "0.1.2"
+var bpmVer = "0.1.3"
 
 var subcommand = "help"
 var subcommandArgs []string
@@ -43,7 +43,6 @@ const (
 	list
 	install
 	remove
-	cleanup
 )
 
 func getCommandType() commandType {
@@ -58,12 +57,9 @@ func getCommandType() commandType {
 		return install
 	case "remove":
 		return remove
-	case "cleanup":
-		return cleanup
 	default:
 		return help
 	}
-
 }
 
 func resolveCommand() {
@@ -335,44 +331,3 @@ func resolveFlags() {
 		}
 	}
 }
-
-/*func resolveFlags() ([]string, int) {
-	flags := getArgs()[1:]
-	var ret []string
-	for _, flag := range flags {
-		if strings.HasPrefix(flag, "-") {
-			f := strings.TrimPrefix(flag, "-")
-			switch getCommandType() {
-			default:
-				log.Fatalf("Invalid flag " + flag)
-			case list:
-				v := [...]string{"l", "n"}
-				if !slices.Contains(v[:], f) {
-					log.Fatalf("Invalid flag " + flag)
-				}
-				ret = append(ret, f)
-			case install:
-				v := [...]string{"y", "f", "b", "k"}
-				if !slices.Contains(v[:], f) {
-					log.Fatalf("Invalid flag " + flag)
-				}
-				ret = append(ret, f)
-			case remove:
-				v := [...]string{"y", "r"}
-				if !slices.Contains(v[:], f) {
-					log.Fatalf("Invalid flag " + flag)
-				}
-				ret = append(ret, f)
-			case info:
-				v := [...]string{"r"}
-				if !slices.Contains(v[:], f) {
-					log.Fatalf("Invalid flag " + flag)
-				}
-				ret = append(ret, f)
-			}
-		} else {
-			break
-		}
-	}
-	return ret, len(ret)
-}*/

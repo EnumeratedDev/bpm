@@ -8,7 +8,6 @@ import (
 	"fmt"
 	"io"
 	"io/fs"
-	"log"
 	"os"
 	"os/exec"
 	"path"
@@ -372,18 +371,39 @@ func InstallPackage(filename, installDir string, force, binaryPkgFromSrc, keepTe
 				}
 			}
 		}
-		if _, err := os.Stat(path.Join("source.sh")); os.IsNotExist(err) {
+		if _, err := os.Stat(path.Join(temp, "source.sh")); os.IsNotExist(err) {
 			return errors.New("source.sh file could not be found in the temporary build directory")
 		}
 		if err != nil {
 			return err
 		}
 		fmt.Println("Running source.sh file...")
-		cmd := exec.Command("/usr/bin/sh", "source.sh")
+		if err != nil {
+			return err
+		}
+		cmd := exec.Command("/bin/bash", "-e", "source.sh")
 		cmd.Stdin = os.Stdin
 		cmd.Stdout = os.Stdout
 		cmd.Stderr = os.Stderr
 		cmd.Dir = temp
+		cmd.Env = os.Environ()
+		cmd.Env = append(cmd.Env, fmt.Sprintf("BPM_PKG_NAME=%s", pkgInfo.Name))
+		cmd.Env = append(cmd.Env, fmt.Sprintf("BPM_PKG_DESC=%s", pkgInfo.Description))
+		cmd.Env = append(cmd.Env, fmt.Sprintf("BPM_PKG_VERSION=%s", pkgInfo.Version))
+		cmd.Env = append(cmd.Env, fmt.Sprintf("BPM_PKG_URL=%s", pkgInfo.Url))
+		depends := make([]string, len(pkgInfo.Depends))
+		copy(depends, pkgInfo.Depends)
+		for i := 0; i < len(depends); i++ {
+			depends[i] = fmt.Sprintf("\"%s\"", depends[i])
+		}
+		makeDepends := make([]string, len(pkgInfo.MakeDepends))
+		copy(makeDepends, pkgInfo.MakeDepends)
+		for i := 0; i < len(makeDepends); i++ {
+			makeDepends[i] = fmt.Sprintf("\"%s\"", makeDepends[i])
+		}
+		cmd.Env = append(cmd.Env, fmt.Sprintf("BPM_PKG_DEPENDS=(%s)", strings.Join(depends, " ")))
+		cmd.Env = append(cmd.Env, fmt.Sprintf("BPM_PKG_MAKE_DEPENDS=(%s)", strings.Join(makeDepends, " ")))
+		cmd.Env = append(cmd.Env, "BPM_PKG_TYPE=source")
 		err = cmd.Run()
 		if err != nil {
 			return err
@@ -479,7 +499,7 @@ func InstallPackage(filename, installDir string, force, binaryPkgFromSrc, keepTe
 				return err
 			}
 			sed := fmt.Sprintf("s/%s/files/", strings.Replace(strings.TrimPrefix(path.Join(temp, "/output/"), "/"), "/", `\/`, -1))
-			cmd := exec.Command("/usr/bin/tar", "-czvf", compiledInfo.Name+".bpm", "pkg.info", path.Join(temp, "/output/"), "--transform", sed)
+			cmd := exec.Command("/usr/bin/tar", "-czvf", compiledInfo.Name+"-"+compiledInfo.Version+".bpm", "pkg.info", path.Join(temp, "/output/"), "--transform", sed)
 			cmd.Stdin = os.Stdin
 			cmd.Stdout = os.Stdout
 			cmd.Stderr = os.Stderr
@@ -571,7 +591,11 @@ func InstallPackage(filename, installDir string, force, binaryPkgFromSrc, keepTe
 	if len(filesDiff) != 0 {
 		fmt.Println("Removing obsolete files")
 		for _, f := range filesDiff {
-			fmt.Println("Removing: " + path.Join(installedDir, f))
+			err := os.RemoveAll(path.Join(installDir, f))
+			if err != nil {
+				return err
+			}
+			fmt.Println("Removing: " + path.Join(installDir, f))
 		}
 	}
 	return nil
@@ -827,45 +851,4 @@ func RemovePackage(pkg, rootDir string) error {
 	}
 	fmt.Println("Removing: " + pkgDir)
 	return nil
-}
-
-func FixInstalledPackages(rootDir string) (map[string]error, int) {
-	var errs map[string]error
-	totalFixed := 0
-	pkgs, err := GetInstalledPackages(rootDir)
-	if err != nil {
-		log.Fatalf("Could not check if installed package info files are formatted correctly\nError: %s", err.Error())
-	}
-	for _, pkg := range pkgs {
-		fixed := false
-		pkgInfo := GetPackageInfo(pkg, "/", true)
-		if pkgInfo.Name == "" {
-			errs[pkg] = errors.New("this package contains no name")
-			continue
-		}
-		if pkgInfo.Description == "" {
-			pkgInfo.Description = "Default Description"
-			fixed = true
-		}
-		if pkgInfo.Version == "" {
-			errs[pkg] = errors.New("this package contains no version")
-			continue
-		}
-		if pkgInfo.Arch == "" {
-			pkgInfo.Arch = GetArch()
-			fixed = true
-		}
-		if pkgInfo.Type == "" {
-			errs[pkg] = errors.New("this package contains no type")
-			continue
-		}
-		if fixed {
-			totalFixed++
-		}
-		err := setPackageInfo(pkg, CreateInfoFile(*pkgInfo), rootDir)
-		if err != nil {
-			log.Fatalf("Could not check if installed package info files are formatted correctly\nError: %s", err.Error())
-		}
-	}
-	return errs, totalFixed
 }
