@@ -7,6 +7,8 @@ import (
 	"fmt"
 	"log"
 	"os"
+	"path/filepath"
+	"slices"
 	"strings"
 )
 
@@ -15,7 +17,7 @@ import (
 /*   A simple-to-use package manager  */
 /* ---------------------------------- */
 
-var bpmVer = "0.1.3"
+var bpmVer = "0.1.4"
 
 var subcommand = "help"
 var subcommandArgs []string
@@ -43,6 +45,7 @@ const (
 	list
 	install
 	remove
+	file
 )
 
 func getCommandType() commandType {
@@ -57,6 +60,8 @@ func getCommandType() commandType {
 		return install
 	case "remove":
 		return remove
+	case "file":
+		return file
 	default:
 		return help
 	}
@@ -247,6 +252,53 @@ func resolveCommand() {
 			}
 			fmt.Printf("Package (%s) was successfully removed!\n", pkgInfo.Name)
 		}
+	case file:
+		files := subcommandArgs
+		if len(files) == 0 {
+			fmt.Println("No files were given to get which packages manage it")
+			return
+		}
+		for _, file := range files {
+			absFile, err := filepath.Abs(file)
+			if err != nil {
+				log.Fatalf("Could not get absolute path of %s", file)
+			}
+			stat, err := os.Stat(absFile)
+			if os.IsNotExist(err) {
+				log.Fatalf(absFile + " does not exist!")
+			}
+			pkgs, err := bpm_utils.GetInstalledPackages(rootDir)
+			if err != nil {
+				log.Fatalf("Could not get installed packages. Error %s", err.Error())
+			}
+
+			if !strings.HasPrefix(absFile, rootDir) {
+				log.Fatalf("Could not get relative path of %s to root path", absFile)
+			}
+			absFile, err = filepath.Rel(rootDir, absFile)
+			if err != nil {
+				log.Fatalf("Could not get relative path of %s to root path", absFile)
+			}
+			absFile = strings.TrimPrefix(absFile, "/")
+			if stat.IsDir() {
+				absFile = absFile + "/"
+			}
+
+			var pkgList []string
+			for _, pkg := range pkgs {
+				if slices.Contains(bpm_utils.GetPackageFiles(pkg, rootDir), absFile) {
+					pkgList = append(pkgList, pkg)
+				}
+			}
+			if len(pkgList) == 0 {
+				fmt.Println(absFile + " is not managed by any packages")
+			} else {
+				fmt.Println(absFile + " is managed by the following packages:")
+				for _, pkg := range pkgList {
+					fmt.Println("- " + pkg)
+				}
+			}
+		}
 	default:
 		printHelp()
 	}
@@ -259,18 +311,23 @@ func printHelp() {
 	fmt.Println("-> flags will be read if passed right after the subcommand otherwise they will be read as subcommand arguments")
 	fmt.Println("\033[1m\\ Command List /\033[0m")
 	fmt.Println("-> bpm version | shows information on the installed version of bpm")
-	fmt.Println("-> bpm info | shows information on an installed package")
-	fmt.Println("-> bpm list [-n, -l] | lists all installed packages")
+	fmt.Println("-> bpm info [-R] | shows information on an installed package")
+	fmt.Println("       -R=<root_path> lets you define the root path which will be used")
+	fmt.Println("-> bpm list [-R, -n, -l] | lists all installed packages")
+	fmt.Println("       -R=<root_path> lets you define the root path which will be used")
 	fmt.Println("       -n shows the number of packages")
 	fmt.Println("       -l lists package names only")
-	fmt.Println("-> bpm install [-y, -f, -b] <files...> | installs the following files")
+	fmt.Println("-> bpm install [-R, -y, -f, -b] <files...> | installs the following files")
+	fmt.Println("       -R=<root_path> lets you define the root path which will be used")
 	fmt.Println("       -y skips the confirmation prompt")
 	fmt.Println("       -f skips dependency and architecture checking")
 	fmt.Println("       -b creates a binary package for a source package after compilation and saves it in /var/lib/bpm/compiled")
 	fmt.Println("       -k keeps the temp directory created by BPM after source package installation")
-	fmt.Println("-> bpm remove [-y] <packages...> | removes the following packages")
+	fmt.Println("-> bpm remove [-R, -y] <packages...> | removes the following packages")
+	fmt.Println("       -R=<root_path> lets you define the root path which will be used")
 	fmt.Println("       -y skips the confirmation prompt")
-	//fmt.Println("-> bpm cleanup | removes all unneeded dependencies")
+	fmt.Println("-> bpm file [-R] <files...> | shows what packages the following packages are managed by")
+	fmt.Println("       -R=<root_path> lets you define the root path which will be used")
 	fmt.Println("\033[1m----------------\033[0m")
 }
 
@@ -299,6 +356,11 @@ func resolveFlags() {
 	removeFlagSet.StringVar(&rootDir, "R", "/", "Set the destination root")
 	removeFlagSet.BoolVar(&yesAll, "y", false, "Skip confirmation prompts")
 	removeFlagSet.Usage = printHelp
+	// File flags
+	// Remove flags
+	fileFlagSet := flag.NewFlagSet("Remove flags", flag.ExitOnError)
+	fileFlagSet.StringVar(&rootDir, "R", "/", "Set the destination root")
+	fileFlagSet.Usage = printHelp
 	if len(os.Args[1:]) <= 0 {
 		subcommand = "help"
 	} else {
@@ -328,6 +390,12 @@ func resolveFlags() {
 				return
 			}
 			subcommandArgs = removeFlagSet.Args()
+		} else if getCommandType() == file {
+			err := fileFlagSet.Parse(subcommandArgs)
+			if err != nil {
+				return
+			}
+			subcommandArgs = fileFlagSet.Args()
 		}
 	}
 }
