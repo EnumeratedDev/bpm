@@ -590,9 +590,21 @@ func InstallPackage(filename, installDir string, force, binaryPkgFromSrc, keepTe
 	}
 	if len(filesDiff) != 0 {
 		fmt.Println("Removing obsolete files")
+		var symlinks []string
 		for _, f := range filesDiff {
 			f = path.Join(installDir, f)
-			stat, err := os.Lstat(f)
+			lstat, err := os.Lstat(f)
+			if os.IsNotExist(err) {
+				continue
+			}
+			if err != nil {
+				return err
+			}
+			if lstat.Mode() == os.ModeSymlink {
+				symlinks = append(symlinks, f)
+				continue
+			}
+			stat, err := os.Stat(f)
 			if os.IsNotExist(err) {
 				continue
 			}
@@ -617,6 +629,26 @@ func InstallPackage(filename, installDir string, force, binaryPkgFromSrc, keepTe
 				if err != nil {
 					return err
 				}
+			}
+		}
+		for _, f := range symlinks {
+			f = path.Join(installDir, f)
+			_, err := os.Lstat(f)
+			if os.IsNotExist(err) {
+				continue
+			}
+			if err != nil {
+				return err
+			}
+			_, err = filepath.EvalSymlinks(f)
+			if os.IsNotExist(err) {
+				err := os.Remove(f)
+				if err != nil {
+					return err
+				}
+			}
+			if err != nil {
+				return err
 			}
 		}
 	}
@@ -838,9 +870,21 @@ func RemovePackage(pkg, rootDir string) error {
 	installedDir := path.Join(rootDir, "var/lib/bpm/installed/")
 	pkgDir := path.Join(installedDir, pkg)
 	files := GetPackageFiles(pkg, rootDir)
+	var symlinks []string
 	for _, file := range files {
 		file = path.Join(rootDir, file)
-		stat, err := os.Lstat(file)
+		lstat, err := os.Lstat(file)
+		if os.IsNotExist(err) {
+			continue
+		}
+		if err != nil {
+			return err
+		}
+		if lstat.Mode() == os.ModeSymlink {
+			symlinks = append(symlinks, file)
+			continue
+		}
+		stat, err := os.Stat(file)
 		if os.IsNotExist(err) {
 			continue
 		}
@@ -865,6 +909,26 @@ func RemovePackage(pkg, rootDir string) error {
 			if err != nil {
 				return err
 			}
+		}
+	}
+	for _, file := range symlinks {
+		file = path.Join(rootDir, file)
+		_, err := os.Lstat(file)
+		if os.IsNotExist(err) {
+			continue
+		}
+		if err != nil {
+			return err
+		}
+		_, err = filepath.EvalSymlinks(file)
+		if os.IsNotExist(err) {
+			err := os.Remove(file)
+			if err != nil {
+				return err
+			}
+		}
+		if err != nil {
+			return err
 		}
 	}
 	err := os.RemoveAll(pkgDir)
