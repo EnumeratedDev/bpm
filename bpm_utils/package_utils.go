@@ -591,11 +591,33 @@ func InstallPackage(filename, installDir string, force, binaryPkgFromSrc, keepTe
 	if len(filesDiff) != 0 {
 		fmt.Println("Removing obsolete files")
 		for _, f := range filesDiff {
-			err := os.RemoveAll(path.Join(installDir, f))
+			f = path.Join(installDir, f)
+			stat, err := os.Lstat(f)
+			if os.IsNotExist(err) {
+				continue
+			}
 			if err != nil {
 				return err
 			}
-			fmt.Println("Removing: " + path.Join(installDir, f))
+			if stat.IsDir() {
+				dir, err := os.ReadDir(f)
+				if err != nil {
+					return err
+				}
+				if len(dir) == 0 {
+					fmt.Println("Removing: " + f)
+					err := os.Remove(f)
+					if err != nil {
+						return err
+					}
+				}
+			} else {
+				fmt.Println("Removing: " + f)
+				err := os.Remove(f)
+				if err != nil {
+					return err
+				}
+			}
 		}
 	}
 	return nil
