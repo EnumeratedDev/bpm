@@ -13,17 +13,41 @@ if [[ ! "$output" =~ ^[a-z.A-Z0-9_-]{1,}$ ]]; then
 fi
 
 type="binary"
+toCompress=("pkg.info")
 
 echo "Creating package with the name $output..."
 
 if [ -d files ]; then
   echo "files/ directory found"
+  toCompress+=("files/")
 else
   if [ -f source.sh ]; then
     type="source"
     echo "source.sh file found"
+    toCompress+=("source.sh")
+    if [ -f pre_update.sh ]; then
+      echo "pre_update.sh file found"
+      toCompress+=("pre_update.sh")
+    fi
+    if [ -f post_update.sh ]; then
+      echo "post_update.sh file found"
+      toCompress+=("post_update.sh")
+    fi
+    if [ -f pre_install.sh ]; then
+      echo "pre_install.sh file found"
+      toCompress+=("pre_install.sh")
+    fi
+    if [ -f post_install.sh ]; then
+      echo "post_install.sh file found"
+      toCompress+=("post_install.sh")
+    fi
+    if [ -f post_remove.sh ]; then
+          echo "post_remove.sh file found"
+          toCompress+=("post_remove.sh")
+        fi
     if [ -d source-files ]; then
       echo "source-files/ directory found"
+      toCompress+=("source-files/")
     fi
   else
     echo "files/ directory or source.sh file not found in $PWD"
@@ -40,12 +64,14 @@ fi
 
 echo "Creating $type package as $output"
 
-if [[ "$type" == "binary" ]]; then
-  tar -czf "$output" files/ pkg.info
-else
-  if [ -d source-files ]; then
-    tar -czf "$output" source.sh source-files/ pkg.info
-  else
-    tar -czf "$output" source.sh pkg.info
-  fi
-fi
+tar -czf "$output" "${toCompress[@]}"
+
+#if [[ "$type" == "binary" ]]; then
+#  tar -czf "$output" files/ pkg.info
+#else
+#  if [ -d source-files ]; then
+#    tar -czf "$output" source.sh source-files/ pkg.info
+#  else
+#    tar -czf "$output" source.sh pkg.info
+#  fi
+#fi

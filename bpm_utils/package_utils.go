@@ -100,6 +100,166 @@ func ReadPackage(filename string) (*PackageInfo, error) {
 	return nil, errors.New("pkg.info not found in archive")
 }
 
+func ReadPackageScripts(filename string) (map[string]string, error) {
+	if _, err := os.Stat(filename); os.IsNotExist(err) {
+		return nil, err
+	}
+	file, err := os.Open(filename)
+	if err != nil {
+		return nil, err
+	}
+	archive, err := gzip.NewReader(file)
+	if err != nil {
+		return nil, err
+	}
+	tr := tar.NewReader(archive)
+	ret := make(map[string]string)
+	for {
+		header, err := tr.Next()
+		if err == io.EOF {
+			break
+		}
+		if err != nil {
+			return nil, err
+		}
+		if header.Name == "pre_install.sh" {
+			bs, _ := io.ReadAll(tr)
+			if err != nil {
+				return nil, err
+			}
+			ret[header.Name] = string(bs)
+		} else if header.Name == "post_install.sh" {
+			bs, _ := io.ReadAll(tr)
+			if err != nil {
+				return nil, err
+			}
+			ret[header.Name] = string(bs)
+		} else if header.Name == "pre_update.sh" {
+			bs, _ := io.ReadAll(tr)
+			if err != nil {
+				return nil, err
+			}
+			ret[header.Name] = string(bs)
+		} else if header.Name == "post_update.sh" {
+			bs, _ := io.ReadAll(tr)
+			if err != nil {
+				return nil, err
+			}
+			ret[header.Name] = string(bs)
+		} else if header.Name == "post_remove.sh" {
+			bs, _ := io.ReadAll(tr)
+			if err != nil {
+				return nil, err
+			}
+			ret[header.Name] = string(bs)
+		}
+	}
+	err = archive.Close()
+	if err != nil {
+		return nil, err
+	}
+	err = file.Close()
+	if err != nil {
+		return nil, err
+	}
+	return ret, nil
+}
+
+type Operation uint8
+
+const (
+	Install Operation = 0
+	Update            = 1
+	Remove            = 2
+)
+
+func ExecutePackageScripts(filename, rootDir string, operation Operation, postOperation bool) error {
+	pkgInfo, err := ReadPackage(filename)
+	if err != nil {
+		return err
+	}
+	scripts, err := ReadPackageScripts(filename)
+	if err != nil {
+		return err
+	}
+
+	run := func(name, content string) error {
+		temp, err := os.CreateTemp("", name)
+		if err != nil {
+			return err
+		}
+		_, err = temp.WriteString(content)
+		if err != nil {
+			return err
+		}
+		cmd := exec.Command("/bin/bash", temp.Name())
+		cmd.Stdin = os.Stdin
+		cmd.Stdout = os.Stdout
+		cmd.Stderr = os.Stderr
+		cmd.Dir = rootDir
+		cmd.Env = os.Environ()
+		cmd.Env = append(cmd.Env, fmt.Sprintf("BPM_ROOT=%s", rootDir))
+		cmd.Env = append(cmd.Env, fmt.Sprintf("BPM_PKG_NAME=%s", pkgInfo.Name))
+		cmd.Env = append(cmd.Env, fmt.Sprintf("BPM_PKG_DESC=%s", pkgInfo.Description))
+		cmd.Env = append(cmd.Env, fmt.Sprintf("BPM_PKG_VERSION=%s", pkgInfo.Version))
+		cmd.Env = append(cmd.Env, fmt.Sprintf("BPM_PKG_URL=%s", pkgInfo.Url))
+		depends := make([]string, len(pkgInfo.Depends))
+		copy(depends, pkgInfo.Depends)
+		for i := 0; i < len(depends); i++ {
+			depends[i] = fmt.Sprintf("\"%s\"", depends[i])
+		}
+		makeDepends := make([]string, len(pkgInfo.MakeDepends))
+		copy(makeDepends, pkgInfo.MakeDepends)
+		for i := 0; i < len(makeDepends); i++ {
+			makeDepends[i] = fmt.Sprintf("\"%s\"", makeDepends[i])
+		}
+		cmd.Env = append(cmd.Env, fmt.Sprintf("BPM_PKG_DEPENDS=(%s)", strings.Join(depends, " ")))
+		cmd.Env = append(cmd.Env, fmt.Sprintf("BPM_PKG_MAKE_DEPENDS=(%s)", strings.Join(makeDepends, " ")))
+		cmd.Env = append(cmd.Env, "BPM_PKG_TYPE=source")
+		err = cmd.Run()
+		if err != nil {
+			return err
+		}
+		return nil
+	}
+
+	if operation == Install {
+		if val, ok := scripts["pre_install.sh"]; !postOperation && ok {
+			err := run("pre_install.sh", val)
+			if err != nil {
+				return err
+			}
+		}
+		if val, ok := scripts["post_install.sh"]; postOperation && ok {
+			err := run("post_install.sh", val)
+			if err != nil {
+				return err
+			}
+		}
+	} else if operation == Update {
+		if val, ok := scripts["pre_update.sh"]; !postOperation && ok {
+			err := run("pre_update.sh", val)
+			if err != nil {
+				return err
+			}
+		}
+		if val, ok := scripts["post_update.sh"]; postOperation && ok {
+			err := run("post_update.sh", val)
+			if err != nil {
+				return err
+			}
+		}
+	} else if operation == Remove {
+		if val, ok := scripts["post_remove.sh"]; postOperation && ok {
+			err := run("post_remove.sh", val)
+			if err != nil {
+				return err
+			}
+		}
+	}
+	return nil
+}
+
 func ReadPackageInfo(contents string, defaultValues bool) (*PackageInfo, error) {
 	pkgInfo := PackageInfo{
 		Name:        "",
@@ -216,7 +376,8 @@ func InstallPackage(filename, installDir string, force, binaryPkgFromSrc, keepTe
 	if err != nil {
 		return err
 	}
-	if IsPackageInstalled(pkgInfo.Name, installDir) {
+	packageInstalled := IsPackageInstalled(pkgInfo.Name, installDir)
+	if packageInstalled {
 		oldFiles = GetPackageFiles(pkgInfo.Name, installDir)
 	}
 	if !force {
@@ -227,8 +388,18 @@ func InstallPackage(filename, installDir string, force, binaryPkgFromSrc, keepTe
 			return errors.New("Could not resolve all dependencies. Missing " + strings.Join(unresolved, ", "))
 		}
 	}
-
 	if pkgInfo.Type == "binary" {
+		if !packageInstalled {
+			err = ExecutePackageScripts(filename, installDir, Install, false)
+			if err != nil {
+				return err
+			}
+		} else {
+			err = ExecutePackageScripts(filename, installDir, Update, false)
+			if err != nil {
+				return err
+			}
+		}
 		seenHardlinks := make(map[string]string)
 		for {
 			header, err := tr.Next()
@@ -378,8 +549,16 @@ func InstallPackage(filename, installDir string, force, binaryPkgFromSrc, keepTe
 			return err
 		}
 		fmt.Println("Running source.sh file...")
-		if err != nil {
-			return err
+		if !packageInstalled {
+			err = ExecutePackageScripts(filename, installDir, Install, false)
+			if err != nil {
+				return err
+			}
+		} else {
+			err = ExecutePackageScripts(filename, installDir, Update, false)
+			if err != nil {
+				return err
+			}
 		}
 		cmd := exec.Command("/bin/bash", "-e", "source.sh")
 		cmd.Stdin = os.Stdin
@@ -387,6 +566,7 @@ func InstallPackage(filename, installDir string, force, binaryPkgFromSrc, keepTe
 		cmd.Stderr = os.Stderr
 		cmd.Dir = temp
 		cmd.Env = os.Environ()
+		cmd.Env = append(cmd.Env, fmt.Sprintf("BPM_ROOT=%s", installDir))
 		cmd.Env = append(cmd.Env, fmt.Sprintf("BPM_PKG_NAME=%s", pkgInfo.Name))
 		cmd.Env = append(cmd.Env, fmt.Sprintf("BPM_PKG_DESC=%s", pkgInfo.Description))
 		cmd.Env = append(cmd.Env, fmt.Sprintf("BPM_PKG_VERSION=%s", pkgInfo.Version))
@@ -498,6 +678,13 @@ func InstallPackage(filename, installDir string, force, binaryPkgFromSrc, keepTe
 			if err != nil {
 				return err
 			}
+			scripts, err := ReadPackageScripts(filename)
+			for key, val := range scripts {
+				err = os.WriteFile(path.Join(compiledDir, key), []byte(val), 0644)
+				if err != nil {
+					return err
+				}
+			}
 			sed := fmt.Sprintf("s/%s/files/", strings.Replace(strings.TrimPrefix(path.Join(temp, "/output/"), "/"), "/", `\/`, -1))
 			cmd := exec.Command("/usr/bin/tar", "-czvf", compiledInfo.Name+"-"+compiledInfo.Version+".bpm", "pkg.info", path.Join(temp, "/output/"), "--transform", sed)
 			cmd.Stdin = os.Stdin
@@ -505,11 +692,17 @@ func InstallPackage(filename, installDir string, force, binaryPkgFromSrc, keepTe
 			cmd.Stderr = os.Stderr
 			cmd.Dir = compiledDir
 			fmt.Printf("running command: %s %s\n", cmd.Path, strings.Join(cmd.Args, " "))
-			err := cmd.Run()
+			err = cmd.Run()
 			if err != nil {
 				return err
 			}
 			err = os.Remove(path.Join(compiledDir, "pkg.info"))
+			for key := range scripts {
+				err = os.Remove(path.Join(compiledDir, key))
+				if err != nil {
+					return err
+				}
+			}
 			if err != nil {
 				return err
 			}
@@ -578,6 +771,25 @@ func InstallPackage(filename, installDir string, force, binaryPkgFromSrc, keepTe
 	err = f.Close()
 	if err != nil {
 		return err
+	}
+
+	scripts, err := ReadPackageScripts(filename)
+	if err != nil {
+		return err
+	}
+	if val, ok := scripts["post_remove.sh"]; ok {
+		f, err = os.Create(path.Join(pkgDir, "post_remove.sh"))
+		if err != nil {
+			return err
+		}
+		_, err = f.WriteString(val)
+		if err != nil {
+			return err
+		}
+		err = f.Close()
+		if err != nil {
+			return err
+		}
 	}
 
 	err = archive.Close()
@@ -650,6 +862,17 @@ func InstallPackage(filename, installDir string, force, binaryPkgFromSrc, keepTe
 			if err != nil {
 				return err
 			}
+		}
+	}
+	if !packageInstalled {
+		err = ExecutePackageScripts(filename, installDir, Install, true)
+		if err != nil {
+			return err
+		}
+	} else {
+		err = ExecutePackageScripts(filename, installDir, Update, true)
+		if err != nil {
+			return err
 		}
 	}
 	return nil
@@ -869,6 +1092,10 @@ func setPackageInfo(pkg, contents, rootDir string) error {
 func RemovePackage(pkg, rootDir string) error {
 	installedDir := path.Join(rootDir, "var/lib/bpm/installed/")
 	pkgDir := path.Join(installedDir, pkg)
+	pkgInfo := GetPackageInfo(pkg, rootDir, false)
+	if pkgInfo == nil {
+		return errors.New("could not get package info")
+	}
 	files := GetPackageFiles(pkg, rootDir)
 	var symlinks []string
 	for _, file := range files {
@@ -927,6 +1154,36 @@ func RemovePackage(pkg, rootDir string) error {
 				return err
 			}
 		}
+		if err != nil {
+			return err
+		}
+	}
+	if _, err := os.Stat(path.Join(pkgDir, "post_remove.sh")); err == nil {
+		cmd := exec.Command("/bin/bash", path.Join(pkgDir, "post_remove.sh"))
+		cmd.Stdin = os.Stdin
+		cmd.Stdout = os.Stdout
+		cmd.Stderr = os.Stderr
+		cmd.Dir = rootDir
+		cmd.Env = os.Environ()
+		cmd.Env = append(cmd.Env, fmt.Sprintf("BPM_ROOT=%s", rootDir))
+		cmd.Env = append(cmd.Env, fmt.Sprintf("BPM_PKG_NAME=%s", pkgInfo.Name))
+		cmd.Env = append(cmd.Env, fmt.Sprintf("BPM_PKG_DESC=%s", pkgInfo.Description))
+		cmd.Env = append(cmd.Env, fmt.Sprintf("BPM_PKG_VERSION=%s", pkgInfo.Version))
+		cmd.Env = append(cmd.Env, fmt.Sprintf("BPM_PKG_URL=%s", pkgInfo.Url))
+		depends := make([]string, len(pkgInfo.Depends))
+		copy(depends, pkgInfo.Depends)
+		for i := 0; i < len(depends); i++ {
+			depends[i] = fmt.Sprintf("\"%s\"", depends[i])
+		}
+		makeDepends := make([]string, len(pkgInfo.MakeDepends))
+		copy(makeDepends, pkgInfo.MakeDepends)
+		for i := 0; i < len(makeDepends); i++ {
+			makeDepends[i] = fmt.Sprintf("\"%s\"", makeDepends[i])
+		}
+		cmd.Env = append(cmd.Env, fmt.Sprintf("BPM_PKG_DEPENDS=(%s)", strings.Join(depends, " ")))
+		cmd.Env = append(cmd.Env, fmt.Sprintf("BPM_PKG_MAKE_DEPENDS=(%s)", strings.Join(makeDepends, " ")))
+		cmd.Env = append(cmd.Env, "BPM_PKG_TYPE=source")
+		err = cmd.Run()
 		if err != nil {
 			return err
 		}
