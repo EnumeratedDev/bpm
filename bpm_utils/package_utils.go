@@ -25,6 +25,7 @@ type PackageInfo struct {
 	License     string
 	Arch        string
 	Type        string
+	Keep        []string
 	Depends     []string
 	MakeDepends []string
 	Provides    []string
@@ -203,6 +204,7 @@ func ExecutePackageScripts(filename, rootDir string, operation Operation, postOp
 		cmd.Env = append(cmd.Env, fmt.Sprintf("BPM_PKG_DESC=%s", pkgInfo.Description))
 		cmd.Env = append(cmd.Env, fmt.Sprintf("BPM_PKG_VERSION=%s", pkgInfo.Version))
 		cmd.Env = append(cmd.Env, fmt.Sprintf("BPM_PKG_URL=%s", pkgInfo.Url))
+		cmd.Env = append(cmd.Env, fmt.Sprintf("BPM_PKG_ARCH=%s", pkgInfo.Arch))
 		depends := make([]string, len(pkgInfo.Depends))
 		copy(depends, pkgInfo.Depends)
 		for i := 0; i < len(depends); i++ {
@@ -269,6 +271,7 @@ func ReadPackageInfo(contents string, defaultValues bool) (*PackageInfo, error) 
 		License:     "",
 		Arch:        "",
 		Type:        "",
+		Keep:        nil,
 		Depends:     nil,
 		MakeDepends: nil,
 		Provides:    nil,
@@ -308,6 +311,9 @@ func ReadPackageInfo(contents string, defaultValues bool) (*PackageInfo, error) 
 			pkgInfo.Arch = split[1]
 		case "type":
 			pkgInfo.Type = split[1]
+		case "keep":
+			pkgInfo.Keep = strings.Split(strings.Replace(split[1], " ", "", -1), ",")
+			pkgInfo.Keep = stringSliceRemoveEmpty(pkgInfo.Keep)
 		case "depends":
 			pkgInfo.Depends = strings.Split(strings.Replace(split[1], " ", "", -1), ",")
 			pkgInfo.Depends = stringSliceRemoveEmpty(pkgInfo.Depends)
@@ -335,7 +341,7 @@ func ReadPackageInfo(contents string, defaultValues bool) (*PackageInfo, error) 
 	return &pkgInfo, nil
 }
 
-func CreateInfoFile(pkgInfo PackageInfo) string {
+func CreateInfoFile(pkgInfo PackageInfo, keepSourceFields bool) string {
 	ret := ""
 	ret = ret + "name: " + pkgInfo.Name + "\n"
 	ret = ret + "description: " + pkgInfo.Description + "\n"
@@ -348,8 +354,14 @@ func CreateInfoFile(pkgInfo PackageInfo) string {
 	}
 	ret = ret + "architecture: " + pkgInfo.Arch + "\n"
 	ret = ret + "type: " + pkgInfo.Type + "\n"
+	if len(pkgInfo.Keep) > 0 {
+		ret = ret + "keep (" + strconv.Itoa(len(pkgInfo.Keep)) + "): " + strings.Join(pkgInfo.Keep, ",") + "\n"
+	}
 	if len(pkgInfo.Depends) > 0 {
 		ret = ret + "depends (" + strconv.Itoa(len(pkgInfo.Depends)) + "): " + strings.Join(pkgInfo.Depends, ",") + "\n"
+	}
+	if len(pkgInfo.MakeDepends) > 0 && keepSourceFields {
+		ret = ret + "make_depends (" + strconv.Itoa(len(pkgInfo.MakeDepends)) + "): " + strings.Join(pkgInfo.MakeDepends, ",") + "\n"
 	}
 	if len(pkgInfo.Provides) > 0 {
 		ret = ret + "provides (" + strconv.Itoa(len(pkgInfo.Provides)) + "): " + strings.Join(pkgInfo.Provides, ",") + "\n"
@@ -410,7 +422,8 @@ func InstallPackage(filename, installDir string, force, binaryPkgFromSrc, keepTe
 				return err
 			}
 			if strings.HasPrefix(header.Name, "files/") && header.Name != "files/" {
-				extractFilename := path.Join(installDir, strings.TrimPrefix(header.Name, "files/"))
+				trimmedName := strings.TrimPrefix(header.Name, "files/")
+				extractFilename := path.Join(installDir, trimmedName)
 				switch header.Typeflag {
 				case tar.TypeDir:
 					files = append(files, strings.TrimPrefix(header.Name, "files/"))
@@ -422,6 +435,13 @@ func InstallPackage(filename, installDir string, force, binaryPkgFromSrc, keepTe
 						fmt.Println("Creating Directory: " + extractFilename)
 					}
 				case tar.TypeReg:
+					if _, err := os.Stat(extractFilename); err == nil {
+						if slices.Contains(pkgInfo.Keep, trimmedName) {
+							fmt.Println("Skipping File: " + extractFilename + "(File is configured to be kept during installs/updates)")
+							files = append(files, trimmedName)
+							continue
+						}
+					}
 					err := os.Remove(extractFilename)
 					if err != nil && !os.IsNotExist(err) {
 						return err
@@ -571,6 +591,7 @@ func InstallPackage(filename, installDir string, force, binaryPkgFromSrc, keepTe
 		cmd.Env = append(cmd.Env, fmt.Sprintf("BPM_PKG_DESC=%s", pkgInfo.Description))
 		cmd.Env = append(cmd.Env, fmt.Sprintf("BPM_PKG_VERSION=%s", pkgInfo.Version))
 		cmd.Env = append(cmd.Env, fmt.Sprintf("BPM_PKG_URL=%s", pkgInfo.Url))
+		cmd.Env = append(cmd.Env, fmt.Sprintf("BPM_PKG_ARCH=%s", pkgInfo.Arch))
 		depends := make([]string, len(pkgInfo.Depends))
 		copy(depends, pkgInfo.Depends)
 		for i := 0; i < len(depends); i++ {
@@ -614,6 +635,13 @@ func InstallPackage(filename, installDir string, force, binaryPkgFromSrc, keepTe
 					fmt.Println("Creating Directory: " + extractFilename)
 				}
 			} else if d.Type().IsRegular() {
+				if _, err := os.Stat(extractFilename); err == nil {
+					if slices.Contains(pkgInfo.Keep, relFilename) {
+						fmt.Println("Skipping File: " + extractFilename + "(File is configured to be kept during installs/updates)")
+						files = append(files, relFilename)
+						return nil
+					}
+				}
 				err := os.Remove(extractFilename)
 				if err != nil && !os.IsNotExist(err) {
 					return err
@@ -674,7 +702,7 @@ func InstallPackage(filename, installDir string, force, binaryPkgFromSrc, keepTe
 			compiledInfo = *pkgInfo
 			compiledInfo.Type = "binary"
 			compiledInfo.Arch = GetArch()
-			err = os.WriteFile(path.Join(compiledDir, "pkg.info"), []byte(CreateInfoFile(compiledInfo)), 0644)
+			err = os.WriteFile(path.Join(compiledDir, "pkg.info"), []byte(CreateInfoFile(compiledInfo, false)), 0644)
 			if err != nil {
 				return err
 			}
@@ -1170,6 +1198,7 @@ func RemovePackage(pkg, rootDir string) error {
 		cmd.Env = append(cmd.Env, fmt.Sprintf("BPM_PKG_DESC=%s", pkgInfo.Description))
 		cmd.Env = append(cmd.Env, fmt.Sprintf("BPM_PKG_VERSION=%s", pkgInfo.Version))
 		cmd.Env = append(cmd.Env, fmt.Sprintf("BPM_PKG_URL=%s", pkgInfo.Url))
+		cmd.Env = append(cmd.Env, fmt.Sprintf("BPM_PKG_ARCH=%s", pkgInfo.Arch))
 		depends := make([]string, len(pkgInfo.Depends))
 		copy(depends, pkgInfo.Depends)
 		for i := 0; i < len(depends); i++ {
