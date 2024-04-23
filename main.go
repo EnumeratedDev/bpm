@@ -17,7 +17,7 @@ import (
 /*   A simple-to-use package manager  */
 /* ---------------------------------- */
 
-var bpmVer = "0.1.7"
+var bpmVer = "0.2.0"
 
 var subcommand = "help"
 var subcommandArgs []string
@@ -84,7 +84,7 @@ func resolveCommand() {
 				fmt.Printf("Package (%s) could not be found\n", pkg)
 				continue
 			}
-			fmt.Print("----------------\n" + bpm_utils.CreateInfoFile(*info))
+			fmt.Print("----------------\n" + bpm_utils.CreateInfoFile(*info, true))
 			if n == len(packages)-1 {
 				fmt.Println("----------------")
 			}
@@ -112,7 +112,7 @@ func resolveCommand() {
 					fmt.Printf("Package (%s) could not be found\n", pkg)
 					continue
 				}
-				fmt.Print("----------------\n" + bpm_utils.CreateInfoFile(*info))
+				fmt.Print("----------------\n" + bpm_utils.CreateInfoFile(*info, true))
 				if n == len(packages)-1 {
 					fmt.Println("----------------")
 				}
@@ -133,7 +133,7 @@ func resolveCommand() {
 			if err != nil {
 				log.Fatalf("Could not read package\nError: %s\n", err)
 			}
-			fmt.Print("----------------\n" + bpm_utils.CreateInfoFile(*pkgInfo))
+			fmt.Print("----------------\n" + bpm_utils.CreateInfoFile(*pkgInfo, true))
 			fmt.Println("----------------")
 			verb := "install"
 			if pkgInfo.Type == "source" {
@@ -149,14 +149,14 @@ func resolveCommand() {
 					continue
 				}
 				if pkgInfo.Type == "source" {
-					if unresolved := bpm_utils.CheckMakeDependencies(pkgInfo, rootDir); len(unresolved) != 0 {
+					if unresolved := bpm_utils.CheckMakeDependencies(pkgInfo, "/"); len(unresolved) != 0 {
 						fmt.Printf("skipping... cannot %s package (%s) due to missing make dependencies: %s\n", verb, pkgInfo.Name, strings.Join(unresolved, ", "))
 						continue
 					}
 				}
 			}
 			if rootDir != "/" {
-				fmt.Println("Warning: Installing to " + rootDir)
+				fmt.Println("Warning: Operating in " + rootDir)
 			}
 			if !yesAll {
 				reader := bufio.NewReader(os.Stdin)
@@ -231,10 +231,10 @@ func resolveCommand() {
 				fmt.Printf("Package (%s) could not be found\n", pkg)
 				continue
 			}
-			fmt.Print("----------------\n" + bpm_utils.CreateInfoFile(*pkgInfo))
+			fmt.Print("----------------\n" + bpm_utils.CreateInfoFile(*pkgInfo, true))
 			fmt.Println("----------------")
 			if rootDir != "/" {
-				fmt.Println("Warning: Installing to " + rootDir)
+				fmt.Println("Warning: Operating in " + rootDir)
 			}
 			if !yesAll {
 				reader := bufio.NewReader(os.Stdin)
@@ -305,11 +305,10 @@ func resolveCommand() {
 }
 
 func printHelp() {
-	fmt.Println("\033[1m------Help------\033[0m")
-	fmt.Println("\033[1m\\ Command Format /\033[0m")
+	fmt.Println("\033[1m---- Command Format ----\033[0m")
 	fmt.Println("-> command format: bpm <subcommand> [-flags]...")
 	fmt.Println("-> flags will be read if passed right after the subcommand otherwise they will be read as subcommand arguments")
-	fmt.Println("\033[1m\\ Command List /\033[0m")
+	fmt.Println("\033[1m---- Command List ----\033[0m")
 	fmt.Println("-> bpm version | shows information on the installed version of bpm")
 	fmt.Println("-> bpm info [-R] | shows information on an installed package")
 	fmt.Println("       -R=<root_path> lets you define the root path which will be used")
