@@ -17,7 +17,7 @@ import (
 /*   A simple-to-use package manager  */
 /* ---------------------------------- */
 
-var bpmVer = "0.2.0"
+var bpmVer = "0.2.1"
 
 var subcommand = "help"
 var subcommandArgs []string

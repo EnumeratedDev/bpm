@@ -836,19 +836,17 @@ func InstallPackage(filename, installDir string, force, binaryPkgFromSrc, keepTe
 			lstat, err := os.Lstat(f)
 			if os.IsNotExist(err) {
 				continue
-			}
-			if err != nil {
+			} else if err != nil {
 				return err
 			}
-			if lstat.Mode() == os.ModeSymlink {
+			if lstat.Mode()&os.ModeSymlink != 0 {
 				symlinks = append(symlinks, f)
 				continue
 			}
 			stat, err := os.Stat(f)
 			if os.IsNotExist(err) {
 				continue
-			}
-			if err != nil {
+			} else if err != nil {
 				return err
 			}
 			if stat.IsDir() {
@@ -871,24 +869,29 @@ func InstallPackage(filename, installDir string, force, binaryPkgFromSrc, keepTe
 				}
 			}
 		}
-		for _, f := range symlinks {
-			f = path.Join(installDir, f)
-			_, err := os.Lstat(f)
-			if os.IsNotExist(err) {
-				continue
-			}
-			if err != nil {
-				return err
-			}
-			_, err = filepath.EvalSymlinks(f)
-			if os.IsNotExist(err) {
-				err := os.Remove(f)
-				if err != nil {
+		removals := -1
+		for len(symlinks) > 0 && removals != 0 {
+			removals = 0
+			for i := len(symlinks) - 1; i >= 0; i-- {
+				f := symlinks[i]
+				f = path.Join(installDir, f)
+				_, err := os.Lstat(f)
+				if os.IsNotExist(err) {
+					continue
+				} else if err != nil {
 					return err
 				}
-			}
-			if err != nil {
-				return err
+				_, err = filepath.EvalSymlinks(f)
+				if os.IsNotExist(err) {
+					err := os.Remove(f)
+					if err != nil {
+						return err
+					}
+					removals++
+					fmt.Println("Removing: " + f)
+				} else if err != nil {
+					return err
+				}
 			}
 		}
 	}
@@ -1135,7 +1138,7 @@ func RemovePackage(pkg, rootDir string) error {
 		if err != nil {
 			return err
 		}
-		if lstat.Mode() == os.ModeSymlink {
+		if lstat.Mode()&os.ModeSymlink != 0 {
 			symlinks = append(symlinks, file)
 			continue
 		}
@@ -1166,24 +1169,29 @@ func RemovePackage(pkg, rootDir string) error {
 			}
 		}
 	}
-	for _, file := range symlinks {
-		file = path.Join(rootDir, file)
-		_, err := os.Lstat(file)
-		if os.IsNotExist(err) {
-			continue
-		}
-		if err != nil {
-			return err
-		}
-		_, err = filepath.EvalSymlinks(file)
-		if os.IsNotExist(err) {
-			err := os.Remove(file)
-			if err != nil {
+	removals := -1
+	for len(symlinks) > 0 && removals != 0 {
+		removals = 0
+		for i := len(symlinks) - 1; i >= 0; i-- {
+			file := symlinks[i]
+			file = path.Join(rootDir, file)
+			_, err := os.Lstat(file)
+			if os.IsNotExist(err) {
+				continue
+			} else if err != nil {
 				return err
 			}
-		}
-		if err != nil {
-			return err
+			_, err = filepath.EvalSymlinks(file)
+			if os.IsNotExist(err) {
+				err := os.Remove(file)
+				if err != nil {
+					return err
+				}
+				removals++
+				fmt.Println("Removing: " + file)
+			} else if err != nil {
+				return err
+			}
 		}
 	}
 	if _, err := os.Stat(path.Join(pkgDir, "post_remove.sh")); err == nil {
