@@ -1,8 +1,0 @@
-name: bpm-utils
-description: Utilities to create BPM packages
-version: 2.0.0
-url: https://gitlab.com/bubble-package-manager/bpm/
-license: GPL3
-architecture: any
-keep: etc/bpm-utils/source.default
-type: binary
