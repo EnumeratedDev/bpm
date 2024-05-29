@@ -32,6 +32,7 @@ var pkgListNumbers = false
 var pkgListNames = false
 
 func main() {
+	bpm_utils.ReadConfig()
 	resolveFlags()
 	resolveCommand()
 }

@@ -193,10 +193,13 @@ func ExecutePackageScripts(filename, rootDir string, operation Operation, postOp
 		if err != nil {
 			return err
 		}
+
 		cmd := exec.Command("/bin/bash", temp.Name())
-		cmd.Stdin = os.Stdin
-		cmd.Stdout = os.Stdout
-		cmd.Stderr = os.Stderr
+		if !BPMConfig.SilentCompilation {
+			cmd.Stdin = os.Stdin
+			cmd.Stdout = os.Stdout
+			cmd.Stderr = os.Stderr
+		}
 		cmd.Dir = rootDir
 		cmd.Env = os.Environ()
 		cmd.Env = append(cmd.Env, fmt.Sprintf("BPM_ROOT=%s", rootDir))
@@ -680,10 +683,6 @@ fi
 	cmd.Env = append(cmd.Env, fmt.Sprintf("BPM_PKG_VERSION=%s", pkgInfo.Version))
 	cmd.Env = append(cmd.Env, fmt.Sprintf("BPM_PKG_URL=%s", pkgInfo.Url))
 	cmd.Env = append(cmd.Env, fmt.Sprintf("BPM_PKG_ARCH=%s", pkgInfo.Arch))
-	cmd.Stdin = os.Stdin
-	cmd.Stdout = os.Stdout
-	cmd.Stderr = os.Stderr
-
 	depends := make([]string, len(pkgInfo.Depends))
 	copy(depends, pkgInfo.Depends)
 	for i := 0; i < len(depends); i++ {
@@ -696,7 +695,16 @@ fi
 	}
 	cmd.Env = append(cmd.Env, fmt.Sprintf("BPM_PKG_DEPENDS=(%s)", strings.Join(depends, " ")))
 	cmd.Env = append(cmd.Env, fmt.Sprintf("BPM_PKG_MAKE_DEPENDS=(%s)", strings.Join(makeDepends, " ")))
+	for _, value := range BPMConfig.CompilationEnv {
+		cmd.Env = append(cmd.Env, value)
+	}
 	cmd.Env = append(cmd.Env, "BPM_PKG_TYPE=source")
+
+	if !BPMConfig.SilentCompilation {
+		cmd.Stdin = os.Stdin
+		cmd.Stdout = os.Stdout
+		cmd.Stderr = os.Stderr
+	}
 	err = cmd.Run()
 	if err != nil {
 		return err, nil
@@ -810,9 +818,11 @@ fi
 		}
 		sed := fmt.Sprintf("s/%s/files/", strings.Replace(strings.TrimPrefix(path.Join(temp, "/output/"), "/"), "/", `\/`, -1))
 		cmd := exec.Command("/usr/bin/tar", "-czvf", compiledInfo.Name+"-"+compiledInfo.Version+".bpm", "pkg.info", path.Join(temp, "/output/"), "--transform", sed)
-		cmd.Stdin = os.Stdin
-		cmd.Stdout = os.Stdout
-		cmd.Stderr = os.Stderr
+		if !BPMConfig.SilentCompilation {
+			cmd.Stdin = os.Stdin
+			cmd.Stdout = os.Stdout
+			cmd.Stderr = os.Stderr
+		}
 		cmd.Dir = compiledDir
 		fmt.Printf("running command: %s %s\n", cmd.Path, strings.Join(cmd.Args, " "))
 		err = cmd.Run()
@@ -1323,9 +1333,11 @@ func RemovePackage(pkg, rootDir string) error {
 	}
 	if _, err := os.Stat(path.Join(pkgDir, "post_remove.sh")); err == nil {
 		cmd := exec.Command("/bin/bash", path.Join(pkgDir, "post_remove.sh"))
-		cmd.Stdin = os.Stdin
-		cmd.Stdout = os.Stdout
-		cmd.Stderr = os.Stderr
+		if !BPMConfig.SilentCompilation {
+			cmd.Stdin = os.Stdin
+			cmd.Stdout = os.Stdout
+			cmd.Stderr = os.Stderr
+		}
 		cmd.Dir = rootDir
 		cmd.Env = os.Environ()
 		cmd.Env = append(cmd.Env, fmt.Sprintf("BPM_ROOT=%s", rootDir))

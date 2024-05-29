@@ -5,3 +5,4 @@ url: https://gitlab.com/bubble-package-manager/bpm/
 license: GPL3
 architecture: x86_64
 type: binary
+keep: etc/bpm.conf
