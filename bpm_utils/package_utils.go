@@ -664,11 +664,11 @@ fi
 		cmd.Dir = temp
 		cmd.Env = os.Environ()
 	} else {
-		err := os.Mkdir(path.Join(temp, "source"), 755)
+		err := os.Mkdir(path.Join(temp, "source"), 0755)
 		if err != nil {
 			return err, nil
 		}
-		err = os.Mkdir(path.Join(temp, "output"), 755)
+		err = os.Mkdir(path.Join(temp, "output"), 0755)
 		if err != nil {
 			return err, nil
 		}
@@ -800,7 +800,7 @@ fi
 	}
 	if binaryPkgFromSrc {
 		compiledDir := path.Join(rootDir, "var/lib/bpm/compiled/")
-		err = os.MkdirAll(compiledDir, 755)
+		err = os.MkdirAll(compiledDir, 0755)
 		compiledInfo := PackageInfo{}
 		compiledInfo = *pkgInfo
 		compiledInfo.Type = "binary"
@@ -900,7 +900,7 @@ func InstallPackage(filename, rootDir string, force, binaryPkgFromSrc, keepTempD
 	})
 
 	installedDir := path.Join(rootDir, "var/lib/bpm/installed/")
-	err = os.MkdirAll(installedDir, 755)
+	err = os.MkdirAll(installedDir, 0755)
 	if err != nil {
 		return err
 	}
@@ -909,7 +909,7 @@ func InstallPackage(filename, rootDir string, force, binaryPkgFromSrc, keepTempD
 	if err != nil {
 		return err
 	}
-	err = os.Mkdir(pkgDir, 755)
+	err = os.Mkdir(pkgDir, 0755)
 	if err != nil {
 		return err
 	}
