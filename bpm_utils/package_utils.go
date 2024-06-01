@@ -611,10 +611,13 @@ func compilePackage(pkgInfo *PackageInfo, filename, rootDir string, binaryPkgFro
 
 	runScript := `
 cd "$BPM_WORKDIR"
+
+set -a
 source "source.sh"
+set +a
+
 if [[ $(type -t prepare) == function ]]; then
   echo "Running prepare() function..."
-  export -f prepare
   bash -e -c prepare
   if [ $? -ne 0 ]; then
     echo "Failed to run prepare() function in source.sh"
@@ -623,7 +626,6 @@ fi
 cd "$BPM_SOURCE"
 if [[ $(type -t build) == function ]]; then
   echo "Running build() function..."
-  export -f build
   bash -e -c build
   if [ $? -ne 0 ]; then
     echo "Failed to run build() function in source.sh"
@@ -632,7 +634,6 @@ fi
 cd "$BPM_SOURCE"
 if [[ $(type -t check) == function ]]; then
   echo "Running check() function..."
-  export -f check
   bash -e -c check
   if [ $? -ne 0 ]; then
     echo "Failed to run check() function in source.sh"
@@ -643,7 +644,6 @@ if ! [[ $(type -t package) == function ]]; then
   exit 1
 fi
 echo "Running package() function..."
-export -f package
 bash -e -c package
 if [ $? -ne 0 ]; then
   echo "Failed to run package() function in source.sh"
