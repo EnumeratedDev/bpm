@@ -1126,80 +1126,20 @@ func GetSourceScript(filename string) (string, error) {
 }
 
 func CheckDependencies(pkgInfo *PackageInfo, rootDir string) []string {
-	unresolved := make([]string, len(pkgInfo.Depends))
-	copy(unresolved, pkgInfo.Depends)
-	installedDir := path.Join(rootDir, "var/lib/bpm/installed/")
-	if _, err := os.Stat(installedDir); err != nil {
-		return nil
-	}
-	items, err := os.ReadDir(installedDir)
-	if err != nil {
-		return nil
-	}
-
-	for _, item := range items {
-		if !item.IsDir() {
-			continue
-		}
-		_, err := os.Stat(path.Join(installedDir, item.Name(), "/info"))
-		if err != nil {
-			return nil
-		}
-		bs, err := os.ReadFile(path.Join(installedDir, item.Name(), "/info"))
-		if err != nil {
-			return nil
-		}
-		info, err := ReadPackageInfo(string(bs), false)
-		if err != nil {
-			return nil
-		}
-		if slices.Contains(unresolved, info.Name) {
-			unresolved = stringSliceRemove(unresolved, info.Name)
-		}
-		for _, prov := range info.Provides {
-			if slices.Contains(unresolved, prov) {
-				unresolved = stringSliceRemove(unresolved, prov)
-			}
+	var unresolved []string
+	for _, dependency := range pkgInfo.Depends {
+		if !IsPackageInstalled(dependency, rootDir) {
+			unresolved = append(unresolved, dependency)
 		}
 	}
 	return unresolved
 }
 
 func CheckMakeDependencies(pkgInfo *PackageInfo, rootDir string) []string {
-	unresolved := make([]string, len(pkgInfo.MakeDepends))
-	copy(unresolved, pkgInfo.MakeDepends)
-	installedDir := path.Join(rootDir, "var/lib/bpm/installed/")
-	if _, err := os.Stat(installedDir); err != nil {
-		return nil
-	}
-	items, err := os.ReadDir(installedDir)
-	if err != nil {
-		return nil
-	}
-
-	for _, item := range items {
-		if !item.IsDir() {
-			continue
-		}
-		_, err := os.Stat(path.Join(installedDir, item.Name(), "/info"))
-		if err != nil {
-			return nil
-		}
-		bs, err := os.ReadFile(path.Join(installedDir, item.Name(), "/info"))
-		if err != nil {
-			return nil
-		}
-		info, err := ReadPackageInfo(string(bs), false)
-		if err != nil {
-			return nil
-		}
-		if slices.Contains(unresolved, info.Name) {
-			unresolved = stringSliceRemove(unresolved, info.Name)
-		}
-		for _, prov := range info.Provides {
-			if slices.Contains(unresolved, prov) {
-				unresolved = stringSliceRemove(unresolved, prov)
-			}
+	var unresolved []string
+	for _, dependency := range pkgInfo.MakeDepends {
+		if !IsPackageInstalled(dependency, "/") {
+			unresolved = append(unresolved, dependency)
 		}
 	}
 	return unresolved
