@@ -1277,24 +1277,6 @@ func GetPackageInfo(pkg, rootDir string, defaultValues bool) *PackageInfo {
 	return info
 }
 
-func setPackageInfo(pkg, contents, rootDir string) error {
-	installedDir := path.Join(rootDir, "var/lib/bpm/installed/")
-	pkgDir := path.Join(installedDir, pkg)
-	info := path.Join(pkgDir, "info")
-	if _, err := os.Stat(installedDir); os.IsNotExist(err) {
-		return err
-	}
-	if _, err := os.Stat(pkgDir); os.IsNotExist(err) {
-		return err
-	}
-	bs := []byte(contents)
-	err := os.WriteFile(info, bs, 0644)
-	if err != nil {
-		return err
-	}
-	return nil
-}
-
 func RemovePackage(pkg, rootDir string) error {
 	installedDir := path.Join(rootDir, "var/lib/bpm/installed/")
 	pkgDir := path.Join(installedDir, pkg)

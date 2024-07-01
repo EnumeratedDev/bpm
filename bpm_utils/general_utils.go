@@ -56,11 +56,3 @@ func stringSliceRemoveEmpty(s []string) []string {
 	}
 	return r
 }
-
-func byteArrayToString(bs []byte) string {
-	b := make([]byte, len(bs))
-	for i, v := range bs {
-		b[i] = v
-	}
-	return string(b)
-}
