@@ -97,10 +97,6 @@ func resolveCommand() {
 			log.Fatalf("Could not get installed packages\nError: %s", err.Error())
 			return
 		}
-		if len(packages) == 0 {
-			fmt.Println("No packages have been installed")
-			return
-		}
 		if pkgListNumbers {
 			fmt.Println(len(packages))
 		} else if pkgListNames {
@@ -108,6 +104,10 @@ func resolveCommand() {
 				fmt.Println(pkg)
 			}
 		} else {
+			if len(packages) == 0 {
+				fmt.Println("No packages have been installed")
+				return
+			}
 			for n, pkg := range packages {
 				info := bpm_utils.GetPackageInfo(pkg, rootDir, false)
 				if info == nil {
