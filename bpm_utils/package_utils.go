@@ -15,6 +15,7 @@ import (
 	"slices"
 	"strconv"
 	"strings"
+	"syscall"
 )
 
 type PackageInfo struct {
@@ -480,7 +481,7 @@ func extractPackage(pkgInfo *PackageInfo, filename, rootDir string) (error, []st
 	return nil, files
 }
 
-func compilePackage(pkgInfo *PackageInfo, filename, rootDir string, binaryPkgFromSrc, keepTempDir bool) (error, []string) {
+func compilePackage(pkgInfo *PackageInfo, filename, rootDir string, binaryPkgFromSrc, skipCheck, keepTempDir bool) (error, []string) {
 	var files []string
 	if !IsPackageInstalled(pkgInfo.Name, rootDir) {
 		err := ExecutePackageScripts(filename, rootDir, Install, false)
@@ -509,11 +510,16 @@ func compilePackage(pkgInfo *PackageInfo, filename, rootDir string, binaryPkgFro
 	if err != nil {
 		return err, nil
 	}
-	err = os.Mkdir(temp, 0755)
 	fmt.Println("Creating temp directory at: " + temp)
+	err = os.Mkdir(temp, 0755)
 	if err != nil {
 		return err, nil
 	}
+	err = os.Chown(temp, 65534, 65534)
+	if err != nil {
+		return err, nil
+	}
+
 	for {
 		header, err := tr.Next()
 		if err == io.EOF {
@@ -532,6 +538,10 @@ func compilePackage(pkgInfo *PackageInfo, filename, rootDir string, binaryPkgFro
 					}
 				} else {
 					fmt.Println("Creating Directory: " + extractFilename)
+					err = os.Chown(extractFilename, 65534, 65534)
+					if err != nil {
+						return err, nil
+					}
 				}
 			case tar.TypeReg:
 				err := os.Remove(extractFilename)
@@ -540,6 +550,10 @@ func compilePackage(pkgInfo *PackageInfo, filename, rootDir string, binaryPkgFro
 				}
 				outFile, err := os.Create(extractFilename)
 				fmt.Println("Creating File: " + extractFilename)
+				if err != nil {
+					return err, nil
+				}
+				err = os.Chown(extractFilename, 65534, 65534)
 				if err != nil {
 					return err, nil
 				}
@@ -570,6 +584,10 @@ func compilePackage(pkgInfo *PackageInfo, filename, rootDir string, binaryPkgFro
 			if err != nil {
 				return err, nil
 			}
+			err = os.Chown(path.Join(temp, "source.sh"), 65534, 65534)
+			if err != nil {
+				return err, nil
+			}
 		}
 	}
 	if _, err := os.Stat(path.Join(temp, "source.sh")); os.IsNotExist(err) {
@@ -594,19 +612,10 @@ func compilePackage(pkgInfo *PackageInfo, filename, rootDir string, binaryPkgFro
 	if err != nil {
 		return err, nil
 	}
-	hasPackageFunc := false
-	compatMode := false
-	if strings.Contains(string(bs), "package()") {
-		hasPackageFunc = true
-	}
-	if !hasPackageFunc {
-		reader := bufio.NewReader(os.Stdin)
-		fmt.Print("This package does not seem to have the required 'package' function\nThe source.sh file may have been created for an older BPM version\nWould you like to run the script in compatibility mode (Not Recommended)? [Y\\n] ")
-		text, _ := reader.ReadString('\n')
-		if strings.TrimSpace(strings.ToLower(text)) != "y" && strings.TrimSpace(strings.ToLower(text)) != "yes" {
-			return errors.New("could not find required 'package' function in source.sh"), nil
-		}
-		compatMode = true
+
+	if !strings.Contains(string(bs), "package()") {
+		fmt.Print("This package does not seem to have the required 'package' function\nThe source.sh file may have been created for an older BPM version\nPlease update the source.sh file")
+		return errors.New("invalid source.sh format"), nil
 	}
 
 	runScript := `
@@ -621,29 +630,39 @@ if [[ $(type -t prepare) == function ]]; then
   bash -e -c prepare
   if [ $? -ne 0 ]; then
     echo "Failed to run prepare() function in source.sh"
+    exit 1
   fi
 fi
+
 cd "$BPM_SOURCE"
 if [[ $(type -t build) == function ]]; then
   echo "Running build() function..."
   bash -e -c build
   if [ $? -ne 0 ]; then
     echo "Failed to run build() function in source.sh"
+    exit 1
   fi
 fi
+
 cd "$BPM_SOURCE"
-if [[ $(type -t check) == function ]]; then
+if [[ $(type -t check) == function ]] && [ -z "$SKIPCHECK" ]; then
   echo "Running check() function..."
   bash -e -c check
   if [ $? -ne 0 ]; then
     echo "Failed to run check() function in source.sh"
+    exit 1
   fi
 fi
+
+
+cd "$BPM_SOURCE"
 if ! [[ $(type -t package) == function ]]; then
   echo "Failed to locate package() function in source.sh"
   exit 1
 fi
 echo "Running package() function..."
+touch "$BPM_WORKDIR"/fakeroot_file
+fakeroot -s "$BPM_WORKDIR"/fakeroot_file bash -e -c package
 bash -e -c package
 if [ $? -ne 0 ]; then
   echo "Failed to run package() function in source.sh"
@@ -654,28 +673,37 @@ fi
 	if err != nil {
 		return err, nil
 	}
+	err = os.Chown(path.Join(temp, "run.sh"), 65534, 65534)
+	if err != nil {
+		return err, nil
+	}
 
 	cmd := exec.Command("/bin/bash", "-e", "run.sh")
+	cmd.SysProcAttr = &syscall.SysProcAttr{}
+	cmd.SysProcAttr.Credential = &syscall.Credential{Uid: 65534, Gid: 65534}
 	cmd.Dir = temp
 	cmd.Env = os.Environ()
 
-	if compatMode {
-		cmd = exec.Command("/bin/bash", "-e", "source.sh")
-		cmd.Dir = temp
-		cmd.Env = os.Environ()
-	} else {
-		err := os.Mkdir(path.Join(temp, "source"), 0755)
-		if err != nil {
-			return err, nil
-		}
-		err = os.Mkdir(path.Join(temp, "output"), 0755)
-		if err != nil {
-			return err, nil
-		}
-		cmd.Env = append(cmd.Env, "BPM_WORKDIR="+temp)
-		cmd.Env = append(cmd.Env, "BPM_SOURCE="+path.Join(temp, "source"))
-		cmd.Env = append(cmd.Env, "BPM_OUTPUT="+path.Join(temp, "output"))
+	err = os.Mkdir(path.Join(temp, "source"), 0755)
+	if err != nil {
+		return err, nil
 	}
+	err = os.Chown(path.Join(temp, "source"), 65534, 65534)
+	if err != nil {
+		return err, nil
+	}
+	err = os.Mkdir(path.Join(temp, "output"), 0755)
+	if err != nil {
+		return err, nil
+	}
+	err = os.Chown(path.Join(temp, "output"), 65534, 65534)
+	if err != nil {
+		return err, nil
+	}
+	cmd.Env = append(cmd.Env, "BPM_WORKDIR="+temp)
+	cmd.Env = append(cmd.Env, "BPM_SOURCE="+path.Join(temp, "source"))
+	cmd.Env = append(cmd.Env, "BPM_OUTPUT="+path.Join(temp, "output"))
+	cmd.Env = append(cmd.Env, "SKIPCHECK="+strconv.FormatBool(skipCheck))
 
 	cmd.Env = append(cmd.Env, fmt.Sprintf("BPM_ROOT=%s", rootDir))
 	cmd.Env = append(cmd.Env, fmt.Sprintf("BPM_PKG_NAME=%s", pkgInfo.Name))
@@ -805,37 +833,47 @@ fi
 		compiledInfo = *pkgInfo
 		compiledInfo.Type = "binary"
 		compiledInfo.Arch = GetArch()
-		err = os.WriteFile(path.Join(compiledDir, "pkg.info"), []byte(CreateInfoFile(compiledInfo, false)), 0644)
+		err = os.WriteFile(path.Join(temp, "pkg.info"), []byte(CreateInfoFile(compiledInfo, false)), 0644)
+		if err != nil {
+			return err, nil
+		}
+		err = os.Chown(path.Join(temp, "pkg.info"), 65534, 65534)
 		if err != nil {
 			return err, nil
 		}
 		scripts, err := ReadPackageScripts(filename)
 		for key, val := range scripts {
-			err = os.WriteFile(path.Join(compiledDir, key), []byte(val), 0644)
+			err = os.WriteFile(path.Join(temp, key), []byte(val), 0644)
+			if err != nil {
+				return err, nil
+			}
+			err = os.Chown(path.Join(temp, key), 65534, 65534)
 			if err != nil {
 				return err, nil
 			}
 		}
-		sed := fmt.Sprintf("s/%s/files/", strings.Replace(strings.TrimPrefix(path.Join(temp, "/output/"), "/"), "/", `\/`, -1))
-		cmd := exec.Command("/usr/bin/tar", "-czvf", compiledInfo.Name+"-"+compiledInfo.Version+".bpm", "pkg.info", path.Join(temp, "/output/"), "--transform", sed)
+		sed := fmt.Sprintf("s/output/files/")
+		fileName := compiledInfo.Name + "-" + compiledInfo.Version + "-" + compiledInfo.Arch + ".bpm"
+		cmd := exec.Command("/usr/bin/fakeroot", "-i fakeroot_file", "tar", "-czvpf", fileName, "pkg.info", "output/", "--transform", sed)
 		if !BPMConfig.SilentCompilation {
 			cmd.Stdin = os.Stdin
 			cmd.Stdout = os.Stdout
 			cmd.Stderr = os.Stderr
 		}
-		cmd.Dir = compiledDir
-		fmt.Printf("running command: %s %s\n", cmd.Path, strings.Join(cmd.Args, " "))
+		cmd.SysProcAttr = &syscall.SysProcAttr{}
+		cmd.SysProcAttr.Credential = &syscall.Credential{Uid: 65534, Gid: 65534}
+		cmd.Dir = temp
+		cmd.Env = os.Environ()
+		fmt.Printf("running command: %s\n", strings.Join(cmd.Args, " "))
 		err = cmd.Run()
 		if err != nil {
 			return err, nil
 		}
-		err = os.Remove(path.Join(compiledDir, "pkg.info"))
-		for key := range scripts {
-			err = os.Remove(path.Join(compiledDir, key))
-			if err != nil {
-				return err, nil
-			}
+		err = copyFileContents(path.Join(temp, fileName), path.Join(compiledDir, fileName))
+		if err != nil {
+			return err, nil
 		}
+		err = os.Chown(path.Join(compiledDir, fileName), 0, 0)
 		if err != nil {
 			return err, nil
 		}
@@ -855,7 +893,7 @@ fi
 	return nil, files
 }
 
-func InstallPackage(filename, rootDir string, force, binaryPkgFromSrc, keepTempDir bool) error {
+func InstallPackage(filename, rootDir string, force, binaryPkgFromSrc, skipCheck, keepTempDir bool) error {
 	if _, err := os.Stat(filename); os.IsNotExist(err) {
 		return err
 	}
@@ -884,7 +922,7 @@ func InstallPackage(filename, rootDir string, force, binaryPkgFromSrc, keepTempD
 		}
 		files = i
 	} else if pkgInfo.Type == "source" {
-		err, i := compilePackage(pkgInfo, filename, rootDir, binaryPkgFromSrc, keepTempDir)
+		err, i := compilePackage(pkgInfo, filename, rootDir, binaryPkgFromSrc, skipCheck, keepTempDir)
 		if err != nil {
 			return err
 		}

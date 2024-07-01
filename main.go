@@ -26,6 +26,7 @@ var subcommandArgs []string
 var rootDir = "/"
 var yesAll = false
 var buildSource = false
+var skipCheck = false
 var keepTempDir = false
 var forceInstall = false
 var pkgListNumbers = false
@@ -204,7 +205,7 @@ func resolveCommand() {
 				}
 			}
 
-			err = bpm_utils.InstallPackage(file, rootDir, forceInstall, buildSource, keepTempDir)
+			err = bpm_utils.InstallPackage(file, rootDir, forceInstall, buildSource, skipCheck, keepTempDir)
 			if err != nil {
 				if pkgInfo.Type == "source" && keepTempDir {
 					fmt.Println("BPM temp directory was created at /var/tmp/bpm_source-" + pkgInfo.Name)
@@ -348,6 +349,7 @@ func resolveFlags() {
 	installFlagSet.StringVar(&rootDir, "R", "/", "Set the destination root")
 	installFlagSet.BoolVar(&yesAll, "y", false, "Skip confirmation prompts")
 	installFlagSet.BoolVar(&buildSource, "b", false, "Build binary package from source package")
+	installFlagSet.BoolVar(&skipCheck, "s", false, "Skip check function during source compilation")
 	installFlagSet.BoolVar(&keepTempDir, "k", false, "Keep temporary directory after source compilation")
 	installFlagSet.BoolVar(&forceInstall, "f", false, "Force installation by skipping architecture and dependency resolution")
 	installFlagSet.Usage = printHelp
