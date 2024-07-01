@@ -314,10 +314,10 @@ func printHelp() {
 	fmt.Println("-> bpm version | shows information on the installed version of bpm")
 	fmt.Println("-> bpm info [-R] | shows information on an installed package")
 	fmt.Println("       -R=<root_path> lets you define the root path which will be used")
-	fmt.Println("-> bpm list [-R, -n, -l] | lists all installed packages")
+	fmt.Println("-> bpm list [-R, -c, -n] | lists all installed packages")
 	fmt.Println("       -R=<root_path> lets you define the root path which will be used")
-	fmt.Println("       -n shows the number of packages")
-	fmt.Println("       -l lists package names only")
+	fmt.Println("       -c lists the amount of installed packages")
+	fmt.Println("       -n lists only the names of installed packages")
 	fmt.Println("-> bpm install [-R, -y, -f, -b] <files...> | installs the following files")
 	fmt.Println("       -R=<root_path> lets you define the root path which will be used")
 	fmt.Println("       -y skips the confirmation prompt")
@@ -337,9 +337,8 @@ func resolveFlags() {
 	listFlagSet := flag.NewFlagSet("List flags", flag.ExitOnError)
 	listFlagSet.Usage = printHelp
 	listFlagSet.StringVar(&rootDir, "R", "/", "Set the destination root")
-	listFlagSet.BoolVar(&yesAll, "y", false, "Skip confirmation prompts")
-	listFlagSet.BoolVar(&pkgListNumbers, "n", false, "List the number of all packages installed with BPM")
-	listFlagSet.BoolVar(&pkgListNames, "l", false, "List the names of all packages installed with BPM")
+	listFlagSet.BoolVar(&pkgListNumbers, "c", false, "List the number of all packages installed with BPM")
+	listFlagSet.BoolVar(&pkgListNames, "n", false, "List the names of all packages installed with BPM")
 	// Info flags
 	infoFlagSet := flag.NewFlagSet("Info flags", flag.ExitOnError)
 	infoFlagSet.StringVar(&rootDir, "R", "/", "Set the destination root")
@@ -359,7 +358,6 @@ func resolveFlags() {
 	removeFlagSet.BoolVar(&yesAll, "y", false, "Skip confirmation prompts")
 	removeFlagSet.Usage = printHelp
 	// File flags
-	// Remove flags
 	fileFlagSet := flag.NewFlagSet("Remove flags", flag.ExitOnError)
 	fileFlagSet.StringVar(&rootDir, "R", "/", "Set the destination root")
 	fileFlagSet.Usage = printHelp
