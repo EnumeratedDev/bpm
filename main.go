@@ -17,7 +17,7 @@ import (
 /*   A simple-to-use package manager  */
 /* ---------------------------------- */
 
-var bpmVer = "0.3.0"
+var bpmVer = "0.3.1"
 
 var subcommand = "help"
 var subcommandArgs []string
@@ -139,6 +139,10 @@ func resolveCommand() {
 			fmt.Println("----------------")
 			verb := "install"
 			if pkgInfo.Type == "source" {
+				if _, err := os.Stat("/bin/fakeroot"); os.IsNotExist(err) {
+					fmt.Printf("Skipping... cannot %s package (%s) due to fakeroot not being installed")
+					continue
+				}
 				verb = "build"
 			}
 			if !forceInstall {
@@ -313,19 +317,21 @@ func printHelp() {
 	fmt.Println("\033[1m---- Command List ----\033[0m")
 	fmt.Println("-> bpm version | shows information on the installed version of bpm")
 	fmt.Println("-> bpm info [-R] | shows information on an installed package")
-	fmt.Println("       -R=<root_path> lets you define the root path which will be used")
+	fmt.Println("       -R=<path> lets you define the root path which will be used")
 	fmt.Println("-> bpm list [-R, -c, -n] | lists all installed packages")
-	fmt.Println("       -R=<root_path> lets you define the root path which will be used")
+	fmt.Println("       -R=<path> lets you define the root path which will be used")
 	fmt.Println("       -c lists the amount of installed packages")
 	fmt.Println("       -n lists only the names of installed packages")
-	fmt.Println("-> bpm install [-R, -y, -f, -b] <files...> | installs the following files")
-	fmt.Println("       -R=<root_path> lets you define the root path which will be used")
+	fmt.Println("-> bpm install [-R, -y, -f, -o, -c, -b, -k] <files...> | installs the following files")
+	fmt.Println("       -R=<path> lets you define the root path which will be used")
 	fmt.Println("       -y skips the confirmation prompt")
 	fmt.Println("       -f skips dependency and architecture checking")
-	fmt.Println("       -b creates a binary package for a source package after compilation and saves it in /var/lib/bpm/compiled")
-	fmt.Println("       -k keeps the temp directory created by BPM after source package installation")
+	fmt.Println("       -o=<path> set the binary package output directory (defaults to /var/lib/bpm/compiled)")
+	fmt.Println("       -c=<path> set the compilation directory (defaults to /var/tmp)")
+	fmt.Println("       -b creates a binary package from a source package after compilation and saves it in the binary package output directory")
+	fmt.Println("       -k keeps the compilation directory created by BPM after source package installation")
 	fmt.Println("-> bpm remove [-R, -y] <packages...> | removes the following packages")
-	fmt.Println("       -R=<root_path> lets you define the root path which will be used")
+	fmt.Println("       -R=<path> lets you define the root path which will be used")
 	fmt.Println("       -y skips the confirmation prompt")
 	fmt.Println("-> bpm file [-R] <files...> | shows what packages the following packages are managed by")
 	fmt.Println("       -R=<root_path> lets you define the root path which will be used")
@@ -347,6 +353,8 @@ func resolveFlags() {
 	installFlagSet := flag.NewFlagSet("Install flags", flag.ExitOnError)
 	installFlagSet.StringVar(&rootDir, "R", "/", "Set the destination root")
 	installFlagSet.BoolVar(&yesAll, "y", false, "Skip confirmation prompts")
+	installFlagSet.StringVar(&bpm_utils.BPMConfig.BinaryOutputDir, "o", bpm_utils.BPMConfig.BinaryOutputDir, "Set the binary output directory")
+	installFlagSet.StringVar(&bpm_utils.BPMConfig.CompilationDir, "c", bpm_utils.BPMConfig.CompilationDir, "Set the compilation directory")
 	installFlagSet.BoolVar(&buildSource, "b", false, "Build binary package from source package")
 	installFlagSet.BoolVar(&skipCheck, "s", false, "Skip check function during source compilation")
 	installFlagSet.BoolVar(&keepTempDir, "k", false, "Keep temporary directory after source compilation")

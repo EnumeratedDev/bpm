@@ -505,7 +505,7 @@ func compilePackage(pkgInfo *PackageInfo, filename, rootDir string, binaryPkgFro
 	}
 	tr := tar.NewReader(archive)
 
-	temp := "/var/tmp/bpm_source-" + pkgInfo.Name
+	temp := path.Join(BPMConfig.CompilationDir, "bpm_source-"+pkgInfo.Name)
 	err = os.RemoveAll(temp)
 	if err != nil {
 		return err, nil
@@ -683,6 +683,8 @@ fi
 	cmd.SysProcAttr.Credential = &syscall.Credential{Uid: 65534, Gid: 65534}
 	cmd.Dir = temp
 	cmd.Env = os.Environ()
+	cmd.Env = append(cmd.Env, "USER=nobody")
+	cmd.Env = append(cmd.Env, "HOME="+temp)
 
 	err = os.Mkdir(path.Join(temp, "source"), 0755)
 	if err != nil {
@@ -827,7 +829,7 @@ fi
 		return err, nil
 	}
 	if binaryPkgFromSrc {
-		compiledDir := path.Join(rootDir, "var/lib/bpm/compiled/")
+		compiledDir := path.Join(BPMConfig.BinaryOutputDir)
 		err = os.MkdirAll(compiledDir, 0755)
 		compiledInfo := PackageInfo{}
 		compiledInfo = *pkgInfo
