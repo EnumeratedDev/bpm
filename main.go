@@ -2,9 +2,9 @@ package main
 
 import (
 	"bufio"
-	"capcreepergr.me/bpm/bpm_utils"
 	"flag"
 	"fmt"
+	"gitlab.com/bubble-package-manager/bpm/bpm_utils"
 	"log"
 	"os"
 	"path/filepath"
@@ -17,7 +17,7 @@ import (
 /*   A simple-to-use package manager  */
 /* ---------------------------------- */
 
-var bpmVer = "0.3.1"
+var bpmVer = "0.3.2"
 
 var subcommand = "help"
 var subcommandArgs []string

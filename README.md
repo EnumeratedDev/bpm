@@ -15,15 +15,16 @@ BPM is still in very early development. It should not be installed on any system
 
 ## Build from source
 
-BPM requires go 1.22 or above to be built properly
-
-```sh
-git clone https://gitlab.com/bubble-package-manager/bpm.git
-cd bpm
-mkdir build
-go build -o ./build/bpm capcreepergr.me/bpm
+- Download `go` from your package manager or from the go website
+- Download `make` from your package manager
+- Run the following command to compile the project
 ```
-You are now able to copy the executable in the ./build directory in a VM or container's /usr/bin/ directory
+make
+```
+- Run the following command to install stormfetch into your system. You may also append a DESTDIR variable at the end of this line if you wish to install in a different location
+```
+make install PREFIX=/usr SYSCONFDIR=/etc
+```
 
 ## How to use
 
