@@ -1,4 +1,4 @@
-module capcreepergr.me/bpm
+module gitlab.com/bubble-package-manager/bpm
 
 go 1.22
 
