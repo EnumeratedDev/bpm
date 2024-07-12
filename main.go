@@ -135,8 +135,10 @@ func resolveCommand() {
 			if err != nil {
 				log.Fatalf("Could not read package\nError: %s\n", err)
 			}
-			fmt.Print("----------------\n" + bpm_utils.CreateInfoFile(*pkgInfo, true))
-			fmt.Println("----------------")
+			if !yesAll {
+				fmt.Print("----------------\n" + bpm_utils.CreateInfoFile(*pkgInfo, true))
+				fmt.Println("----------------")
+			}
 			verb := "install"
 			if pkgInfo.Type == "source" {
 				if _, err := os.Stat("/bin/fakeroot"); os.IsNotExist(err) {

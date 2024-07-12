@@ -481,6 +481,21 @@ func extractPackage(pkgInfo *PackageInfo, filename, rootDir string) (error, []st
 	return nil, files
 }
 
+func isSplitPackage(filename string) bool {
+	pkgInfo, err := ReadPackage(filename)
+	if err != nil {
+		return false
+	}
+	if pkgInfo.Type != "source" {
+		return false
+	}
+	cmd := exec.Command("/bin/bash", "-c", fmt.Sprintf("test $(tar -tf %s | grep '^pkg.info' | wc -l) -eq 1", filename))
+	if err := cmd.Run(); err == nil {
+		return false
+	}
+	return true
+}
+
 func compilePackage(pkgInfo *PackageInfo, filename, rootDir string, binaryPkgFromSrc, skipCheck, keepTempDir bool) (error, []string) {
 	var files []string
 	if !IsPackageInstalled(pkgInfo.Name, rootDir) {
@@ -668,7 +683,6 @@ if [ $? -ne 0 ]; then
   echo "Failed to run package() function in source.sh"
 fi
 `
-
 	err = os.WriteFile(path.Join(temp, "run.sh"), []byte(runScript), 0644)
 	if err != nil {
 		return err, nil
@@ -924,6 +938,9 @@ func InstallPackage(filename, rootDir string, force, binaryPkgFromSrc, skipCheck
 		}
 		files = i
 	} else if pkgInfo.Type == "source" {
+		if isSplitPackage(filename) {
+			return errors.New("BPM is unable to install split source packages")
+		}
 		err, i := compilePackage(pkgInfo, filename, rootDir, binaryPkgFromSrc, skipCheck, keepTempDir)
 		if err != nil {
 			return err
