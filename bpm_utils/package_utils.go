@@ -310,6 +310,9 @@ func ReadPackageInfo(contents string, defaultValues bool) (*PackageInfo, error) 
 			return nil, errors.New("this package contains no type")
 		}
 	}
+	for i := 0; i < len(pkgInfo.Keep); i++ {
+		pkgInfo.Keep[i] = strings.TrimPrefix(pkgInfo.Keep[i], "/")
+	}
 	return &pkgInfo, nil
 }
 
@@ -368,14 +371,32 @@ func extractPackage(pkgInfo *PackageInfo, verbose bool, filename, rootDir string
 					}
 				}
 			case tar.TypeReg:
+				skip := false
 				if _, err := os.Stat(extractFilename); err == nil {
-					if slices.Contains(pkgInfo.Keep, trimmedName) {
-						if verbose {
-							fmt.Println("Skipping File: " + extractFilename + "(File is configured to be kept during installs/updates)")
+					for _, k := range pkgInfo.Keep {
+						if strings.HasSuffix(k, "/") {
+							if strings.HasPrefix(trimmedName, k) {
+								if verbose {
+									fmt.Println("Skipping File: " + extractFilename + " (Containing directory is set to be kept during installs/updates)")
+								}
+								files = append(files, strings.TrimPrefix(header.Name, "files/"))
+								skip = true
+								continue
+							}
+						} else {
+							if trimmedName == k {
+								if verbose {
+									fmt.Println("Skipping File: " + extractFilename + " (File is configured to be kept during installs/updates)")
+								}
+								files = append(files, strings.TrimPrefix(header.Name, "files/"))
+								skip = true
+								continue
+							}
 						}
-						files = append(files, trimmedName)
-						continue
 					}
+				}
+				if skip {
+					continue
 				}
 				err := os.Remove(extractFilename)
 				if err != nil && !os.IsNotExist(err) {
