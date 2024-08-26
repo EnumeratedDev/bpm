@@ -6,6 +6,7 @@ import (
 	"compress/gzip"
 	"errors"
 	"fmt"
+	"gopkg.in/yaml.v3"
 	"io"
 	"io/fs"
 	"os"
@@ -19,17 +20,23 @@ import (
 )
 
 type PackageInfo struct {
-	Name        string
-	Description string
-	Version     string
-	Url         string
-	License     string
-	Arch        string
-	Type        string
-	Keep        []string
-	Depends     []string
-	MakeDepends []string
-	Provides    []string
+	Name                   string              `yaml:"name,omitempty"`
+	Description            string              `yaml:"description,omitempty"`
+	Version                string              `yaml:"version,omitempty"`
+	Url                    string              `yaml:"url,omitempty"`
+	License                string              `yaml:"license,omitempty"`
+	Arch                   string              `yaml:"architecture,omitempty"`
+	Type                   string              `yaml:"type,omitempty"`
+	Keep                   []string            `yaml:"keep,omitempty"`
+	Depends                []string            `yaml:"depends,omitempty"`
+	ConditionalDepends     map[string][]string `yaml:"conditional_depends,omitempty"`
+	MakeDepends            []string            `yaml:"make_depends,omitempty"`
+	ConditionalMakeDepends map[string][]string `yaml:"conditional_make_depends,omitempty"`
+	Conflicts              []string            `yaml:"conflicts,omitempty"`
+	ConditionalConflicts   map[string][]string `yaml:"conditional_conflicts,omitempty"`
+	Optional               []string            `yaml:"optional,omitempty"`
+	ConditionalOptional    map[string][]string `yaml:"conditional_optional,omitempty"`
+	Provides               []string            `yaml:"provides,omitempty"`
 }
 
 func GetPackageInfoRaw(filename string) (string, error) {
@@ -268,66 +275,27 @@ func ExecutePackageScripts(filename, rootDir string, operation Operation, postOp
 
 func ReadPackageInfo(contents string, defaultValues bool) (*PackageInfo, error) {
 	pkgInfo := PackageInfo{
-		Name:        "",
-		Description: "",
-		Version:     "",
-		Url:         "",
-		License:     "",
-		Arch:        "",
-		Type:        "",
-		Keep:        nil,
-		Depends:     nil,
-		MakeDepends: nil,
-		Provides:    nil,
+		Name:                   "",
+		Description:            "",
+		Version:                "",
+		Url:                    "",
+		License:                "",
+		Arch:                   "",
+		Type:                   "",
+		Keep:                   make([]string, 0),
+		Depends:                make([]string, 0),
+		ConditionalDepends:     make(map[string][]string),
+		MakeDepends:            make([]string, 0),
+		ConditionalMakeDepends: make(map[string][]string),
+		Conflicts:              make([]string, 0),
+		ConditionalConflicts:   make(map[string][]string),
+		Optional:               make([]string, 0),
+		ConditionalOptional:    make(map[string][]string),
+		Provides:               make([]string, 0),
 	}
-	lines := strings.Split(contents, "\n")
-	for num, line := range lines {
-		if len(strings.TrimSpace(line)) == 0 {
-			continue
-		}
-		if line[0] == '#' {
-			continue
-		}
-		split := strings.SplitN(line, ":", 2)
-		if len(split) != 2 {
-			return nil, errors.New("invalid pkg.info format at line " + strconv.Itoa(num))
-		}
-		split[0] = strings.Trim(split[0], " ")
-		split[1] = strings.Trim(split[1], " ")
-		switch split[0] {
-		case "name":
-			if strings.Contains(split[1], " ") {
-				return nil, errors.New("the " + split[0] + " field cannot contain spaces")
-			}
-			pkgInfo.Name = split[1]
-		case "description":
-			pkgInfo.Description = split[1]
-		case "version":
-			if strings.Contains(split[1], " ") {
-				return nil, errors.New("the " + split[0] + " field cannot contain spaces")
-			}
-			pkgInfo.Version = split[1]
-		case "url":
-			pkgInfo.Url = split[1]
-		case "license":
-			pkgInfo.License = split[1]
-		case "architecture":
-			pkgInfo.Arch = split[1]
-		case "type":
-			pkgInfo.Type = split[1]
-		case "keep":
-			pkgInfo.Keep = strings.Split(strings.Replace(split[1], " ", "", -1), ",")
-			pkgInfo.Keep = stringSliceRemoveEmpty(pkgInfo.Keep)
-		case "depends":
-			pkgInfo.Depends = strings.Split(strings.Replace(split[1], " ", "", -1), ",")
-			pkgInfo.Depends = stringSliceRemoveEmpty(pkgInfo.Depends)
-		case "make_depends":
-			pkgInfo.MakeDepends = strings.Split(strings.Replace(split[1], " ", "", -1), ",")
-			pkgInfo.MakeDepends = stringSliceRemoveEmpty(pkgInfo.MakeDepends)
-		case "provides":
-			pkgInfo.Provides = strings.Split(strings.Replace(split[1], " ", "", -1), ",")
-			pkgInfo.Provides = stringSliceRemoveEmpty(pkgInfo.Provides)
-		}
+	err := yaml.Unmarshal([]byte(contents), &pkgInfo)
+	if err != nil {
+		return nil, err
 	}
 	if !defaultValues {
 		if pkgInfo.Name == "" {
@@ -345,35 +313,15 @@ func ReadPackageInfo(contents string, defaultValues bool) (*PackageInfo, error) 
 	return &pkgInfo, nil
 }
 
-func CreateInfoFile(pkgInfo PackageInfo, keepSourceFields bool) string {
-	ret := ""
-	ret = ret + "name: " + pkgInfo.Name + "\n"
-	ret = ret + "description: " + pkgInfo.Description + "\n"
-	ret = ret + "version: " + pkgInfo.Version + "\n"
-	if pkgInfo.Url != "" {
-		ret = ret + "url: " + pkgInfo.Url + "\n"
+func CreateInfoFile(pkgInfo PackageInfo) string {
+	bytes, err := yaml.Marshal(&pkgInfo)
+	if err != nil {
+		return ""
 	}
-	if pkgInfo.License != "" {
-		ret = ret + "license: " + pkgInfo.License + "\n"
-	}
-	ret = ret + "architecture: " + pkgInfo.Arch + "\n"
-	ret = ret + "type: " + pkgInfo.Type + "\n"
-	if len(pkgInfo.Keep) > 0 {
-		ret = ret + "keep (" + strconv.Itoa(len(pkgInfo.Keep)) + "): " + strings.Join(pkgInfo.Keep, ",") + "\n"
-	}
-	if len(pkgInfo.Depends) > 0 {
-		ret = ret + "depends (" + strconv.Itoa(len(pkgInfo.Depends)) + "): " + strings.Join(pkgInfo.Depends, ",") + "\n"
-	}
-	if len(pkgInfo.MakeDepends) > 0 && keepSourceFields {
-		ret = ret + "make_depends (" + strconv.Itoa(len(pkgInfo.MakeDepends)) + "): " + strings.Join(pkgInfo.MakeDepends, ",") + "\n"
-	}
-	if len(pkgInfo.Provides) > 0 {
-		ret = ret + "provides (" + strconv.Itoa(len(pkgInfo.Provides)) + "): " + strings.Join(pkgInfo.Provides, ",") + "\n"
-	}
-	return ret
+	return string(bytes)
 }
 
-func extractPackage(pkgInfo *PackageInfo, filename, rootDir string) (error, []string) {
+func extractPackage(pkgInfo *PackageInfo, verbose bool, filename, rootDir string) (error, []string) {
 	var files []string
 	if !IsPackageInstalled(pkgInfo.Name, rootDir) {
 		err := ExecutePackageScripts(filename, rootDir, Install, false)
@@ -415,12 +363,16 @@ func extractPackage(pkgInfo *PackageInfo, filename, rootDir string) (error, []st
 						return err, nil
 					}
 				} else {
-					fmt.Println("Creating Directory: " + extractFilename)
+					if verbose {
+						fmt.Println("Creating Directory: " + extractFilename)
+					}
 				}
 			case tar.TypeReg:
 				if _, err := os.Stat(extractFilename); err == nil {
 					if slices.Contains(pkgInfo.Keep, trimmedName) {
-						fmt.Println("Skipping File: " + extractFilename + "(File is configured to be kept during installs/updates)")
+						if verbose {
+							fmt.Println("Skipping File: " + extractFilename + "(File is configured to be kept during installs/updates)")
+						}
 						files = append(files, trimmedName)
 						continue
 					}
@@ -430,7 +382,9 @@ func extractPackage(pkgInfo *PackageInfo, filename, rootDir string) (error, []st
 					return err, nil
 				}
 				outFile, err := os.Create(extractFilename)
-				fmt.Println("Creating File: " + extractFilename)
+				if verbose {
+					fmt.Println("Creating File: " + extractFilename)
+				}
 				files = append(files, strings.TrimPrefix(header.Name, "files/"))
 				if err != nil {
 					return err, nil
@@ -446,7 +400,9 @@ func extractPackage(pkgInfo *PackageInfo, filename, rootDir string) (error, []st
 					return err, nil
 				}
 			case tar.TypeSymlink:
-				fmt.Println("Creating Symlink: " + extractFilename + " -> " + header.Linkname)
+				if verbose {
+					fmt.Println("Creating Symlink: " + extractFilename + " -> " + header.Linkname)
+				}
 				files = append(files, strings.TrimPrefix(header.Name, "files/"))
 				err := os.Remove(extractFilename)
 				if err != nil && !os.IsNotExist(err) {
@@ -457,7 +413,9 @@ func extractPackage(pkgInfo *PackageInfo, filename, rootDir string) (error, []st
 					return err, nil
 				}
 			case tar.TypeLink:
-				fmt.Println("Detected Hard Link: " + extractFilename + " -> " + path.Join(rootDir, strings.TrimPrefix(header.Linkname, "files/")))
+				if verbose {
+					fmt.Println("Detected Hard Link: " + extractFilename + " -> " + path.Join(rootDir, strings.TrimPrefix(header.Linkname, "files/")))
+				}
 				files = append(files, strings.TrimPrefix(header.Name, "files/"))
 				seenHardlinks[extractFilename] = path.Join(strings.TrimPrefix(header.Linkname, "files/"))
 				err := os.Remove(extractFilename)
@@ -470,7 +428,9 @@ func extractPackage(pkgInfo *PackageInfo, filename, rootDir string) (error, []st
 		}
 	}
 	for extractFilename, destination := range seenHardlinks {
-		fmt.Println("Creating Hard Link: " + extractFilename + " -> " + path.Join(rootDir, destination))
+		if verbose {
+			fmt.Println("Creating Hard Link: " + extractFilename + " -> " + path.Join(rootDir, destination))
+		}
 		err := os.Link(path.Join(rootDir, destination), extractFilename)
 		if err != nil {
 			return err, nil
@@ -496,7 +456,7 @@ func isSplitPackage(filename string) bool {
 	return true
 }
 
-func compilePackage(pkgInfo *PackageInfo, filename, rootDir string, binaryPkgFromSrc, skipCheck, keepTempDir bool) (error, []string) {
+func compilePackage(pkgInfo *PackageInfo, filename, rootDir string, verbose, binaryPkgFromSrc, skipCheck, keepTempDir bool) (error, []string) {
 	var files []string
 	if !IsPackageInstalled(pkgInfo.Name, rootDir) {
 		err := ExecutePackageScripts(filename, rootDir, Install, false)
@@ -525,7 +485,9 @@ func compilePackage(pkgInfo *PackageInfo, filename, rootDir string, binaryPkgFro
 	if err != nil {
 		return err, nil
 	}
-	fmt.Println("Creating temp directory at: " + temp)
+	if verbose {
+		fmt.Println("Creating temp directory at: " + temp)
+	}
 	err = os.Mkdir(temp, 0755)
 	if err != nil {
 		return err, nil
@@ -552,7 +514,9 @@ func compilePackage(pkgInfo *PackageInfo, filename, rootDir string, binaryPkgFro
 						return err, nil
 					}
 				} else {
-					fmt.Println("Creating Directory: " + extractFilename)
+					if verbose {
+						fmt.Println("Creating Directory: " + extractFilename)
+					}
 					err = os.Chown(extractFilename, 65534, 65534)
 					if err != nil {
 						return err, nil
@@ -564,7 +528,9 @@ func compilePackage(pkgInfo *PackageInfo, filename, rootDir string, binaryPkgFro
 					return err, nil
 				}
 				outFile, err := os.Create(extractFilename)
-				fmt.Println("Creating File: " + extractFilename)
+				if verbose {
+					fmt.Println("Creating File: " + extractFilename)
+				}
 				if err != nil {
 					return err, nil
 				}
@@ -583,9 +549,13 @@ func compilePackage(pkgInfo *PackageInfo, filename, rootDir string, binaryPkgFro
 					return err, nil
 				}
 			case tar.TypeSymlink:
-				fmt.Println("Skipping symlink (Bundling symlinks in source packages is not supported)")
+				if verbose {
+					fmt.Println("Skipping symlink (Bundling symlinks in source packages is not supported)")
+				}
 			case tar.TypeLink:
-				fmt.Println("Skipping hard link (Bundling hard links in source packages is not supported)")
+				if verbose {
+					fmt.Println("Skipping hard link (Bundling hard links in source packages is not supported)")
+				}
 			default:
 				return errors.New("ExtractTarGz: unknown type: " + strconv.Itoa(int(header.Typeflag)) + " in " + extractFilename), nil
 			}
@@ -779,12 +749,16 @@ fi
 					return err
 				}
 			} else {
-				fmt.Println("Creating Directory: " + extractFilename)
+				if verbose {
+					fmt.Println("Creating Directory: " + extractFilename)
+				}
 			}
 		} else if d.Type().IsRegular() {
 			if _, err := os.Stat(extractFilename); err == nil {
 				if slices.Contains(pkgInfo.Keep, relFilename) {
-					fmt.Println("Skipping File: " + extractFilename + "(File is configured to be kept during installs/updates)")
+					if verbose {
+						fmt.Println("Skipping File: " + extractFilename + "(File is configured to be kept during installs/updates)")
+					}
 					files = append(files, relFilename)
 					return nil
 				}
@@ -794,7 +768,9 @@ fi
 				return err
 			}
 			outFile, err := os.Create(extractFilename)
-			fmt.Println("Creating File: " + extractFilename)
+			if verbose {
+				fmt.Println("Creating File: " + extractFilename)
+			}
 			files = append(files, relFilename)
 			if err != nil {
 				return err
@@ -830,7 +806,9 @@ fi
 			if err != nil && !os.IsNotExist(err) {
 				return err
 			}
-			fmt.Println("Creating Symlink: "+extractFilename, " -> "+link)
+			if verbose {
+				fmt.Println("Creating Symlink: "+extractFilename, " -> "+link)
+			}
 			files = append(files, relFilename)
 			err = os.Symlink(link, extractFilename)
 			if err != nil {
@@ -849,7 +827,7 @@ fi
 		compiledInfo = *pkgInfo
 		compiledInfo.Type = "binary"
 		compiledInfo.Arch = GetArch()
-		err = os.WriteFile(path.Join(temp, "pkg.info"), []byte(CreateInfoFile(compiledInfo, false)), 0644)
+		err = os.WriteFile(path.Join(temp, "pkg.info"), []byte(CreateInfoFile(compiledInfo)), 0644)
 		if err != nil {
 			return err, nil
 		}
@@ -909,7 +887,7 @@ fi
 	return nil, files
 }
 
-func InstallPackage(filename, rootDir string, force, binaryPkgFromSrc, skipCheck, keepTempDir bool) error {
+func InstallPackage(filename, rootDir string, verbose, force, binaryPkgFromSrc, skipCheck, keepTempDir bool) error {
 	if _, err := os.Stat(filename); os.IsNotExist(err) {
 		return err
 	}
@@ -927,12 +905,12 @@ func InstallPackage(filename, rootDir string, force, binaryPkgFromSrc, skipCheck
 		if pkgInfo.Arch != "any" && pkgInfo.Arch != GetArch() {
 			return errors.New("cannot install a package with a different architecture")
 		}
-		if unresolved := CheckDependencies(pkgInfo, rootDir); len(unresolved) != 0 {
+		if unresolved := CheckDependencies(pkgInfo, true, true, rootDir); len(unresolved) != 0 {
 			return errors.New("Could not resolve all dependencies. Missing " + strings.Join(unresolved, ", "))
 		}
 	}
 	if pkgInfo.Type == "binary" {
-		err, i := extractPackage(pkgInfo, filename, rootDir)
+		err, i := extractPackage(pkgInfo, verbose, filename, rootDir)
 		if err != nil {
 			return err
 		}
@@ -941,7 +919,7 @@ func InstallPackage(filename, rootDir string, force, binaryPkgFromSrc, skipCheck
 		if isSplitPackage(filename) {
 			return errors.New("BPM is unable to install split source packages")
 		}
-		err, i := compilePackage(pkgInfo, filename, rootDir, binaryPkgFromSrc, skipCheck, keepTempDir)
+		err, i := compilePackage(pkgInfo, filename, rootDir, verbose, binaryPkgFromSrc, skipCheck, keepTempDir)
 		if err != nil {
 			return err
 		}
@@ -1023,7 +1001,7 @@ func InstallPackage(filename, rootDir string, force, binaryPkgFromSrc, skipCheck
 	}
 
 	if len(filesDiff) != 0 {
-		fmt.Println("Removing obsolete files")
+		fmt.Println("Removing obsolete files...")
 		var symlinks []string
 		for _, f := range filesDiff {
 			f = path.Join(rootDir, f)
@@ -1049,14 +1027,18 @@ func InstallPackage(filename, rootDir string, force, binaryPkgFromSrc, skipCheck
 					return err
 				}
 				if len(dir) == 0 {
-					fmt.Println("Removing: " + f)
+					if verbose {
+						fmt.Println("Removing: " + f)
+					}
 					err := os.Remove(f)
 					if err != nil {
 						return err
 					}
 				}
 			} else {
-				fmt.Println("Removing: " + f)
+				if verbose {
+					fmt.Println("Removing: " + f)
+				}
 				err := os.Remove(f)
 				if err != nil {
 					return err
@@ -1082,7 +1064,9 @@ func InstallPackage(filename, rootDir string, force, binaryPkgFromSrc, skipCheck
 						return err
 					}
 					removals++
-					fmt.Println("Removing: " + f)
+					if verbose {
+						fmt.Println("Removing: " + f)
+					}
 				} else if err != nil {
 					return err
 				}
@@ -1144,24 +1128,67 @@ func GetSourceScript(filename string) (string, error) {
 	return "", errors.New("package does not contain a source.sh file")
 }
 
-func CheckDependencies(pkgInfo *PackageInfo, rootDir string) []string {
-	var unresolved []string
+func CheckDependencies(pkgInfo *PackageInfo, checkMake, checkConditional bool, rootDir string) []string {
+	var ret []string
 	for _, dependency := range pkgInfo.Depends {
 		if !IsPackageInstalled(dependency, rootDir) {
-			unresolved = append(unresolved, dependency)
+			ret = append(ret, dependency)
 		}
 	}
-	return unresolved
+	if checkMake {
+		for _, dependency := range pkgInfo.MakeDepends {
+			if !IsPackageInstalled(dependency, rootDir) {
+				ret = append(ret, dependency)
+			}
+		}
+	}
+	if checkConditional {
+		for condition, dependencies := range pkgInfo.ConditionalDepends {
+			if !IsPackageInstalled(condition, rootDir) {
+				continue
+			}
+			for _, dependency := range dependencies {
+				if !IsPackageInstalled(dependency, rootDir) {
+					ret = append(ret, dependency)
+				}
+			}
+		}
+		if checkMake {
+			for condition, dependencies := range pkgInfo.ConditionalMakeDepends {
+				if !IsPackageInstalled(condition, rootDir) {
+					continue
+				}
+				for _, dependency := range dependencies {
+					if !IsPackageInstalled(dependency, rootDir) {
+						ret = append(ret, dependency)
+					}
+				}
+			}
+		}
+	}
+	return ret
 }
 
-func CheckMakeDependencies(pkgInfo *PackageInfo, rootDir string) []string {
-	var unresolved []string
-	for _, dependency := range pkgInfo.MakeDepends {
-		if !IsPackageInstalled(dependency, "/") {
-			unresolved = append(unresolved, dependency)
+func CheckConflicts(pkgInfo *PackageInfo, checkConditional bool, rootDir string) []string {
+	var ret []string
+	for _, conflict := range pkgInfo.Conflicts {
+		if IsPackageInstalled(conflict, rootDir) {
+			ret = append(ret, conflict)
 		}
 	}
-	return unresolved
+	if checkConditional {
+		for condition, conflicts := range pkgInfo.ConditionalConflicts {
+			if !IsPackageInstalled(condition, rootDir) {
+				continue
+			}
+			for _, conflict := range conflicts {
+				if IsPackageInstalled(conflict, rootDir) {
+					ret = append(ret, conflict)
+				}
+			}
+		}
+	}
+	return ret
 }
 
 func IsPackageInstalled(pkg, rootDir string) bool {
@@ -1236,7 +1263,7 @@ func GetPackageInfo(pkg, rootDir string, defaultValues bool) *PackageInfo {
 	return info
 }
 
-func RemovePackage(pkg, rootDir string) error {
+func RemovePackage(pkg string, verbose bool, rootDir string) error {
 	installedDir := path.Join(rootDir, "var/lib/bpm/installed/")
 	pkgDir := path.Join(installedDir, pkg)
 	pkgInfo := GetPackageInfo(pkg, rootDir, false)
@@ -1271,14 +1298,18 @@ func RemovePackage(pkg, rootDir string) error {
 				return err
 			}
 			if len(dir) == 0 {
-				fmt.Println("Removing: " + file)
+				if verbose {
+					fmt.Println("Removing: " + file)
+				}
 				err := os.Remove(file)
 				if err != nil {
 					return err
 				}
 			}
 		} else {
-			fmt.Println("Removing: " + file)
+			if verbose {
+				fmt.Println("Removing: " + file)
+			}
 			err := os.Remove(file)
 			if err != nil {
 				return err
@@ -1304,7 +1335,9 @@ func RemovePackage(pkg, rootDir string) error {
 					return err
 				}
 				removals++
-				fmt.Println("Removing: " + file)
+				if verbose {
+					fmt.Println("Removing: " + file)
+				}
 			} else if err != nil {
 				return err
 			}
@@ -1347,6 +1380,8 @@ func RemovePackage(pkg, rootDir string) error {
 	if err != nil {
 		return err
 	}
-	fmt.Println("Removing: " + pkgDir)
+	if verbose {
+		fmt.Println("Removing: " + pkgDir)
+	}
 	return nil
 }
