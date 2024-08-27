@@ -39,6 +39,43 @@ type PackageInfo struct {
 	Provides               []string            `yaml:"provides,omitempty"`
 }
 
+type InstallationReason string
+
+const (
+	Manual     InstallationReason = "manual"
+	Dependency InstallationReason = "dependency"
+	Unknown    InstallationReason = "unknown"
+)
+
+func GetInstallationReason(pkg, rootDir string) InstallationReason {
+	installedDir := path.Join(rootDir, "var/lib/bpm/installed/")
+	pkgDir := path.Join(installedDir, pkg)
+	if stat, err := os.Stat(path.Join(pkgDir, "installation_reason")); err != nil || stat.IsDir() {
+		return Manual
+	}
+	bytes, err := os.ReadFile(path.Join(pkgDir, "installation_reason"))
+	if err != nil {
+		return Unknown
+	}
+	reason := string(bytes)
+	if reason == "manual" {
+		return Manual
+	} else if reason == "dependency" {
+		return Dependency
+	}
+	return Unknown
+}
+
+func SetInstallationReason(pkg string, reason InstallationReason, rootDir string) error {
+	installedDir := path.Join(rootDir, "var/lib/bpm/installed/")
+	pkgDir := path.Join(installedDir, pkg)
+	err := os.WriteFile(path.Join(pkgDir, "installation_reason"), []byte(reason), 0644)
+	if err != nil {
+		return err
+	}
+	return nil
+}
+
 func GetPackageInfoRaw(filename string) (string, error) {
 	if _, err := os.Stat(filename); os.IsNotExist(err) {
 		return "", err
@@ -316,12 +353,65 @@ func ReadPackageInfo(contents string, defaultValues bool) (*PackageInfo, error) 
 	return &pkgInfo, nil
 }
 
-func CreateInfoFile(pkgInfo PackageInfo) string {
+func CreateInfoFile(pkgInfo *PackageInfo) string {
 	bytes, err := yaml.Marshal(&pkgInfo)
 	if err != nil {
 		return ""
 	}
 	return string(bytes)
+}
+
+func CreateReadableInfo(showArchitecture, showType, showPackageRelations, showRemoteInfo, showInstallationReason bool, pkgInfo *PackageInfo, rootDir string) string {
+	ret := make([]string, 0)
+	appendArray := func(label string, array []string) {
+		if len(array) == 0 {
+			return
+		}
+		ret = append(ret, fmt.Sprintf("%s: %s", label, strings.Join(array, ", ")))
+	}
+	appendMap := func(label string, m map[string][]string) {
+		if len(m) == 0 {
+			return
+		}
+		ret = append(ret, label+":")
+		for k, v := range m {
+			if len(v) == 0 {
+				continue
+			}
+			ret = append(ret, fmt.Sprintf("  %s: %s", k, strings.Join(v, ", ")))
+		}
+	}
+	ret = append(ret, "Name: "+pkgInfo.Name)
+	ret = append(ret, "Description: "+pkgInfo.Description)
+	ret = append(ret, "Version: "+pkgInfo.Version)
+	ret = append(ret, "URL: "+pkgInfo.Url)
+	ret = append(ret, "License: "+pkgInfo.License)
+	if showArchitecture {
+		ret = append(ret, "Architecture: "+pkgInfo.Arch)
+	}
+	if showType {
+		ret = append(ret, "Type: "+pkgInfo.Type)
+	}
+	if showPackageRelations {
+		appendArray("Dependencies", pkgInfo.Depends)
+		appendArray("Make Dependencies", pkgInfo.MakeDepends)
+		appendArray("Provided packages", pkgInfo.Provides)
+		appendArray("Conflicting packages", pkgInfo.Conflicts)
+		appendArray("Optional dependencies", pkgInfo.Optional)
+		appendMap("Conditional dependencies", pkgInfo.ConditionalDepends)
+		appendMap("Conditional make dependencies", pkgInfo.ConditionalMakeDepends)
+		appendMap("Conditional conflicting packages", pkgInfo.ConditionalConflicts)
+		appendMap("Conditional optional dependencies", pkgInfo.ConditionalOptional)
+	}
+	if showInstallationReason {
+		if IsPackageInstalled(pkgInfo.Name, rootDir) {
+			ret = append(ret, "Installed: yes")
+			ret = append(ret, "Installation Reason: "+string(GetInstallationReason(pkgInfo.Name, rootDir)))
+		} else {
+			ret = append(ret, "Installed: no")
+		}
+	}
+	return strings.Join(ret, "\n")
 }
 
 func extractPackage(pkgInfo *PackageInfo, verbose bool, filename, rootDir string) (error, []string) {
@@ -848,7 +938,7 @@ fi
 		compiledInfo = *pkgInfo
 		compiledInfo.Type = "binary"
 		compiledInfo.Arch = GetArch()
-		err = os.WriteFile(path.Join(temp, "pkg.info"), []byte(CreateInfoFile(compiledInfo)), 0644)
+		err = os.WriteFile(path.Join(temp, "pkg.info"), []byte(CreateInfoFile(&compiledInfo)), 0644)
 		if err != nil {
 			return err, nil
 		}

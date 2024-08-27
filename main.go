@@ -30,6 +30,7 @@ var buildSource = false
 var skipCheck = false
 var keepTempDir = false
 var forceInstall = false
+var showInstalled = false
 var pkgListNumbers = false
 var pkgListNames = false
 
@@ -82,12 +83,27 @@ func resolveCommand() {
 			return
 		}
 		for n, pkg := range packages {
-			info := bpm_utils.GetPackageInfo(pkg, rootDir, false)
-			if info == nil {
-				fmt.Printf("Package (%s) could not be found\n", pkg)
-				continue
+			var info *bpm_utils.PackageInfo
+			if _, err := os.Stat(pkg); err == nil && !showInstalled {
+				info, err = bpm_utils.ReadPackage(pkg)
+				if err != nil {
+					fmt.Printf("File (%s) could not be read\n", pkg)
+					continue
+				}
+
+			} else {
+				info = bpm_utils.GetPackageInfo(pkg, rootDir, false)
+				if info == nil {
+					fmt.Printf("Package (%s) could not be found\n", pkg)
+					continue
+				}
 			}
-			fmt.Print("----------------\n" + bpm_utils.CreateInfoFile(*info))
+			fmt.Println("----------------")
+			if showInstalled {
+				fmt.Println(bpm_utils.CreateReadableInfo(false, false, true, false, true, info, rootDir))
+			} else {
+				fmt.Println(bpm_utils.CreateReadableInfo(true, true, true, true, true, info, rootDir))
+			}
 			if n == len(packages)-1 {
 				fmt.Println("----------------")
 			}
@@ -115,7 +131,7 @@ func resolveCommand() {
 					fmt.Printf("Package (%s) could not be found\n", pkg)
 					continue
 				}
-				fmt.Print("----------------\n" + bpm_utils.CreateInfoFile(*info))
+				fmt.Println("----------------\n" + bpm_utils.CreateReadableInfo(true, true, true, true, true, info, rootDir))
 				if n == len(packages)-1 {
 					fmt.Println("----------------")
 				}
@@ -137,7 +153,7 @@ func resolveCommand() {
 				log.Fatalf("Could not read package\nError: %s\n", err)
 			}
 			if !yesAll {
-				fmt.Print("----------------\n" + bpm_utils.CreateInfoFile(*pkgInfo))
+				fmt.Println("----------------\n" + bpm_utils.CreateReadableInfo(true, true, true, true, false, pkgInfo, rootDir))
 				fmt.Println("----------------")
 			}
 			verb := "install"
@@ -238,7 +254,7 @@ func resolveCommand() {
 				fmt.Printf("Package (%s) could not be found\n", pkg)
 				continue
 			}
-			fmt.Print("----------------\n" + bpm_utils.CreateInfoFile(*pkgInfo))
+			fmt.Println("----------------\n" + bpm_utils.CreateReadableInfo(true, true, true, true, true, pkgInfo, rootDir))
 			fmt.Println("----------------")
 			if rootDir != "/" {
 				fmt.Println("Warning: Operating in " + rootDir)
@@ -319,6 +335,7 @@ func printHelp() {
 	fmt.Println("-> bpm version | shows information on the installed version of bpm")
 	fmt.Println("-> bpm info [-R] | shows information on an installed package")
 	fmt.Println("       -R=<path> lets you define the root path which will be used")
+	fmt.Println("       -i shows information about the currently installed package")
 	fmt.Println("-> bpm list [-R, -c, -n] | lists all installed packages")
 	fmt.Println("       -R=<path> lets you define the root path which will be used")
 	fmt.Println("       -c lists the amount of installed packages")
@@ -351,6 +368,7 @@ func resolveFlags() {
 	// Info flags
 	infoFlagSet := flag.NewFlagSet("Info flags", flag.ExitOnError)
 	infoFlagSet.StringVar(&rootDir, "R", "/", "Set the destination root")
+	infoFlagSet.BoolVar(&showInstalled, "i", false, "Shows information about the currently installed package")
 	infoFlagSet.Usage = printHelp
 	// Install flags
 	installFlagSet := flag.NewFlagSet("Install flags", flag.ExitOnError)
