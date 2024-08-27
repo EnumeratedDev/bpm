@@ -1242,13 +1242,13 @@ func GetSourceScript(filename string) (string, error) {
 func CheckDependencies(pkgInfo *PackageInfo, checkMake, checkConditional bool, rootDir string) []string {
 	var ret []string
 	for _, dependency := range pkgInfo.Depends {
-		if !IsPackageInstalled(dependency, rootDir) {
+		if !IsPackageProvided(dependency, rootDir) {
 			ret = append(ret, dependency)
 		}
 	}
 	if checkMake {
 		for _, dependency := range pkgInfo.MakeDepends {
-			if !IsPackageInstalled(dependency, rootDir) {
+			if !IsPackageProvided(dependency, rootDir) {
 				ret = append(ret, dependency)
 			}
 		}
@@ -1259,7 +1259,7 @@ func CheckDependencies(pkgInfo *PackageInfo, checkMake, checkConditional bool, r
 				continue
 			}
 			for _, dependency := range dependencies {
-				if !IsPackageInstalled(dependency, rootDir) {
+				if !IsPackageProvided(dependency, rootDir) {
 					ret = append(ret, dependency)
 				}
 			}
@@ -1309,6 +1309,22 @@ func IsPackageInstalled(pkg, rootDir string) bool {
 		return false
 	}
 	return true
+}
+
+func IsPackageProvided(pkg, rootDir string) bool {
+	pkgs, err := GetInstalledPackages(rootDir)
+	if err != nil {
+		return false
+	}
+	for _, p := range pkgs {
+		if p == pkg {
+			return true
+		}
+		if slices.Contains(GetPackageInfo(p, rootDir, true).Provides, pkg) {
+			return true
+		}
+	}
+	return false
 }
 
 func GetInstalledPackages(rootDir string) ([]string, error) {
