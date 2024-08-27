@@ -1,4 +1,4 @@
-package bpm_utils
+package utils
 
 import (
 	"archive/tar"
