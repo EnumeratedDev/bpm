@@ -403,6 +403,15 @@ func CreateReadableInfo(showArchitecture, showType, showPackageRelations, showRe
 		appendMap("Conditional conflicting packages", pkgInfo.ConditionalConflicts)
 		appendMap("Conditional optional dependencies", pkgInfo.ConditionalOptional)
 	}
+	if showRemoteInfo {
+		arr := make([]string, 0)
+		for _, repo := range BPMConfig.Repositories {
+			if repo.ContainsPackage(pkgInfo.Name) {
+				arr = append(arr, repo.Name)
+			}
+		}
+		appendArray("Repositories", arr)
+	}
 	if showInstallationReason {
 		if IsPackageInstalled(pkgInfo.Name, rootDir) {
 			ret = append(ret, "Installed: yes")
