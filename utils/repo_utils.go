@@ -14,7 +14,7 @@ import (
 type Repository struct {
 	Name     string `yaml:"name"`
 	Source   string `yaml:"source"`
-	Disabled bool   `yaml:"disabled"`
+	Disabled *bool  `yaml:"disabled"`
 	Entries  map[string]*RepositoryEntry
 }
 

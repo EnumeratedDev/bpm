@@ -268,12 +268,6 @@ func resolveCommand() {
 			}
 		}
 		for _, repo := range utils.BPMConfig.Repositories {
-			if repo.Disabled {
-				if verbose {
-					fmt.Printf("Skipping repository (%s) because it is disabled\n", repo.Name)
-				}
-				continue
-			}
 			fmt.Printf("Fetching package database for repository (%s)...\n", repo.Name)
 			err := repo.SyncLocalDatabase()
 			if err != nil {

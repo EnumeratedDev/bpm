@@ -33,6 +33,11 @@ func ReadConfig() {
 	if err != nil {
 		log.Fatal(err)
 	}
+	for i := len(BPMConfig.Repositories) - 1; i >= 0; i-- {
+		if BPMConfig.Repositories[i].Disabled != nil && *BPMConfig.Repositories[i].Disabled {
+			BPMConfig.Repositories = append(BPMConfig.Repositories[:i], BPMConfig.Repositories[i+1:]...)
+		}
+	}
 	for _, repo := range BPMConfig.Repositories {
 		repo.Entries = make(map[string]*RepositoryEntry)
 		err := repo.ReadLocalDatabase()
