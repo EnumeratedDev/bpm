@@ -19,8 +19,8 @@ type Repository struct {
 }
 
 type RepositoryEntry struct {
-	Info     PackageInfo `yaml:"info"`
-	Download string      `yaml:"download"`
+	Info     *PackageInfo `yaml:"info"`
+	Download string       `yaml:"download"`
 }
 
 func (repo *Repository) ContainsPackage(pkg string) bool {
@@ -42,7 +42,7 @@ func (repo *Repository) ReadLocalDatabase() error {
 	data := string(bytes)
 	for _, b := range strings.Split(data, "---") {
 		entry := RepositoryEntry{
-			Info: PackageInfo{
+			Info: &PackageInfo{
 				Name:                   "",
 				Description:            "",
 				Version:                "",
@@ -110,52 +110,60 @@ func GetRepository(name string) *Repository {
 	return nil
 }
 
-func GetRepositoryEntry(str string) (*RepositoryEntry, error) {
+func GetRepositoryEntry(str string) (*RepositoryEntry, *Repository, error) {
 	split := strings.Split(str, "/")
 	if len(split) == 1 {
 		pkgName := strings.TrimSpace(split[0])
 		if pkgName == "" {
-			return nil, errors.New("could not find repository entry for this package")
+			return nil, nil, errors.New("could not find repository entry for this package")
 		}
 		for _, repo := range BPMConfig.Repositories {
 			if repo.ContainsPackage(pkgName) {
-				return repo.Entries[pkgName], nil
+				return repo.Entries[pkgName], repo, nil
 			}
 		}
-		return nil, errors.New("could not find repository entry for this package")
+		return nil, nil, errors.New("could not find repository entry for this package")
 	} else if len(split) == 2 {
 		repoName := strings.TrimSpace(split[0])
 		pkgName := strings.TrimSpace(split[1])
 		if repoName == "" || pkgName == "" {
-			return nil, errors.New("could not find repository entry for this package")
+			return nil, nil, errors.New("could not find repository entry for this package")
 		}
 		repo := GetRepository(repoName)
 		if repo == nil || !repo.ContainsPackage(pkgName) {
-			return nil, errors.New("could not find repository entry for this package")
+			return nil, nil, errors.New("could not find repository entry for this package")
 		}
-		return repo.Entries[pkgName], nil
+		return repo.Entries[pkgName], repo, nil
 	} else {
-		return nil, errors.New("could not find repository entry for this package")
+		return nil, nil, errors.New("could not find repository entry for this package")
 	}
 }
 
-func (repo *Repository) FetchPackage(pkg, savePath string) (string, error) {
+func (repo *Repository) FetchPackage(pkg string) (string, error) {
 	if !repo.ContainsPackage(pkg) {
 		return "", errors.New("Could not fetch package '" + pkg + "'")
 	}
 	entry := repo.Entries[pkg]
-	resp, err := http.Get(entry.Download)
+	URL, err := url.JoinPath(repo.Source, entry.Download)
+	if err != nil {
+		return "", err
+	}
+	resp, err := http.Get(URL)
 	if err != nil {
 		return "", err
 	}
 	defer resp.Body.Close()
 
-	out, err := os.Create(savePath)
+	err = os.MkdirAll("/var/cache/bpm/packages/", 0755)
+	if err != nil {
+		return "", err
+	}
+	out, err := os.Create("/var/cache/bpm/packages/" + path.Base(entry.Download))
 	if err != nil {
 		return "", err
 	}
 	defer out.Close()
 
 	_, err = io.Copy(out, resp.Body)
-	return savePath, nil
+	return "/var/cache/bpm/packages/" + path.Base(entry.Download), nil
 }

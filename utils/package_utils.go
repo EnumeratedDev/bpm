@@ -1311,6 +1311,55 @@ func CheckConflicts(pkgInfo *PackageInfo, checkConditional bool, rootDir string)
 	return ret
 }
 
+func ResolveAll(pkgInfo *PackageInfo, checkMake, ignoreInstalled bool, rootDir string) ([]string, []string, error) {
+	resolved := make([]string, 0)
+	unresolved := make([]string, 0)
+	toResolve := []string{pkgInfo.Name}
+	allDepends := make([]string, 0)
+	allDepends = append(allDepends, pkgInfo.Depends...)
+	for condition, depends := range pkgInfo.ConditionalDepends {
+		if IsPackageInstalled(condition, rootDir) {
+			allDepends = append(allDepends, depends...)
+		}
+	}
+	if checkMake {
+		allDepends = append(allDepends, pkgInfo.MakeDepends...)
+		for condition, depends := range pkgInfo.ConditionalMakeDepends {
+			if IsPackageInstalled(condition, rootDir) {
+				allDepends = append(allDepends, depends...)
+			}
+		}
+	}
+
+	resolve := func(depend string) {
+		if slices.Contains(resolved, depend) {
+			return
+		}
+		if ignoreInstalled && IsPackageInstalled(depend, rootDir) {
+			return
+		}
+		entry, _, err := GetRepositoryEntry(depend)
+		if err != nil {
+			if !slices.Contains(unresolved, depend) {
+				unresolved = append(unresolved, depend)
+			}
+			return
+		}
+		resolved = append(resolved, depend)
+		toResolve = append(toResolve, entry.Info.Depends...)
+	}
+
+	for len(toResolve) > 0 {
+		clone := slices.Clone(toResolve)
+		toResolve = make([]string, 0)
+		for _, depend := range clone {
+			resolve(depend)
+		}
+	}
+
+	return resolved, unresolved, nil
+}
+
 func IsPackageInstalled(pkg, rootDir string) bool {
 	installedDir := path.Join(rootDir, "var/lib/bpm/installed/")
 	pkgDir := path.Join(installedDir, pkg)
@@ -1329,7 +1378,11 @@ func IsPackageProvided(pkg, rootDir string) bool {
 		if p == pkg {
 			return true
 		}
-		if slices.Contains(GetPackageInfo(p, rootDir, true).Provides, pkg) {
+		i := GetPackageInfo(p, rootDir, true)
+		if i == nil {
+			continue
+		}
+		if slices.Contains(i.Provides, pkg) {
 			return true
 		}
 	}
