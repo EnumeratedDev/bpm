@@ -96,21 +96,17 @@ func resolveCommand() {
 			if _, err := os.Stat(pkg); err == nil && !showInstalled {
 				info, err = utils.ReadPackage(pkg)
 				if err != nil {
-					fmt.Printf("File (%s) could not be read\n", pkg)
-					continue
+					log.Fatalf("File (%s) could not be read\n", pkg)
 				}
-
 			} else if showInstalled {
 				info = utils.GetPackageInfo(pkg, rootDir, false)
 				if info == nil {
-					fmt.Printf("Package (%s) is not installed\n", pkg)
-					continue
+					log.Fatalf("Package (%s) is not installed\n", pkg)
 				}
 			} else {
 				entry, _, err := utils.GetRepositoryEntry(pkg)
 				if err != nil {
-					fmt.Printf("Package (%s) could not be found in any repository\n", pkg)
-					continue
+					log.Fatalf("Package (%s) could not be found in any repository\n", pkg)
 				}
 				info = entry.Info
 			}
