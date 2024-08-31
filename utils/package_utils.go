@@ -1025,7 +1025,7 @@ func InstallPackage(filename, rootDir string, verbose, force, binaryPkgFromSrc, 
 		if pkgInfo.Arch != "any" && pkgInfo.Arch != GetArch() {
 			return errors.New("cannot install a package with a different architecture")
 		}
-		if unresolved := CheckDependencies(pkgInfo, true, true, rootDir); len(unresolved) != 0 {
+		if unresolved := CheckDependencies(pkgInfo, pkgInfo.Type == "source", true, rootDir); len(unresolved) != 0 {
 			return errors.New("Could not resolve all dependencies. Missing " + strings.Join(unresolved, ", "))
 		}
 	}
@@ -1314,8 +1314,10 @@ func CheckConflicts(pkgInfo *PackageInfo, checkConditional bool, rootDir string)
 func ResolveAll(pkgInfo *PackageInfo, checkMake, ignoreInstalled bool, rootDir string) ([]string, []string, error) {
 	resolved := make([]string, 0)
 	unresolved := make([]string, 0)
-	toResolve := []string{pkgInfo.Name}
+	toResolve := make([]string, 0)
 	allDepends := make([]string, 0)
+
+	toResolve = append(toResolve, pkgInfo.Depends...)
 	allDepends = append(allDepends, pkgInfo.Depends...)
 	for condition, depends := range pkgInfo.ConditionalDepends {
 		if IsPackageInstalled(condition, rootDir) {

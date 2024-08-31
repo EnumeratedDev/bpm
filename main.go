@@ -177,7 +177,7 @@ func resolveCommand() {
 				if err != nil {
 					log.Fatalf("Could not read package. Error: %s\n", err)
 				}
-				if !reinstall && utils.IsPackageInstalled(pkgInfo.Name, rootDir) {
+				if !reinstall && utils.IsPackageInstalled(pkgInfo.Name, rootDir) && utils.GetPackageInfo(pkgInfo.Name, rootDir, true).Version == pkgInfo.Version {
 					continue
 				}
 				pkgsToInstall.Set(pkg, &struct {
@@ -189,7 +189,7 @@ func resolveCommand() {
 				if err != nil {
 					log.Fatalf("Could not find package (%s) in any repository\n", pkg)
 				}
-				if !reinstall && utils.IsPackageInstalled(entry.Info.Name, rootDir) {
+				if !reinstall && utils.IsPackageInstalled(entry.Info.Name, rootDir) && utils.GetPackageInfo(entry.Info.Name, rootDir, true).Version == entry.Info.Version {
 					continue
 				}
 				pkgsToFetch.Set(entry.Info.Name, &struct {
@@ -200,19 +200,62 @@ func resolveCommand() {
 		}
 
 		// Check for dependencies and conflicts
-		for _, pkg := range pkgsToFetch.Keys() {
+		clone := pkgsToFetch.Copy()
+		pkgsToFetch = orderedmap.NewOrderedMap[string, *struct {
+			isDependency bool
+			pkgInfo      *utils.PackageInfo
+		}]()
+		for _, pkg := range clone.Keys() {
+			value := clone.GetElement(pkg).Value
+			resolved, u, err := utils.ResolveAll(value.pkgInfo, false, !reinstall, rootDir)
+			if err != nil {
+				log.Fatalf("Could not resolve dependencies for package (%s). Error: %s\n", pkg, err)
+			}
+			unresolvedDepends = append(unresolvedDepends, u...)
+			for _, depend := range resolved {
+				if _, ok := pkgsToFetch.Get(depend); !ok && depend != value.pkgInfo.Name {
+					entry, _, err := utils.GetRepositoryEntry(depend)
+					if err != nil {
+						log.Fatalf("Could not find package (%s) in any repository\n", pkg)
+					}
+					pkgsToFetch.Set(depend, &struct {
+						isDependency bool
+						pkgInfo      *utils.PackageInfo
+					}{isDependency: true, pkgInfo: entry.Info})
+				}
+			}
+			pkgsToFetch.Set(pkg, value)
+		}
+
+		clone = pkgsToFetch.Copy()
+		pkgsToFetch = orderedmap.NewOrderedMap[string, *struct {
+			isDependency bool
+			pkgInfo      *utils.PackageInfo
+		}]()
+		for _, pkg := range clone.Keys() {
+			value := clone.GetElement(pkg).Value
 			entry, _, err := utils.GetRepositoryEntry(pkg)
 			if err != nil {
 				log.Fatalf("Could not read package. Error: %s\n", err)
 			}
-
 			resolved, u, err := utils.ResolveAll(entry.Info, false, !reinstall, rootDir)
+			if err != nil {
+				log.Fatalf("Could not resolve dependencies for package (%s). Error: %s\n", pkg, err)
+			}
 			unresolvedDepends = append(unresolvedDepends, u...)
 			for _, depend := range resolved {
-				if _, ok := pkgsToFetch.Get(depend); !ok {
-					pkgsToFetch.GetElement(depend).Value.isDependency = true
+				if _, ok := clone.Get(depend); !ok {
+					entry, _, err := utils.GetRepositoryEntry(depend)
+					if err != nil {
+						log.Fatalf("Could not find package (%s) in any repository\n", pkg)
+					}
+					pkgsToFetch.Set(depend, &struct {
+						isDependency bool
+						pkgInfo      *utils.PackageInfo
+					}{isDependency: true, pkgInfo: entry.Info})
 				}
 			}
+			pkgsToFetch.Set(pkg, value)
 		}
 
 		// Fetch packages from repositories
@@ -267,7 +310,7 @@ func resolveCommand() {
 				if pkgInfo.Type == "source" && keepTempDir {
 					fmt.Println("BPM temp directory was created at /var/tmp/bpm_source-" + pkgInfo.Name)
 				}
-				log.Fatalf("Could not install package\nError: %s\n", err)
+				log.Fatalf("Could not install package (%s). Error: %s\n", pkg, err)
 			}
 			fmt.Printf("Package (%s) was successfully installed!\n", pkgInfo.Name)
 			if value.isDependency {
