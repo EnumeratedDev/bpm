@@ -35,6 +35,7 @@ var showInstalled = false
 var pkgListNumbers = false
 var pkgListNames = false
 var reinstall = false
+var noOptional = false
 var nosync = true
 
 func main() {
@@ -207,7 +208,7 @@ func resolveCommand() {
 		}]()
 		for _, pkg := range clone.Keys() {
 			value := clone.GetElement(pkg).Value
-			resolved, u, err := utils.ResolveAll(value.pkgInfo, false, !reinstall, rootDir)
+			resolved, u, err := utils.ResolveAll(value.pkgInfo, false, !noOptional, !reinstall, rootDir)
 			if err != nil {
 				log.Fatalf("Could not resolve dependencies for package (%s). Error: %s\n", pkg, err)
 			}
@@ -238,7 +239,7 @@ func resolveCommand() {
 			if err != nil {
 				log.Fatalf("Could not read package. Error: %s\n", err)
 			}
-			resolved, u, err := utils.ResolveAll(entry.Info, false, !reinstall, rootDir)
+			resolved, u, err := utils.ResolveAll(entry.Info, false, !noOptional, !reinstall, rootDir)
 			if err != nil {
 				log.Fatalf("Could not resolve dependencies for package (%s). Error: %s\n", pkg, err)
 			}
@@ -447,7 +448,7 @@ func printHelp() {
 	fmt.Println("       -R=<path> lets you define the root path which will be used")
 	fmt.Println("       -c lists the amount of installed packages")
 	fmt.Println("       -n lists only the names of installed packages")
-	fmt.Println("-> bpm install [-R, -v, -y, -f, -o, -c, -b, -k] <files...> | installs the following files")
+	fmt.Println("-> bpm install [-R, -v, -y, -f, -o, -c, -b, -k, --reinstall, --no-optional] <files...> | installs the following files")
 	fmt.Println("       -R=<path> lets you define the root path which will be used")
 	fmt.Println("       -v Show additional information about what BPM is doing")
 	fmt.Println("       -y skips the confirmation prompt")
@@ -456,6 +457,8 @@ func printHelp() {
 	fmt.Println("       -c=<path> set the compilation directory (defaults to /var/tmp)")
 	fmt.Println("       -b creates a binary package from a source package after compilation and saves it in the binary package output directory")
 	fmt.Println("       -k keeps the compilation directory created by BPM after source package installation")
+	fmt.Println("       --reinstall Reinstalls packages even if they do not have a newer version available")
+	fmt.Println("       --no-optional Prevents installation of optional dependencies")
 	fmt.Println("-> bpm update [-R, -v, -y, -f, --reinstall, --nosync] | updates all packages that are available in the repositories")
 	fmt.Println("       -R=<path> lets you define the root path which will be used")
 	fmt.Println("       -v Show additional information about what BPM is doing")
@@ -500,6 +503,7 @@ func resolveFlags() {
 	installFlagSet.BoolVar(&keepTempDir, "k", false, "Keep temporary directory after source compilation")
 	installFlagSet.BoolVar(&force, "f", false, "Force installation by skipping architecture and dependency resolution")
 	installFlagSet.BoolVar(&reinstall, "reinstall", false, "Reinstalls packages even if they do not have a newer version available")
+	installFlagSet.BoolVar(&noOptional, "no-optional", false, "Prevents installation of optional dependencies")
 	installFlagSet.Usage = printHelp
 	// Update flags
 	updateFlagSet := flag.NewFlagSet("Update flags", flag.ExitOnError)

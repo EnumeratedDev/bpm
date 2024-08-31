@@ -20,23 +20,19 @@ import (
 )
 
 type PackageInfo struct {
-	Name                   string              `yaml:"name,omitempty"`
-	Description            string              `yaml:"description,omitempty"`
-	Version                string              `yaml:"version,omitempty"`
-	Url                    string              `yaml:"url,omitempty"`
-	License                string              `yaml:"license,omitempty"`
-	Arch                   string              `yaml:"architecture,omitempty"`
-	Type                   string              `yaml:"type,omitempty"`
-	Keep                   []string            `yaml:"keep,omitempty"`
-	Depends                []string            `yaml:"depends,omitempty"`
-	ConditionalDepends     map[string][]string `yaml:"conditional_depends,omitempty"`
-	MakeDepends            []string            `yaml:"make_depends,omitempty"`
-	ConditionalMakeDepends map[string][]string `yaml:"conditional_make_depends,omitempty"`
-	Conflicts              []string            `yaml:"conflicts,omitempty"`
-	ConditionalConflicts   map[string][]string `yaml:"conditional_conflicts,omitempty"`
-	Optional               []string            `yaml:"optional,omitempty"`
-	ConditionalOptional    map[string][]string `yaml:"conditional_optional,omitempty"`
-	Provides               []string            `yaml:"provides,omitempty"`
+	Name            string   `yaml:"name,omitempty"`
+	Description     string   `yaml:"description,omitempty"`
+	Version         string   `yaml:"version,omitempty"`
+	Url             string   `yaml:"url,omitempty"`
+	License         string   `yaml:"license,omitempty"`
+	Arch            string   `yaml:"architecture,omitempty"`
+	Type            string   `yaml:"type,omitempty"`
+	Keep            []string `yaml:"keep,omitempty"`
+	Depends         []string `yaml:"depends,omitempty"`
+	MakeDepends     []string `yaml:"make_depends,omitempty"`
+	OptionalDepends []string `yaml:"optional_depends,omitempty"`
+	Conflicts       []string `yaml:"conflicts,omitempty"`
+	Provides        []string `yaml:"provides,omitempty"`
 }
 
 type InstallationReason string
@@ -312,23 +308,19 @@ func ExecutePackageScripts(filename, rootDir string, operation Operation, postOp
 
 func ReadPackageInfo(contents string, defaultValues bool) (*PackageInfo, error) {
 	pkgInfo := PackageInfo{
-		Name:                   "",
-		Description:            "",
-		Version:                "",
-		Url:                    "",
-		License:                "",
-		Arch:                   "",
-		Type:                   "",
-		Keep:                   make([]string, 0),
-		Depends:                make([]string, 0),
-		ConditionalDepends:     make(map[string][]string),
-		MakeDepends:            make([]string, 0),
-		ConditionalMakeDepends: make(map[string][]string),
-		Conflicts:              make([]string, 0),
-		ConditionalConflicts:   make(map[string][]string),
-		Optional:               make([]string, 0),
-		ConditionalOptional:    make(map[string][]string),
-		Provides:               make([]string, 0),
+		Name:            "",
+		Description:     "",
+		Version:         "",
+		Url:             "",
+		License:         "",
+		Arch:            "",
+		Type:            "",
+		Keep:            make([]string, 0),
+		Depends:         make([]string, 0),
+		MakeDepends:     make([]string, 0),
+		OptionalDepends: make([]string, 0),
+		Conflicts:       make([]string, 0),
+		Provides:        make([]string, 0),
 	}
 	err := yaml.Unmarshal([]byte(contents), &pkgInfo)
 	if err != nil {
@@ -369,18 +361,6 @@ func CreateReadableInfo(showArchitecture, showType, showPackageRelations, showRe
 		}
 		ret = append(ret, fmt.Sprintf("%s: %s", label, strings.Join(array, ", ")))
 	}
-	appendMap := func(label string, m map[string][]string) {
-		if len(m) == 0 {
-			return
-		}
-		ret = append(ret, label+":")
-		for k, v := range m {
-			if len(v) == 0 {
-				continue
-			}
-			ret = append(ret, fmt.Sprintf("  %s: %s", k, strings.Join(v, ", ")))
-		}
-	}
 	ret = append(ret, "Name: "+pkgInfo.Name)
 	ret = append(ret, "Description: "+pkgInfo.Description)
 	ret = append(ret, "Version: "+pkgInfo.Version)
@@ -395,13 +375,10 @@ func CreateReadableInfo(showArchitecture, showType, showPackageRelations, showRe
 	if showPackageRelations {
 		appendArray("Dependencies", pkgInfo.Depends)
 		appendArray("Make Dependencies", pkgInfo.MakeDepends)
-		appendArray("Provided packages", pkgInfo.Provides)
+		appendArray("Optional dependencies", pkgInfo.OptionalDepends)
 		appendArray("Conflicting packages", pkgInfo.Conflicts)
-		appendArray("Optional dependencies", pkgInfo.Optional)
-		appendMap("Conditional dependencies", pkgInfo.ConditionalDepends)
-		appendMap("Conditional make dependencies", pkgInfo.ConditionalMakeDepends)
-		appendMap("Conditional conflicting packages", pkgInfo.ConditionalConflicts)
-		appendMap("Conditional optional dependencies", pkgInfo.ConditionalOptional)
+		appendArray("Provided packages", pkgInfo.Provides)
+
 	}
 	if showRemoteInfo {
 		arr := make([]string, 0)
@@ -1248,7 +1225,7 @@ func GetSourceScript(filename string) (string, error) {
 	return "", errors.New("package does not contain a source.sh file")
 }
 
-func CheckDependencies(pkgInfo *PackageInfo, checkMake, checkConditional bool, rootDir string) []string {
+func CheckDependencies(pkgInfo *PackageInfo, checkMake, checkOptional bool, rootDir string) []string {
 	var ret []string
 	for _, dependency := range pkgInfo.Depends {
 		if !IsPackageProvided(dependency, rootDir) {
@@ -1262,30 +1239,14 @@ func CheckDependencies(pkgInfo *PackageInfo, checkMake, checkConditional bool, r
 			}
 		}
 	}
-	if checkConditional {
-		for condition, dependencies := range pkgInfo.ConditionalDepends {
-			if !IsPackageInstalled(condition, rootDir) {
-				continue
-			}
-			for _, dependency := range dependencies {
-				if !IsPackageProvided(dependency, rootDir) {
-					ret = append(ret, dependency)
-				}
-			}
-		}
-		if checkMake {
-			for condition, dependencies := range pkgInfo.ConditionalMakeDepends {
-				if !IsPackageInstalled(condition, rootDir) {
-					continue
-				}
-				for _, dependency := range dependencies {
-					if !IsPackageInstalled(dependency, rootDir) {
-						ret = append(ret, dependency)
-					}
-				}
+	if checkOptional {
+		for _, dependency := range pkgInfo.OptionalDepends {
+			if !IsPackageProvided(dependency, rootDir) {
+				ret = append(ret, dependency)
 			}
 		}
 	}
+
 	return ret
 }
 
@@ -1296,41 +1257,20 @@ func CheckConflicts(pkgInfo *PackageInfo, checkConditional bool, rootDir string)
 			ret = append(ret, conflict)
 		}
 	}
-	if checkConditional {
-		for condition, conflicts := range pkgInfo.ConditionalConflicts {
-			if !IsPackageInstalled(condition, rootDir) {
-				continue
-			}
-			for _, conflict := range conflicts {
-				if IsPackageInstalled(conflict, rootDir) {
-					ret = append(ret, conflict)
-				}
-			}
-		}
-	}
 	return ret
 }
 
-func ResolveAll(pkgInfo *PackageInfo, checkMake, ignoreInstalled bool, rootDir string) ([]string, []string, error) {
+func ResolveAll(pkgInfo *PackageInfo, checkMake, checkOptional, ignoreInstalled bool, rootDir string) ([]string, []string, error) {
 	resolved := make([]string, 0)
 	unresolved := make([]string, 0)
 	toResolve := make([]string, 0)
-	allDepends := make([]string, 0)
 
 	toResolve = append(toResolve, pkgInfo.Depends...)
-	allDepends = append(allDepends, pkgInfo.Depends...)
-	for condition, depends := range pkgInfo.ConditionalDepends {
-		if IsPackageInstalled(condition, rootDir) {
-			allDepends = append(allDepends, depends...)
-		}
-	}
 	if checkMake {
-		allDepends = append(allDepends, pkgInfo.MakeDepends...)
-		for condition, depends := range pkgInfo.ConditionalMakeDepends {
-			if IsPackageInstalled(condition, rootDir) {
-				allDepends = append(allDepends, depends...)
-			}
-		}
+		toResolve = append(toResolve, pkgInfo.MakeDepends...)
+	}
+	if checkOptional {
+		toResolve = append(toResolve, pkgInfo.OptionalDepends...)
 	}
 
 	resolve := func(depend string) {
@@ -1349,6 +1289,12 @@ func ResolveAll(pkgInfo *PackageInfo, checkMake, ignoreInstalled bool, rootDir s
 		}
 		resolved = append(resolved, depend)
 		toResolve = append(toResolve, entry.Info.Depends...)
+		if checkMake {
+			toResolve = append(toResolve, entry.Info.MakeDepends...)
+		}
+		if checkOptional {
+			toResolve = append(toResolve, entry.Info.OptionalDepends...)
+		}
 	}
 
 	for len(toResolve) > 0 {
