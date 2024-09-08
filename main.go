@@ -35,6 +35,7 @@ var showInstalled = false
 var pkgListNumbers = false
 var pkgListNames = false
 var reinstall = false
+var reinstallAll = false
 var noOptional = false
 var nosync = true
 
@@ -208,13 +209,13 @@ func resolveCommand() {
 		}]()
 		for _, pkg := range clone.Keys() {
 			value := clone.GetElement(pkg).Value
-			resolved, u, err := utils.ResolveAll(value.pkgInfo, false, !noOptional, !reinstall, rootDir)
-			if err != nil {
-				log.Fatalf("Could not resolve dependencies for package (%s). Error: %s\n", pkg, err)
-			}
-			unresolvedDepends = append(unresolvedDepends, u...)
+			resolved, unresolved := value.pkgInfo.ResolveAll(&[]string{}, &[]string{}, false, !noOptional, !reinstall, rootDir)
+			unresolvedDepends = append(unresolvedDepends, unresolved...)
 			for _, depend := range resolved {
 				if _, ok := pkgsToFetch.Get(depend); !ok && depend != value.pkgInfo.Name {
+					if !reinstallAll && utils.IsPackageInstalled(depend, rootDir) {
+						continue
+					}
 					entry, _, err := utils.GetRepositoryEntry(depend)
 					if err != nil {
 						log.Fatalf("Could not find package (%s) in any repository\n", pkg)
@@ -228,24 +229,15 @@ func resolveCommand() {
 			pkgsToFetch.Set(pkg, value)
 		}
 
-		clone = pkgsToFetch.Copy()
-		pkgsToFetch = orderedmap.NewOrderedMap[string, *struct {
-			isDependency bool
-			pkgInfo      *utils.PackageInfo
-		}]()
-		for _, pkg := range clone.Keys() {
+		for _, pkg := range pkgsToInstall.Keys() {
 			value := clone.GetElement(pkg).Value
-			entry, _, err := utils.GetRepositoryEntry(pkg)
-			if err != nil {
-				log.Fatalf("Could not read package. Error: %s\n", err)
-			}
-			resolved, u, err := utils.ResolveAll(entry.Info, false, !noOptional, !reinstall, rootDir)
-			if err != nil {
-				log.Fatalf("Could not resolve dependencies for package (%s). Error: %s\n", pkg, err)
-			}
-			unresolvedDepends = append(unresolvedDepends, u...)
+			resolved, unresolved := value.pkgInfo.ResolveAll(&[]string{}, &[]string{}, false, !noOptional, !reinstall, rootDir)
+			unresolvedDepends = append(unresolvedDepends, unresolved...)
 			for _, depend := range resolved {
 				if _, ok := clone.Get(depend); !ok {
+					if !reinstallAll && utils.IsPackageInstalled(depend, rootDir) {
+						continue
+					}
 					entry, _, err := utils.GetRepositoryEntry(depend)
 					if err != nil {
 						log.Fatalf("Could not find package (%s) in any repository\n", pkg)
@@ -257,9 +249,66 @@ func resolveCommand() {
 				}
 			}
 			pkgsToFetch.Set(pkg, value)
+		}
+
+		// Show summary
+		if len(unresolvedDepends) != 0 {
+			if force {
+				log.Fatalf("The following dependencies could not be found in any repositories: %s\n", strings.Join(unresolvedDepends, ", "))
+			} else {
+				log.Println("Warning: The following dependencies could not be found in any repositories: " + strings.Join(unresolvedDepends, ", "))
+			}
+		}
+		if pkgsToInstall.Len()+pkgsToFetch.Len() == 0 {
+			fmt.Println("All packages are up to date!")
+			os.Exit(0)
+		}
+		for _, pkg := range pkgsToInstall.Keys() {
+			pkgInfo, err := utils.ReadPackage(pkg)
+			if err != nil {
+				if err != nil {
+					log.Fatalf("Could not read package. Error: %s\n", err)
+				}
+			}
+			installedInfo := utils.GetPackageInfo(pkgInfo.Name, rootDir, false)
+			if installedInfo == nil {
+				fmt.Printf("%s: %s (Install)\n", pkgInfo.Name, pkgInfo.Version)
+			} else if strings.Compare(pkgInfo.Version, installedInfo.Version) < 0 {
+				fmt.Printf("%s: %s -> %s (Downgrade)\n", pkgInfo.Name, installedInfo.Version, pkgInfo.Version)
+			} else if strings.Compare(pkgInfo.Version, installedInfo.Version) > 0 {
+				fmt.Printf("%s: %s -> %s (Upgrade)\n", pkgInfo.Name, installedInfo.Version, pkgInfo.Version)
+			} else {
+				fmt.Printf("%s: %s (Reinstall)\n", pkgInfo.Name, pkgInfo.Version)
+			}
+		}
+		for _, pkg := range pkgsToFetch.Keys() {
+			pkgInfo := pkgsToFetch.GetElement(pkg).Value.pkgInfo
+			installedInfo := utils.GetPackageInfo(pkgInfo.Name, rootDir, false)
+			if installedInfo == nil {
+				fmt.Printf("%s: %s (Install)\n", pkgInfo.Name, pkgInfo.Version)
+			} else if strings.Compare(pkgInfo.Version, installedInfo.Version) < 0 {
+				fmt.Printf("%s: %s -> %s (Downgrade)\n", pkgInfo.Name, installedInfo.Version, pkgInfo.Version)
+			} else if strings.Compare(pkgInfo.Version, installedInfo.Version) > 0 {
+				fmt.Printf("%s: %s -> %s (Upgrade)\n", pkgInfo.Name, installedInfo.Version, pkgInfo.Version)
+			} else {
+				fmt.Printf("%s: %s (Reinstall)\n", pkgInfo.Name, pkgInfo.Version)
+			}
+		}
+		if rootDir != "/" {
+			fmt.Println("Warning: Operating in " + rootDir)
+		}
+		if !yesAll {
+			reader := bufio.NewReader(os.Stdin)
+			fmt.Print("Do you wish to install these packages? [y\\N] ")
+			text, _ := reader.ReadString('\n')
+			if strings.TrimSpace(strings.ToLower(text)) != "y" && strings.TrimSpace(strings.ToLower(text)) != "yes" {
+				fmt.Println("Cancelling...")
+				os.Exit(1)
+			}
 		}
 
 		// Fetch packages from repositories
+		fmt.Println("Fetching packages from available repositories...")
 		for _, pkg := range pkgsToFetch.Keys() {
 			isDependency, _ := pkgsToFetch.Get(pkg)
 			entry, repo, err := utils.GetRepositoryEntry(pkg)
@@ -273,40 +322,16 @@ func resolveCommand() {
 			pkgsToInstall.Set(fetchedPackage, isDependency)
 		}
 
-		// Install Packages
-		if rootDir != "/" {
-			fmt.Println("Warning: Operating in " + rootDir)
-		}
-		if pkgsToInstall.Len() == 0 {
-			fmt.Println("All packages are up to date!")
-			os.Exit(0)
-		}
-		for _, pkg := range pkgsToInstall.Keys() {
-			pkgInfo := pkgsToInstall.GetElement(pkg).Value.pkgInfo
-			installedInfo := utils.GetPackageInfo(pkgInfo.Name, rootDir, false)
-			if installedInfo == nil {
-				fmt.Printf("%s: %s (Install)\n", pkgInfo.Name, pkgInfo.Version)
-			} else if strings.Compare(pkgInfo.Version, installedInfo.Version) < 0 {
-				fmt.Printf("%s: %s -> %s (Downgrade)\n", pkgInfo.Name, installedInfo.Version, pkgInfo.Version)
-			} else if strings.Compare(pkgInfo.Version, installedInfo.Version) > 0 {
-				fmt.Printf("%s: %s -> %s (Upgrade)\n", pkgInfo.Name, installedInfo.Version, pkgInfo.Version)
-			} else {
-				fmt.Printf("%s: %s (Reinstall)\n", pkgInfo.Name, pkgInfo.Version)
-			}
-		}
-		if !yesAll {
-			reader := bufio.NewReader(os.Stdin)
-			fmt.Print("Do you wish to install these packages? [y\\N] ")
-			text, _ := reader.ReadString('\n')
-			if strings.TrimSpace(strings.ToLower(text)) != "y" && strings.TrimSpace(strings.ToLower(text)) != "yes" {
-				fmt.Println("Cancelling...")
-				os.Exit(1)
-			}
-		}
 		for _, pkg := range pkgsToInstall.Keys() {
 			value, _ := pkgsToInstall.Get(pkg)
 			pkgInfo := value.pkgInfo
-			err := utils.InstallPackage(pkg, rootDir, verbose, force, buildSource, skipCheck, keepTempDir)
+			var err error
+			if value.isDependency {
+				err = utils.InstallPackage(pkg, rootDir, verbose, true, buildSource, skipCheck, keepTempDir)
+			} else {
+				err = utils.InstallPackage(pkg, rootDir, verbose, force, buildSource, skipCheck, keepTempDir)
+			}
+
 			if err != nil {
 				if pkgInfo.Type == "source" && keepTempDir {
 					fmt.Println("BPM temp directory was created at /var/tmp/bpm_source-" + pkgInfo.Name)
@@ -441,14 +466,14 @@ func printHelp() {
 	fmt.Println("-> flags will be read if passed right after the subcommand otherwise they will be read as subcommand arguments")
 	fmt.Println("\033[1m---- Command List ----\033[0m")
 	fmt.Println("-> bpm version | shows information on the installed version of bpm")
-	fmt.Println("-> bpm info [-R] | shows information on an installed package")
+	fmt.Println("-> bpm info [-R,  -i] | shows information on an installed package")
 	fmt.Println("       -R=<path> lets you define the root path which will be used")
 	fmt.Println("       -i shows information about the currently installed package")
 	fmt.Println("-> bpm list [-R, -c, -n] | lists all installed packages")
 	fmt.Println("       -R=<path> lets you define the root path which will be used")
 	fmt.Println("       -c lists the amount of installed packages")
 	fmt.Println("       -n lists only the names of installed packages")
-	fmt.Println("-> bpm install [-R, -v, -y, -f, -o, -c, -b, -k, --reinstall, --no-optional] <files...> | installs the following files")
+	fmt.Println("-> bpm install [-R, -v, -y, -f, -o, -c, -b, -k, --reinstall, --reinstall-all, --no-optional] <packages...> | installs the following files")
 	fmt.Println("       -R=<path> lets you define the root path which will be used")
 	fmt.Println("       -v Show additional information about what BPM is doing")
 	fmt.Println("       -y skips the confirmation prompt")
@@ -458,15 +483,16 @@ func printHelp() {
 	fmt.Println("       -b creates a binary package from a source package after compilation and saves it in the binary package output directory")
 	fmt.Println("       -k keeps the compilation directory created by BPM after source package installation")
 	fmt.Println("       --reinstall Reinstalls packages even if they do not have a newer version available")
+	fmt.Println("       --reinstall-all Same as --reinstall but also reinstalls dependencies")
 	fmt.Println("       --no-optional Prevents installation of optional dependencies")
-	fmt.Println("-> bpm update [-R, -v, -y, -f, --reinstall, --nosync] | updates all packages that are available in the repositories")
+	fmt.Println("-> bpm update [-R, -v, -y, -f, --reinstall, --no-sync] | updates all packages that are available in the repositories")
 	fmt.Println("       -R=<path> lets you define the root path which will be used")
 	fmt.Println("       -v Show additional information about what BPM is doing")
 	fmt.Println("       -y skips the confirmation prompt")
 	fmt.Println("       -f skips dependency, conflict and architecture checking")
 	fmt.Println("       --reinstall Fetches and reinstalls all packages even if they do not have a newer version available")
-	fmt.Println("       --nosync Skips package database syncing")
-	fmt.Println("-> bpm sync [-R, -v] | Syncs package databases without updating packages")
+	fmt.Println("       --no-sync Skips package database syncing")
+	fmt.Println("-> bpm sync [-R, -v, -y] | Syncs package databases without updating packages")
 	fmt.Println("       -R=<path> lets you define the root path which will be used")
 	fmt.Println("       -v Show additional information about what BPM is doing")
 	fmt.Println("       -y skips the confirmation prompt")
@@ -503,6 +529,7 @@ func resolveFlags() {
 	installFlagSet.BoolVar(&keepTempDir, "k", false, "Keep temporary directory after source compilation")
 	installFlagSet.BoolVar(&force, "f", false, "Force installation by skipping architecture and dependency resolution")
 	installFlagSet.BoolVar(&reinstall, "reinstall", false, "Reinstalls packages even if they do not have a newer version available")
+	installFlagSet.BoolVar(&reinstallAll, "reinstall-all", false, "Same as --reinstall but also reinstalls dependencies")
 	installFlagSet.BoolVar(&noOptional, "no-optional", false, "Prevents installation of optional dependencies")
 	installFlagSet.Usage = printHelp
 	// Update flags
@@ -512,7 +539,7 @@ func resolveFlags() {
 	updateFlagSet.BoolVar(&yesAll, "y", false, "Skip confirmation prompts")
 	updateFlagSet.BoolVar(&force, "f", false, "Force update by skipping architecture and dependency resolution")
 	updateFlagSet.BoolVar(&reinstall, "reinstall", false, "Fetches and reinstalls all packages even if they do not have a newer version available")
-	updateFlagSet.BoolVar(&nosync, "nosync", false, "Skips package database syncing")
+	updateFlagSet.BoolVar(&nosync, "no-sync", false, "Skips package database syncing")
 	updateFlagSet.Usage = printHelp
 	// Sync flags
 	syncFlagSet := flag.NewFlagSet("Sync flags", flag.ExitOnError)
@@ -577,6 +604,9 @@ func resolveFlags() {
 				return
 			}
 			subcommandArgs = fileFlagSet.Args()
+		}
+		if reinstallAll {
+			reinstall = true
 		}
 	}
 }

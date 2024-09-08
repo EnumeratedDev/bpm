@@ -1002,7 +1002,7 @@ func InstallPackage(filename, rootDir string, verbose, force, binaryPkgFromSrc, 
 		if pkgInfo.Arch != "any" && pkgInfo.Arch != GetArch() {
 			return errors.New("cannot install a package with a different architecture")
 		}
-		if unresolved := CheckDependencies(pkgInfo, pkgInfo.Type == "source", true, rootDir); len(unresolved) != 0 {
+		if unresolved := pkgInfo.CheckDependencies(pkgInfo.Type == "source", true, rootDir); len(unresolved) != 0 {
 			return errors.New("Could not resolve all dependencies. Missing " + strings.Join(unresolved, ", "))
 		}
 	}
@@ -1225,7 +1225,19 @@ func GetSourceScript(filename string) (string, error) {
 	return "", errors.New("package does not contain a source.sh file")
 }
 
-func CheckDependencies(pkgInfo *PackageInfo, checkMake, checkOptional bool, rootDir string) []string {
+func (pkgInfo *PackageInfo) GetAllDependencies(checkMake, checkOptional bool) []string {
+	allDepends := make([]string, 0)
+	allDepends = append(allDepends, pkgInfo.Depends...)
+	if checkMake {
+		allDepends = append(allDepends, pkgInfo.MakeDepends...)
+	}
+	if checkOptional {
+		allDepends = append(allDepends, pkgInfo.OptionalDepends...)
+	}
+	return allDepends
+}
+
+func (pkgInfo *PackageInfo) CheckDependencies(checkMake, checkOptional bool, rootDir string) []string {
 	var ret []string
 	for _, dependency := range pkgInfo.Depends {
 		if !IsPackageProvided(dependency, rootDir) {
@@ -1250,7 +1262,7 @@ func CheckDependencies(pkgInfo *PackageInfo, checkMake, checkOptional bool, root
 	return ret
 }
 
-func CheckConflicts(pkgInfo *PackageInfo, checkConditional bool, rootDir string) []string {
+func (pkgInfo *PackageInfo) CheckConflicts(rootDir string) []string {
 	var ret []string
 	for _, conflict := range pkgInfo.Conflicts {
 		if IsPackageInstalled(conflict, rootDir) {
@@ -1260,52 +1272,26 @@ func CheckConflicts(pkgInfo *PackageInfo, checkConditional bool, rootDir string)
 	return ret
 }
 
-func ResolveAll(pkgInfo *PackageInfo, checkMake, checkOptional, ignoreInstalled bool, rootDir string) ([]string, []string, error) {
-	resolved := make([]string, 0)
-	unresolved := make([]string, 0)
-	toResolve := make([]string, 0)
-
-	toResolve = append(toResolve, pkgInfo.Depends...)
-	if checkMake {
-		toResolve = append(toResolve, pkgInfo.MakeDepends...)
-	}
-	if checkOptional {
-		toResolve = append(toResolve, pkgInfo.OptionalDepends...)
-	}
-
-	resolve := func(depend string) {
-		if slices.Contains(resolved, depend) {
-			return
-		}
-		if ignoreInstalled && IsPackageInstalled(depend, rootDir) {
-			return
-		}
-		entry, _, err := GetRepositoryEntry(depend)
-		if err != nil {
-			if !slices.Contains(unresolved, depend) {
-				unresolved = append(unresolved, depend)
+func (pkgInfo *PackageInfo) ResolveAll(resolved, unresolved *[]string, checkMake, checkOptional, ignoreInstalled bool, rootDir string) ([]string, []string) {
+	*unresolved = append(*unresolved, pkgInfo.Name)
+	for _, depend := range pkgInfo.GetAllDependencies(checkMake, checkOptional) {
+		if !slices.Contains(*resolved, depend) {
+			if slices.Contains(*unresolved, depend) || (ignoreInstalled && IsPackageInstalled(depend, rootDir)) {
+				continue
 			}
-			return
-		}
-		resolved = append(resolved, depend)
-		toResolve = append(toResolve, entry.Info.Depends...)
-		if checkMake {
-			toResolve = append(toResolve, entry.Info.MakeDepends...)
-		}
-		if checkOptional {
-			toResolve = append(toResolve, entry.Info.OptionalDepends...)
-		}
-	}
-
-	for len(toResolve) > 0 {
-		clone := slices.Clone(toResolve)
-		toResolve = make([]string, 0)
-		for _, depend := range clone {
-			resolve(depend)
+			entry, _, err := GetRepositoryEntry(depend)
+			if err != nil {
+				if !slices.Contains(*unresolved, depend) {
+					*unresolved = append(*unresolved, depend)
+				}
+				continue
+			}
+			entry.Info.ResolveAll(resolved, unresolved, checkMake, checkOptional, ignoreInstalled, rootDir)
 		}
 	}
-
-	return resolved, unresolved, nil
+	*resolved = append(*resolved, pkgInfo.Name)
+	*unresolved = stringSliceRemove(*unresolved, pkgInfo.Name)
+	return *resolved, *unresolved
 }
 
 func IsPackageInstalled(pkg, rootDir string) bool {
