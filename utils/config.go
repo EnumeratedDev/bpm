@@ -14,12 +14,7 @@ type BPMConfigStruct struct {
 	Repositories      []*Repository `yaml:"repositories"`
 }
 
-var BPMConfig BPMConfigStruct = BPMConfigStruct{
-	CompilationEnv:    make([]string, 0),
-	SilentCompilation: false,
-	BinaryOutputDir:   "/var/lib/bpm/compiled/",
-	CompilationDir:    "/var/tmp/",
-}
+var BPMConfig BPMConfigStruct
 
 func ReadConfig() {
 	if _, err := os.Stat("/etc/bpm.conf"); os.IsNotExist(err) {
@@ -28,6 +23,12 @@ func ReadConfig() {
 	bytes, err := os.ReadFile("/etc/bpm.conf")
 	if err != nil {
 		log.Fatal(err)
+	}
+	BPMConfig = BPMConfigStruct{
+		CompilationEnv:    make([]string, 0),
+		SilentCompilation: false,
+		BinaryOutputDir:   "/var/lib/bpm/compiled/",
+		CompilationDir:    "/var/tmp/",
 	}
 	err = yaml.Unmarshal(bytes, &BPMConfig)
 	if err != nil {

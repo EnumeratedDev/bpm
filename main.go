@@ -244,11 +244,11 @@ func resolveCommand() {
 		}
 
 		for _, pkg := range pkgsToInstall.Keys() {
-			value := clone.GetElement(pkg).Value
+			value, _ := pkgsToInstall.Get(pkg)
 			resolved, unresolved := value.pkgInfo.ResolveAll(&[]string{}, &[]string{}, false, !noOptional, !reinstall, rootDir)
 			unresolvedDepends = append(unresolvedDepends, unresolved...)
 			for _, depend := range resolved {
-				if _, ok := clone.Get(depend); !ok {
+				if _, ok := clone.Get(depend); !ok && depend != value.pkgInfo.Name {
 					if !reinstallAll && utils.IsPackageInstalled(depend, rootDir) {
 						continue
 					}
@@ -262,7 +262,6 @@ func resolveCommand() {
 					}{isDependency: true, pkgInfo: entry.Info})
 				}
 			}
-			pkgsToFetch.Set(pkg, value)
 		}
 
 		// Show summary
@@ -313,7 +312,7 @@ func resolveCommand() {
 		}
 		if !yesAll {
 			reader := bufio.NewReader(os.Stdin)
-			fmt.Print("Do you wish to install these packages? [y\\N] ")
+			fmt.Printf("Do you wish to install these %d packages? [y\\N] ", pkgsToInstall.Len()+pkgsToFetch.Len())
 			text, _ := reader.ReadString('\n')
 			if strings.TrimSpace(strings.ToLower(text)) != "y" && strings.TrimSpace(strings.ToLower(text)) != "yes" {
 				fmt.Println("Cancelling...")
@@ -336,9 +335,166 @@ func resolveCommand() {
 			pkgsToInstall.Set(fetchedPackage, isDependency)
 		}
 
+		// Install fetched packages
 		for _, pkg := range pkgsToInstall.Keys() {
 			value, _ := pkgsToInstall.Get(pkg)
 			pkgInfo := value.pkgInfo
+			var err error
+			if value.isDependency {
+				err = utils.InstallPackage(pkg, rootDir, verbose, true, buildSource, skipCheck, keepTempDir)
+			} else {
+				err = utils.InstallPackage(pkg, rootDir, verbose, force, buildSource, skipCheck, keepTempDir)
+			}
+
+			if err != nil {
+				if pkgInfo.Type == "source" && keepTempDir {
+					fmt.Println("BPM temp directory was created at /var/tmp/bpm_source-" + pkgInfo.Name)
+				}
+				log.Fatalf("Could not install package (%s). Error: %s\n", pkg, err)
+			}
+			fmt.Printf("Package (%s) was successfully installed!\n", pkgInfo.Name)
+			if value.isDependency {
+				err := utils.SetInstallationReason(pkgInfo.Name, utils.Dependency, rootDir)
+				if err != nil {
+					log.Fatalf("Could not set installation reason for package\nError: %s\n", err)
+				}
+			}
+			if pkgInfo.Type == "source" && keepTempDir {
+				fmt.Println("** It is recommended you delete the temporary bpm folder in /var/tmp **")
+			}
+		}
+	case update:
+		if os.Getuid() != 0 {
+			fmt.Println("This subcommand needs to be run with superuser permissions")
+			os.Exit(0)
+		}
+
+		// Sync repositories
+		if !nosync {
+			for _, repo := range utils.BPMConfig.Repositories {
+				fmt.Printf("Fetching package database for repository (%s)...\n", repo.Name)
+				err := repo.SyncLocalDatabase()
+				if err != nil {
+					log.Fatal(err)
+				}
+			}
+			fmt.Println("All package databases synced successfully!")
+		}
+
+		utils.ReadConfig()
+
+		// Get installed packages and check for updates
+		pkgs, err := utils.GetInstalledPackages(rootDir)
+		if err != nil {
+			log.Fatalf("Could not get installed packages! Error: %s\n", err)
+		}
+		toUpdate := orderedmap.NewOrderedMap[string, *struct {
+			isDependency bool
+			entry        *utils.RepositoryEntry
+		}]()
+		for _, pkg := range pkgs {
+			entry, _, err := utils.GetRepositoryEntry(pkg)
+			if err != nil {
+				continue
+			}
+			installedInfo := utils.GetPackageInfo(pkg, rootDir, true)
+			if installedInfo == nil {
+				log.Fatalf(pkg)
+			}
+			if strings.Compare(entry.Info.Version, installedInfo.Version) > 0 {
+				toUpdate.Set(entry.Info.Name, &struct {
+					isDependency bool
+					entry        *utils.RepositoryEntry
+				}{isDependency: false, entry: entry})
+			} else if reinstall {
+				toUpdate.Set(entry.Info.Name, &struct {
+					isDependency bool
+					entry        *utils.RepositoryEntry
+				}{isDependency: false, entry: entry})
+			}
+		}
+		if toUpdate.Len() == 0 {
+			fmt.Println("All packages are up to date!")
+			os.Exit(0)
+		}
+
+		// Check for new dependencies in updated packages
+		unresolved := make([]string, 0)
+		clone := toUpdate.Copy()
+		for _, key := range clone.Keys() {
+			pkg, _ := clone.Get(key)
+			r, u := pkg.entry.Info.ResolveAll(&[]string{}, &[]string{}, false, !noOptional, true, rootDir)
+			unresolved = append(unresolved, u...)
+			for _, depend := range r {
+				if _, ok := toUpdate.Get(depend); !ok {
+					entry, _, err := utils.GetRepositoryEntry(depend)
+					if err != nil {
+						log.Fatalf("Could not find package (%s) in any repository\n", depend)
+					}
+					toUpdate.Set(depend, &struct {
+						isDependency bool
+						entry        *utils.RepositoryEntry
+					}{isDependency: true, entry: entry})
+				}
+			}
+		}
+
+		if len(unresolved) != 0 {
+			if force {
+				log.Fatalf("The following dependencies could not be found in any repositories: %s\n", strings.Join(unresolved, ", "))
+			} else {
+				log.Println("Warning: The following dependencies could not be found in any repositories: " + strings.Join(unresolved, ", "))
+			}
+		}
+
+		for _, key := range toUpdate.Keys() {
+			value, _ := toUpdate.Get(key)
+			installedInfo := utils.GetPackageInfo(value.entry.Info.Name, rootDir, true)
+			if installedInfo == nil {
+				fmt.Printf("%s: %s (Install)\n", value.entry.Info.Name, value.entry.Info.Version)
+				continue
+			}
+			if strings.Compare(value.entry.Info.Version, installedInfo.Version) > 0 {
+				fmt.Printf("%s: %s -> %s (Upgrade)\n", value.entry.Info.Name, installedInfo.Version, value.entry.Info.Version)
+			} else if reinstall {
+				fmt.Printf("%s: %s -> %s (Reinstall)\n", value.entry.Info.Name, installedInfo.Version, value.entry.Info.Version)
+			}
+		}
+
+		// Update confirmation prompt
+		if !yesAll {
+			fmt.Printf("Are you sure you wish to update all %d packages? [y\\N] ", toUpdate.Len())
+			reader := bufio.NewReader(os.Stdin)
+			text, _ := reader.ReadString('\n')
+			if strings.TrimSpace(strings.ToLower(text)) != "y" && strings.TrimSpace(strings.ToLower(text)) != "yes" {
+				fmt.Println("Cancelling update...")
+				os.Exit(0)
+			}
+		}
+
+		// Fetch packages
+		pkgsToInstall := orderedmap.NewOrderedMap[string, *struct {
+			isDependency bool
+			entry        *utils.RepositoryEntry
+		}]()
+		fmt.Println("Fetching packages from available repositories...")
+		for _, pkg := range toUpdate.Keys() {
+			isDependency, _ := toUpdate.Get(pkg)
+			entry, repo, err := utils.GetRepositoryEntry(pkg)
+			if err != nil {
+				log.Fatalf("Could not find package (%s) in any repository\n", pkg)
+			}
+			fetchedPackage, err := repo.FetchPackage(entry.Info.Name)
+			if err != nil {
+				log.Fatalf("Could not fetch package (%s). Error: %s\n", pkg, err)
+			}
+			pkgsToInstall.Set(fetchedPackage, isDependency)
+		}
+
+		// Install fetched packages
+		for _, pkg := range pkgsToInstall.Keys() {
+			value, _ := pkgsToInstall.Get(pkg)
+			pkgInfo := value.entry.Info
 			var err error
 			if value.isDependency {
 				err = utils.InstallPackage(pkg, rootDir, verbose, true, buildSource, skipCheck, keepTempDir)
