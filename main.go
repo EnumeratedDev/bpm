@@ -177,11 +177,9 @@ func resolveCommand() {
 		}
 
 		pkgsToInstall := orderedmap.NewOrderedMap[string, *struct {
+			bpmFile      string
 			isDependency bool
-			pkgInfo      *utils.PackageInfo
-		}]()
-		pkgsToFetch := orderedmap.NewOrderedMap[string, *struct {
-			isDependency bool
+			shouldFetch  bool
 			pkgInfo      *utils.PackageInfo
 		}]()
 		unresolvedDepends := make([]string, 0)
@@ -196,10 +194,12 @@ func resolveCommand() {
 				if !reinstall && utils.IsPackageInstalled(pkgInfo.Name, rootDir) && utils.GetPackageInfo(pkgInfo.Name, rootDir, true).Version == pkgInfo.Version {
 					continue
 				}
-				pkgsToInstall.Set(pkg, &struct {
+				pkgsToInstall.Set(pkgInfo.Name, &struct {
+					bpmFile      string
 					isDependency bool
+					shouldFetch  bool
 					pkgInfo      *utils.PackageInfo
-				}{isDependency: false, pkgInfo: pkgInfo})
+				}{bpmFile: pkg, isDependency: false, shouldFetch: false, pkgInfo: pkgInfo})
 			} else {
 				entry, _, err := utils.GetRepositoryEntry(pkg)
 				if err != nil {
@@ -208,25 +208,28 @@ func resolveCommand() {
 				if !reinstall && utils.IsPackageInstalled(entry.Info.Name, rootDir) && utils.GetPackageInfo(entry.Info.Name, rootDir, true).Version == entry.Info.Version {
 					continue
 				}
-				pkgsToFetch.Set(entry.Info.Name, &struct {
+				pkgsToInstall.Set(entry.Info.Name, &struct {
+					bpmFile      string
 					isDependency bool
+					shouldFetch  bool
 					pkgInfo      *utils.PackageInfo
-				}{isDependency: false, pkgInfo: entry.Info})
+				}{bpmFile: "", isDependency: false, shouldFetch: true, pkgInfo: entry.Info})
 			}
 		}
 
-		// Check for dependencies and conflicts
-		clone := pkgsToFetch.Copy()
-		pkgsToFetch = orderedmap.NewOrderedMap[string, *struct {
+		clone := pkgsToInstall.Copy()
+		pkgsToInstall = orderedmap.NewOrderedMap[string, *struct {
+			bpmFile      string
 			isDependency bool
+			shouldFetch  bool
 			pkgInfo      *utils.PackageInfo
 		}]()
 		for _, pkg := range clone.Keys() {
-			value := clone.GetElement(pkg).Value
+			value, _ := clone.Get(pkg)
 			resolved, unresolved := value.pkgInfo.ResolveAll(&[]string{}, &[]string{}, false, !noOptional, !reinstall, rootDir)
 			unresolvedDepends = append(unresolvedDepends, unresolved...)
 			for _, depend := range resolved {
-				if _, ok := pkgsToFetch.Get(depend); !ok && depend != value.pkgInfo.Name {
+				if _, ok := pkgsToInstall.Get(depend); !ok && depend != value.pkgInfo.Name {
 					if !reinstallAll && utils.IsPackageInstalled(depend, rootDir) {
 						continue
 					}
@@ -234,68 +237,33 @@ func resolveCommand() {
 					if err != nil {
 						log.Fatalf("Could not find package (%s) in any repository\n", pkg)
 					}
-					pkgsToFetch.Set(depend, &struct {
+					pkgsToInstall.Set(depend, &struct {
+						bpmFile      string
 						isDependency bool
+						shouldFetch  bool
 						pkgInfo      *utils.PackageInfo
-					}{isDependency: true, pkgInfo: entry.Info})
+					}{bpmFile: "", isDependency: true, shouldFetch: true, pkgInfo: entry.Info})
 				}
 			}
-			pkgsToFetch.Set(pkg, value)
-		}
-
-		for _, pkg := range pkgsToInstall.Keys() {
-			value, _ := pkgsToInstall.Get(pkg)
-			resolved, unresolved := value.pkgInfo.ResolveAll(&[]string{}, &[]string{}, false, !noOptional, !reinstall, rootDir)
-			unresolvedDepends = append(unresolvedDepends, unresolved...)
-			for _, depend := range resolved {
-				if _, ok := clone.Get(depend); !ok && depend != value.pkgInfo.Name {
-					if !reinstallAll && utils.IsPackageInstalled(depend, rootDir) {
-						continue
-					}
-					entry, _, err := utils.GetRepositoryEntry(depend)
-					if err != nil {
-						log.Fatalf("Could not find package (%s) in any repository\n", pkg)
-					}
-					pkgsToFetch.Set(depend, &struct {
-						isDependency bool
-						pkgInfo      *utils.PackageInfo
-					}{isDependency: true, pkgInfo: entry.Info})
-				}
-			}
+			pkgsToInstall.Set(pkg, value)
 		}
 
 		// Show summary
 		if len(unresolvedDepends) != 0 {
-			if force {
+			if !force {
 				log.Fatalf("The following dependencies could not be found in any repositories: %s\n", strings.Join(unresolvedDepends, ", "))
 			} else {
 				log.Println("Warning: The following dependencies could not be found in any repositories: " + strings.Join(unresolvedDepends, ", "))
 			}
 		}
-		if pkgsToInstall.Len()+pkgsToFetch.Len() == 0 {
+		if pkgsToInstall.Len() == 0 {
 			fmt.Println("All packages are up to date!")
 			os.Exit(0)
 		}
+
 		for _, pkg := range pkgsToInstall.Keys() {
-			pkgInfo, err := utils.ReadPackage(pkg)
-			if err != nil {
-				if err != nil {
-					log.Fatalf("Could not read package. Error: %s\n", err)
-				}
-			}
-			installedInfo := utils.GetPackageInfo(pkgInfo.Name, rootDir, false)
-			if installedInfo == nil {
-				fmt.Printf("%s: %s (Install)\n", pkgInfo.Name, pkgInfo.Version)
-			} else if strings.Compare(pkgInfo.Version, installedInfo.Version) < 0 {
-				fmt.Printf("%s: %s -> %s (Downgrade)\n", pkgInfo.Name, installedInfo.Version, pkgInfo.Version)
-			} else if strings.Compare(pkgInfo.Version, installedInfo.Version) > 0 {
-				fmt.Printf("%s: %s -> %s (Upgrade)\n", pkgInfo.Name, installedInfo.Version, pkgInfo.Version)
-			} else {
-				fmt.Printf("%s: %s (Reinstall)\n", pkgInfo.Name, pkgInfo.Version)
-			}
-		}
-		for _, pkg := range pkgsToFetch.Keys() {
-			pkgInfo := pkgsToFetch.GetElement(pkg).Value.pkgInfo
+			value, _ := pkgsToInstall.Get(pkg)
+			pkgInfo := value.pkgInfo
 			installedInfo := utils.GetPackageInfo(pkgInfo.Name, rootDir, false)
 			if installedInfo == nil {
 				fmt.Printf("%s: %s (Install)\n", pkgInfo.Name, pkgInfo.Version)
@@ -312,7 +280,7 @@ func resolveCommand() {
 		}
 		if !yesAll {
 			reader := bufio.NewReader(os.Stdin)
-			fmt.Printf("Do you wish to install these %d packages? [y\\N] ", pkgsToInstall.Len()+pkgsToFetch.Len())
+			fmt.Printf("Do you wish to install these %d packages? [y\\N] ", pkgsToInstall.Len())
 			text, _ := reader.ReadString('\n')
 			if strings.TrimSpace(strings.ToLower(text)) != "y" && strings.TrimSpace(strings.ToLower(text)) != "yes" {
 				fmt.Println("Cancelling...")
@@ -322,8 +290,11 @@ func resolveCommand() {
 
 		// Fetch packages from repositories
 		fmt.Println("Fetching packages from available repositories...")
-		for _, pkg := range pkgsToFetch.Keys() {
-			isDependency, _ := pkgsToFetch.Get(pkg)
+		for _, pkg := range pkgsToInstall.Keys() {
+			value, _ := pkgsToInstall.Get(pkg)
+			if !value.shouldFetch {
+				continue
+			}
 			entry, repo, err := utils.GetRepositoryEntry(pkg)
 			if err != nil {
 				log.Fatalf("Could not find package (%s) in any repository\n", pkg)
@@ -332,7 +303,8 @@ func resolveCommand() {
 			if err != nil {
 				log.Fatalf("Could not fetch package (%s). Error: %s\n", pkg, err)
 			}
-			pkgsToInstall.Set(fetchedPackage, isDependency)
+			value.bpmFile = fetchedPackage
+			pkgsToInstall.Set(pkg, value)
 		}
 
 		// Install fetched packages
@@ -341,9 +313,9 @@ func resolveCommand() {
 			pkgInfo := value.pkgInfo
 			var err error
 			if value.isDependency {
-				err = utils.InstallPackage(pkg, rootDir, verbose, true, buildSource, skipCheck, keepTempDir)
+				err = utils.InstallPackage(value.bpmFile, rootDir, verbose, true, buildSource, skipCheck, keepTempDir)
 			} else {
-				err = utils.InstallPackage(pkg, rootDir, verbose, force, buildSource, skipCheck, keepTempDir)
+				err = utils.InstallPackage(value.bpmFile, rootDir, verbose, force, buildSource, skipCheck, keepTempDir)
 			}
 
 			if err != nil {
@@ -440,7 +412,7 @@ func resolveCommand() {
 		}
 
 		if len(unresolved) != 0 {
-			if force {
+			if !force {
 				log.Fatalf("The following dependencies could not be found in any repositories: %s\n", strings.Join(unresolved, ", "))
 			} else {
 				log.Println("Warning: The following dependencies could not be found in any repositories: " + strings.Join(unresolved, ", "))
