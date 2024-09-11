@@ -18,7 +18,7 @@ import (
 /*   A simple-to-use package manager  */
 /* ---------------------------------- */
 
-var bpmVer = "0.4"
+var bpmVer = "0.4.1"
 
 var subcommand = "help"
 var subcommandArgs []string
@@ -303,6 +303,7 @@ func resolveCommand() {
 			if err != nil {
 				log.Fatalf("Could not fetch package (%s). Error: %s\n", pkg, err)
 			}
+			fmt.Printf("Package (%s) was successfully fetched!\n", value.pkgInfo.Name)
 			value.bpmFile = fetchedPackage
 			pkgsToInstall.Set(pkg, value)
 		}
@@ -451,7 +452,7 @@ func resolveCommand() {
 		}]()
 		fmt.Println("Fetching packages from available repositories...")
 		for _, pkg := range toUpdate.Keys() {
-			isDependency, _ := toUpdate.Get(pkg)
+			value, _ := toUpdate.Get(pkg)
 			entry, repo, err := utils.GetRepositoryEntry(pkg)
 			if err != nil {
 				log.Fatalf("Could not find package (%s) in any repository\n", pkg)
@@ -460,7 +461,8 @@ func resolveCommand() {
 			if err != nil {
 				log.Fatalf("Could not fetch package (%s). Error: %s\n", pkg, err)
 			}
-			pkgsToInstall.Set(fetchedPackage, isDependency)
+			fmt.Printf("Package (%s) was successfully fetched!\n", value.entry.Info.Name)
+			pkgsToInstall.Set(fetchedPackage, value)
 		}
 
 		// Install fetched packages
