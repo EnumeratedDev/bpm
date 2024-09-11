@@ -23,6 +23,7 @@ type PackageInfo struct {
 	Name            string   `yaml:"name,omitempty"`
 	Description     string   `yaml:"description,omitempty"`
 	Version         string   `yaml:"version,omitempty"`
+	Revision        int      `yaml:"revision,omitempty"`
 	Url             string   `yaml:"url,omitempty"`
 	License         string   `yaml:"license,omitempty"`
 	Arch            string   `yaml:"architecture,omitempty"`
@@ -33,6 +34,10 @@ type PackageInfo struct {
 	OptionalDepends []string `yaml:"optional_depends,omitempty"`
 	Conflicts       []string `yaml:"conflicts,omitempty"`
 	Provides        []string `yaml:"provides,omitempty"`
+}
+
+func (pkgInfo *PackageInfo) GetFullVersion() string {
+	return pkgInfo.Version + "-" + strconv.Itoa(pkgInfo.Revision)
 }
 
 type InstallationReason string
@@ -132,7 +137,7 @@ func ReadPackage(filename string) (*PackageInfo, error) {
 			if err != nil {
 				return nil, err
 			}
-			pkgInfo, err := ReadPackageInfo(string(bs), false)
+			pkgInfo, err := ReadPackageInfo(string(bs))
 			if err != nil {
 				return nil, err
 			}
@@ -306,11 +311,12 @@ func ExecutePackageScripts(filename, rootDir string, operation Operation, postOp
 	return nil
 }
 
-func ReadPackageInfo(contents string, defaultValues bool) (*PackageInfo, error) {
+func ReadPackageInfo(contents string) (*PackageInfo, error) {
 	pkgInfo := PackageInfo{
 		Name:            "",
 		Description:     "",
 		Version:         "",
+		Revision:        1,
 		Url:             "",
 		License:         "",
 		Arch:            "",
@@ -326,18 +332,18 @@ func ReadPackageInfo(contents string, defaultValues bool) (*PackageInfo, error) 
 	if err != nil {
 		return nil, err
 	}
-	if !defaultValues {
-		if pkgInfo.Name == "" {
-			return nil, errors.New("this package contains no name")
-		} else if pkgInfo.Description == "" {
-			return nil, errors.New("this package contains no description")
-		} else if pkgInfo.Version == "" {
-			return nil, errors.New("this package contains no version")
-		} else if pkgInfo.Arch == "" {
-			return nil, errors.New("this package contains no architecture")
-		} else if pkgInfo.Type == "" {
-			return nil, errors.New("this package contains no type")
-		}
+	if pkgInfo.Name == "" {
+		return nil, errors.New("this package contains no name")
+	} else if pkgInfo.Description == "" {
+		return nil, errors.New("this package contains no description")
+	} else if pkgInfo.Version == "" {
+		return nil, errors.New("this package contains no version")
+	} else if pkgInfo.Revision <= 0 {
+		return nil, errors.New("this package contains a revision number less or equal to 0")
+	} else if pkgInfo.Arch == "" {
+		return nil, errors.New("this package contains no architecture")
+	} else if pkgInfo.Type == "" {
+		return nil, errors.New("this package contains no type")
 	}
 	for i := 0; i < len(pkgInfo.Keep); i++ {
 		pkgInfo.Keep[i] = strings.TrimPrefix(pkgInfo.Keep[i], "/")
@@ -363,7 +369,7 @@ func CreateReadableInfo(showArchitecture, showType, showPackageRelations bool, p
 	}
 	ret = append(ret, "Name: "+pkgInfo.Name)
 	ret = append(ret, "Description: "+pkgInfo.Description)
-	ret = append(ret, "Version: "+pkgInfo.Version)
+	ret = append(ret, "Version: "+pkgInfo.GetFullVersion())
 	ret = append(ret, "URL: "+pkgInfo.Url)
 	ret = append(ret, "License: "+pkgInfo.License)
 	if showArchitecture {
@@ -776,6 +782,7 @@ fi
 	cmd.Env = append(cmd.Env, fmt.Sprintf("BPM_PKG_NAME=%s", pkgInfo.Name))
 	cmd.Env = append(cmd.Env, fmt.Sprintf("BPM_PKG_DESC=%s", pkgInfo.Description))
 	cmd.Env = append(cmd.Env, fmt.Sprintf("BPM_PKG_VERSION=%s", pkgInfo.Version))
+	cmd.Env = append(cmd.Env, fmt.Sprintf("BPM_PKG_REVISION=%d", pkgInfo.Revision))
 	cmd.Env = append(cmd.Env, fmt.Sprintf("BPM_PKG_URL=%s", pkgInfo.Url))
 	cmd.Env = append(cmd.Env, fmt.Sprintf("BPM_PKG_ARCH=%s", pkgInfo.Arch))
 	depends := make([]string, len(pkgInfo.Depends))
@@ -928,7 +935,7 @@ fi
 			}
 		}
 		sed := fmt.Sprintf("s/output/files/")
-		fileName := compiledInfo.Name + "-" + compiledInfo.Version + "-" + compiledInfo.Arch + ".bpm"
+		fileName := compiledInfo.Name + "-" + compiledInfo.GetFullVersion() + "-" + compiledInfo.Arch + ".bpm"
 		cmd := exec.Command("/usr/bin/fakeroot", "-i fakeroot_file", "tar", "-czvpf", fileName, "pkg.info", "output/", "--transform", sed)
 		if !BPMConfig.SilentCompilation {
 			cmd.Stdin = os.Stdin
@@ -1363,7 +1370,7 @@ func GetPackageInfo(pkg, rootDir string, defaultValues bool) *PackageInfo {
 	if err != nil {
 		return nil
 	}
-	info, err := ReadPackageInfo(string(bs), defaultValues)
+	info, err := ReadPackageInfo(string(bs))
 	if err != nil {
 		return nil
 	}
@@ -1463,6 +1470,7 @@ func RemovePackage(pkg string, verbose bool, rootDir string) error {
 		cmd.Env = append(cmd.Env, fmt.Sprintf("BPM_PKG_NAME=%s", pkgInfo.Name))
 		cmd.Env = append(cmd.Env, fmt.Sprintf("BPM_PKG_DESC=%s", pkgInfo.Description))
 		cmd.Env = append(cmd.Env, fmt.Sprintf("BPM_PKG_VERSION=%s", pkgInfo.Version))
+		cmd.Env = append(cmd.Env, fmt.Sprintf("BPM_PKG_REVISION=%d", pkgInfo.Revision))
 		cmd.Env = append(cmd.Env, fmt.Sprintf("BPM_PKG_URL=%s", pkgInfo.Url))
 		cmd.Env = append(cmd.Env, fmt.Sprintf("BPM_PKG_ARCH=%s", pkgInfo.Arch))
 		depends := make([]string, len(pkgInfo.Depends))

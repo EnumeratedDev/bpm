@@ -162,7 +162,7 @@ func resolveCommand() {
 			fmt.Printf("Results for term (%s)\n", term)
 			for i, result := range results {
 				fmt.Println("----------------")
-				fmt.Printf("%d) %s: %s (%s)\n", i+1, result.Name, result.Description, result.Version)
+				fmt.Printf("%d) %s: %s (%s)\n", i+1, result.Name, result.Description, result.GetFullVersion())
 			}
 		}
 	case install:
@@ -191,7 +191,7 @@ func resolveCommand() {
 				if err != nil {
 					log.Fatalf("Could not read package. Error: %s\n", err)
 				}
-				if !reinstall && utils.IsPackageInstalled(pkgInfo.Name, rootDir) && utils.GetPackageInfo(pkgInfo.Name, rootDir, true).Version == pkgInfo.Version {
+				if !reinstall && utils.IsPackageInstalled(pkgInfo.Name, rootDir) && utils.GetPackageInfo(pkgInfo.Name, rootDir, true).GetFullVersion() == pkgInfo.GetFullVersion() {
 					continue
 				}
 				pkgsToInstall.Set(pkgInfo.Name, &struct {
@@ -205,7 +205,7 @@ func resolveCommand() {
 				if err != nil {
 					log.Fatalf("Could not find package (%s) in any repository\n", pkg)
 				}
-				if !reinstall && utils.IsPackageInstalled(entry.Info.Name, rootDir) && utils.GetPackageInfo(entry.Info.Name, rootDir, true).Version == entry.Info.Version {
+				if !reinstall && utils.IsPackageInstalled(entry.Info.Name, rootDir) && utils.GetPackageInfo(entry.Info.Name, rootDir, true).GetFullVersion() == entry.Info.GetFullVersion() {
 					continue
 				}
 				pkgsToInstall.Set(entry.Info.Name, &struct {
@@ -266,13 +266,13 @@ func resolveCommand() {
 			pkgInfo := value.pkgInfo
 			installedInfo := utils.GetPackageInfo(pkgInfo.Name, rootDir, false)
 			if installedInfo == nil {
-				fmt.Printf("%s: %s (Install)\n", pkgInfo.Name, pkgInfo.Version)
-			} else if strings.Compare(pkgInfo.Version, installedInfo.Version) < 0 {
-				fmt.Printf("%s: %s -> %s (Downgrade)\n", pkgInfo.Name, installedInfo.Version, pkgInfo.Version)
-			} else if strings.Compare(pkgInfo.Version, installedInfo.Version) > 0 {
-				fmt.Printf("%s: %s -> %s (Upgrade)\n", pkgInfo.Name, installedInfo.Version, pkgInfo.Version)
+				fmt.Printf("%s: %s (Install)\n", pkgInfo.Name, pkgInfo.GetFullVersion())
+			} else if strings.Compare(pkgInfo.GetFullVersion(), installedInfo.GetFullVersion()) < 0 {
+				fmt.Printf("%s: %s -> %s (Downgrade)\n", pkgInfo.Name, installedInfo.GetFullVersion(), pkgInfo.GetFullVersion())
+			} else if strings.Compare(pkgInfo.GetFullVersion(), installedInfo.GetFullVersion()) > 0 {
+				fmt.Printf("%s: %s -> %s (Upgrade)\n", pkgInfo.Name, installedInfo.GetFullVersion(), pkgInfo.GetFullVersion())
 			} else {
-				fmt.Printf("%s: %s (Reinstall)\n", pkgInfo.Name, pkgInfo.Version)
+				fmt.Printf("%s: %s (Reinstall)\n", pkgInfo.Name, pkgInfo.GetFullVersion())
 			}
 		}
 		if rootDir != "/" {
@@ -374,7 +374,7 @@ func resolveCommand() {
 			if installedInfo == nil {
 				log.Fatalf(pkg)
 			}
-			if strings.Compare(entry.Info.Version, installedInfo.Version) > 0 {
+			if strings.Compare(entry.Info.GetFullVersion(), installedInfo.GetFullVersion()) > 0 {
 				toUpdate.Set(entry.Info.Name, &struct {
 					isDependency bool
 					entry        *utils.RepositoryEntry
@@ -424,13 +424,13 @@ func resolveCommand() {
 			value, _ := toUpdate.Get(key)
 			installedInfo := utils.GetPackageInfo(value.entry.Info.Name, rootDir, true)
 			if installedInfo == nil {
-				fmt.Printf("%s: %s (Install)\n", value.entry.Info.Name, value.entry.Info.Version)
+				fmt.Printf("%s: %s (Install)\n", value.entry.Info.Name, value.entry.Info.GetFullVersion())
 				continue
 			}
-			if strings.Compare(value.entry.Info.Version, installedInfo.Version) > 0 {
-				fmt.Printf("%s: %s -> %s (Upgrade)\n", value.entry.Info.Name, installedInfo.Version, value.entry.Info.Version)
+			if strings.Compare(value.entry.Info.GetFullVersion(), installedInfo.GetFullVersion()) > 0 {
+				fmt.Printf("%s: %s -> %s (Upgrade)\n", value.entry.Info.Name, installedInfo.GetFullVersion(), value.entry.Info.GetFullVersion())
 			} else if reinstall {
-				fmt.Printf("%s: %s -> %s (Reinstall)\n", value.entry.Info.Name, installedInfo.Version, value.entry.Info.Version)
+				fmt.Printf("%s: %s -> %s (Reinstall)\n", value.entry.Info.Name, installedInfo.GetFullVersion(), value.entry.Info.GetFullVersion())
 			}
 		}
 
