@@ -1280,7 +1280,9 @@ func (pkgInfo *PackageInfo) ResolveAll(resolved, unresolved *[]string, checkMake
 			entry.Info.ResolveAll(resolved, unresolved, checkMake, checkOptional, ignoreInstalled, rootDir)
 		}
 	}
-	*resolved = append(*resolved, pkgInfo.Name)
+	if !slices.Contains(*resolved, pkgInfo.Name) {
+		*resolved = append(*resolved, pkgInfo.Name)
+	}
 	*unresolved = stringSliceRemove(*unresolved, pkgInfo.Name)
 	return *resolved, *unresolved
 }

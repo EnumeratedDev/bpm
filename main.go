@@ -226,7 +226,7 @@ func resolveCommand() {
 		}]()
 		for _, pkg := range clone.Keys() {
 			value, _ := clone.Get(pkg)
-			resolved, unresolved := value.pkgInfo.ResolveAll(&[]string{}, &[]string{}, false, !noOptional, !reinstall, rootDir)
+			resolved, unresolved := value.pkgInfo.ResolveAll(&[]string{}, &[]string{}, value.pkgInfo.Type == "source", !noOptional, !reinstall, rootDir)
 			unresolvedDepends = append(unresolvedDepends, unresolved...)
 			for _, depend := range resolved {
 				if _, ok := pkgsToInstall.Get(depend); !ok && depend != value.pkgInfo.Name {
@@ -265,14 +265,21 @@ func resolveCommand() {
 			value, _ := pkgsToInstall.Get(pkg)
 			pkgInfo := value.pkgInfo
 			installedInfo := utils.GetPackageInfo(pkgInfo.Name, rootDir, false)
+			sourceInfo := ""
+			if pkgInfo.Type == "source" {
+				if rootDir != "/" && !force {
+					log.Fatalf("Error: Cannot compile and install source packages to a different root directory")
+				}
+				sourceInfo = "(From Source)"
+			}
 			if installedInfo == nil {
-				fmt.Printf("%s: %s (Install)\n", pkgInfo.Name, pkgInfo.GetFullVersion())
+				fmt.Printf("%s: %s (Install) %s\n", pkgInfo.Name, pkgInfo.GetFullVersion(), sourceInfo)
 			} else if strings.Compare(pkgInfo.GetFullVersion(), installedInfo.GetFullVersion()) < 0 {
-				fmt.Printf("%s: %s -> %s (Downgrade)\n", pkgInfo.Name, installedInfo.GetFullVersion(), pkgInfo.GetFullVersion())
+				fmt.Printf("%s: %s -> %s (Downgrade) %s\n", pkgInfo.Name, installedInfo.GetFullVersion(), pkgInfo.GetFullVersion(), sourceInfo)
 			} else if strings.Compare(pkgInfo.GetFullVersion(), installedInfo.GetFullVersion()) > 0 {
-				fmt.Printf("%s: %s -> %s (Upgrade)\n", pkgInfo.Name, installedInfo.GetFullVersion(), pkgInfo.GetFullVersion())
+				fmt.Printf("%s: %s -> %s (Upgrade) %s\n", pkgInfo.Name, installedInfo.GetFullVersion(), pkgInfo.GetFullVersion(), sourceInfo)
 			} else {
-				fmt.Printf("%s: %s (Reinstall)\n", pkgInfo.Name, pkgInfo.GetFullVersion())
+				fmt.Printf("%s: %s (Reinstall) %s\n", pkgInfo.Name, pkgInfo.GetFullVersion(), sourceInfo)
 			}
 		}
 		if rootDir != "/" {
@@ -396,7 +403,7 @@ func resolveCommand() {
 		clone := toUpdate.Copy()
 		for _, key := range clone.Keys() {
 			pkg, _ := clone.Get(key)
-			r, u := pkg.entry.Info.ResolveAll(&[]string{}, &[]string{}, false, !noOptional, true, rootDir)
+			r, u := pkg.entry.Info.ResolveAll(&[]string{}, &[]string{}, pkg.entry.Info.Type == "source", !noOptional, true, rootDir)
 			unresolved = append(unresolved, u...)
 			for _, depend := range r {
 				if _, ok := toUpdate.Get(depend); !ok {
@@ -423,14 +430,18 @@ func resolveCommand() {
 		for _, key := range toUpdate.Keys() {
 			value, _ := toUpdate.Get(key)
 			installedInfo := utils.GetPackageInfo(value.entry.Info.Name, rootDir, true)
+			sourceInfo := ""
+			if value.entry.Info.Type == "source" {
+				sourceInfo = "(From Source)"
+			}
 			if installedInfo == nil {
-				fmt.Printf("%s: %s (Install)\n", value.entry.Info.Name, value.entry.Info.GetFullVersion())
+				fmt.Printf("%s: %s (Install) %s\n", value.entry.Info.Name, value.entry.Info.GetFullVersion(), sourceInfo)
 				continue
 			}
 			if strings.Compare(value.entry.Info.GetFullVersion(), installedInfo.GetFullVersion()) > 0 {
-				fmt.Printf("%s: %s -> %s (Upgrade)\n", value.entry.Info.Name, installedInfo.GetFullVersion(), value.entry.Info.GetFullVersion())
+				fmt.Printf("%s: %s -> %s (Upgrade) %s\n", value.entry.Info.Name, installedInfo.GetFullVersion(), value.entry.Info.GetFullVersion(), sourceInfo)
 			} else if reinstall {
-				fmt.Printf("%s: %s -> %s (Reinstall)\n", value.entry.Info.Name, installedInfo.GetFullVersion(), value.entry.Info.GetFullVersion())
+				fmt.Printf("%s: %s -> %s (Reinstall) %s\n", value.entry.Info.Name, installedInfo.GetFullVersion(), value.entry.Info.GetFullVersion(), sourceInfo)
 			}
 		}
 

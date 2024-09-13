@@ -46,6 +46,7 @@ func (repo *Repository) ReadLocalDatabase() error {
 				Name:            "",
 				Description:     "",
 				Version:         "",
+				Revision:        1,
 				Url:             "",
 				License:         "",
 				Arch:            "",
