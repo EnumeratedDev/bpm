@@ -138,7 +138,7 @@ func GetRepositoryEntry(str string) (*RepositoryEntry, *Repository, error) {
 
 func (repo *Repository) FetchPackage(pkg string) (string, error) {
 	if !repo.ContainsPackage(pkg) {
-		return "", errors.New("Could not fetch package '" + pkg + "'")
+		return "", errors.New("could not fetch package '" + pkg + "'")
 	}
 	entry := repo.Entries[pkg]
 	URL, err := url.JoinPath(repo.Source, entry.Download)

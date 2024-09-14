@@ -510,7 +510,7 @@ func extractPackage(pkgInfo *PackageInfo, verbose bool, filename, rootDir string
 					return err, nil
 				}
 			default:
-				return errors.New("ExtractTarGz: unknown type: " + strconv.Itoa(int(header.Typeflag)) + " in " + extractFilename), nil
+				return errors.New("unknown type (" + strconv.Itoa(int(header.Typeflag)) + ") in " + extractFilename), nil
 			}
 		}
 	}
@@ -644,7 +644,7 @@ func compilePackage(pkgInfo *PackageInfo, filename, rootDir string, verbose, bin
 					fmt.Println("Skipping hard link (Bundling hard links in source packages is not supported)")
 				}
 			default:
-				return errors.New("ExtractTarGz: unknown type: " + strconv.Itoa(int(header.Typeflag)) + " in " + extractFilename), nil
+				return errors.New("unknown type (" + strconv.Itoa(int(header.Typeflag)) + ") in " + extractFilename), nil
 			}
 		}
 		if header.Name == "source.sh" {
@@ -994,7 +994,7 @@ func InstallPackage(filename, rootDir string, verbose, force, binaryPkgFromSrc, 
 			return errors.New("cannot install a package with a different architecture")
 		}
 		if unresolved := pkgInfo.CheckDependencies(pkgInfo.Type == "source", true, rootDir); len(unresolved) != 0 {
-			return errors.New("Could not resolve all dependencies. Missing " + strings.Join(unresolved, ", "))
+			return errors.New("the following dependencies are not installed: " + strings.Join(unresolved, ", "))
 		}
 	}
 	if pkgInfo.Type == "binary" {
@@ -1013,7 +1013,7 @@ func InstallPackage(filename, rootDir string, verbose, force, binaryPkgFromSrc, 
 		}
 		files = i
 	} else {
-		return errors.New("Unknown package type: " + pkgInfo.Type)
+		return errors.New("unknown package type: " + pkgInfo.Type)
 	}
 	slices.Sort(files)
 	slices.Reverse(files)

@@ -99,7 +99,7 @@ func resolveCommand() {
 			var info *utils.PackageInfo
 			info = utils.GetPackageInfo(pkg, rootDir, false)
 			if info == nil {
-				log.Fatalf("Package (%s) is not installed\n", pkg)
+				log.Fatalf("Error: package (%s) is not installed\n", pkg)
 			}
 			fmt.Println("----------------")
 			fmt.Println(utils.CreateReadableInfo(true, true, true, info, rootDir))
@@ -110,7 +110,7 @@ func resolveCommand() {
 	case list:
 		packages, err := utils.GetInstalledPackages(rootDir)
 		if err != nil {
-			log.Fatalf("Could not get installed packages\nError: %s", err.Error())
+			log.Fatalf("Error: could not get installed packages: %s", err.Error())
 			return
 		}
 		if pkgListNumbers {
@@ -139,8 +139,7 @@ func resolveCommand() {
 	case search:
 		searchTerms := subcommandArgs
 		if len(searchTerms) == 0 {
-			fmt.Println("No search terms given")
-			os.Exit(0)
+			log.Fatalf("Error: no search terms given")
 		}
 
 		for _, term := range searchTerms {
@@ -157,7 +156,7 @@ func resolveCommand() {
 			}
 			results := append(nameResults, descResults...)
 			if len(results) == 0 {
-				log.Fatalf("No results for term (%s) were found\n", term)
+				log.Fatalf("Error: no results for term (%s) were found\n", term)
 			}
 			fmt.Printf("Results for term (%s)\n", term)
 			for i, result := range results {
@@ -167,8 +166,7 @@ func resolveCommand() {
 		}
 	case install:
 		if os.Getuid() != 0 {
-			fmt.Println("This subcommand needs to be run with superuser permissions")
-			os.Exit(0)
+			log.Fatalf("Error: this subcommand needs to be run with superuser permissions")
 		}
 		pkgs := subcommandArgs
 		if len(pkgs) == 0 {
@@ -189,7 +187,7 @@ func resolveCommand() {
 			if stat, err := os.Stat(pkg); err == nil && !stat.IsDir() {
 				pkgInfo, err := utils.ReadPackage(pkg)
 				if err != nil {
-					log.Fatalf("Could not read package. Error: %s\n", err)
+					log.Fatalf("Error: could not read package: %s\n", err)
 				}
 				if !reinstall && utils.IsPackageInstalled(pkgInfo.Name, rootDir) && utils.GetPackageInfo(pkgInfo.Name, rootDir, true).GetFullVersion() == pkgInfo.GetFullVersion() {
 					continue
@@ -203,7 +201,7 @@ func resolveCommand() {
 			} else {
 				entry, _, err := utils.GetRepositoryEntry(pkg)
 				if err != nil {
-					log.Fatalf("Could not find package (%s) in any repository\n", pkg)
+					log.Fatalf("Error: could not find package (%s) in any repository\n", pkg)
 				}
 				if !reinstall && utils.IsPackageInstalled(entry.Info.Name, rootDir) && utils.GetPackageInfo(entry.Info.Name, rootDir, true).GetFullVersion() == entry.Info.GetFullVersion() {
 					continue
@@ -235,7 +233,7 @@ func resolveCommand() {
 					}
 					entry, _, err := utils.GetRepositoryEntry(depend)
 					if err != nil {
-						log.Fatalf("Could not find package (%s) in any repository\n", pkg)
+						log.Fatalf("Error: could not find package (%s) in any repository\n", pkg)
 					}
 					pkgsToInstall.Set(depend, &struct {
 						bpmFile      string
@@ -251,7 +249,7 @@ func resolveCommand() {
 		// Show summary
 		if len(unresolvedDepends) != 0 {
 			if !force {
-				log.Fatalf("The following dependencies could not be found in any repositories: %s\n", strings.Join(unresolvedDepends, ", "))
+				log.Fatalf("Error: the following dependencies could not be found in any repositories: %s\n", strings.Join(unresolvedDepends, ", "))
 			} else {
 				log.Println("Warning: The following dependencies could not be found in any repositories: " + strings.Join(unresolvedDepends, ", "))
 			}
@@ -268,7 +266,7 @@ func resolveCommand() {
 			sourceInfo := ""
 			if pkgInfo.Type == "source" {
 				if rootDir != "/" && !force {
-					log.Fatalf("Error: Cannot compile and install source packages to a different root directory")
+					log.Fatalf("Error: cannot compile and install source packages to a different root directory")
 				}
 				sourceInfo = "(From Source)"
 			}
@@ -287,7 +285,12 @@ func resolveCommand() {
 		}
 		if !yesAll {
 			reader := bufio.NewReader(os.Stdin)
-			fmt.Printf("Do you wish to install these %d packages? [y\\N] ", pkgsToInstall.Len())
+			if pkgsToInstall.Len() == 1 {
+				fmt.Printf("Do you wish to install this package? [y\\N] ")
+			} else {
+				fmt.Printf("Do you wish to install these %d packages? [y\\N] ", pkgsToInstall.Len())
+			}
+
 			text, _ := reader.ReadString('\n')
 			if strings.TrimSpace(strings.ToLower(text)) != "y" && strings.TrimSpace(strings.ToLower(text)) != "yes" {
 				fmt.Println("Cancelling...")
@@ -304,11 +307,11 @@ func resolveCommand() {
 			}
 			entry, repo, err := utils.GetRepositoryEntry(pkg)
 			if err != nil {
-				log.Fatalf("Could not find package (%s) in any repository\n", pkg)
+				log.Fatalf("Error: could not find package (%s) in any repository\n", pkg)
 			}
 			fetchedPackage, err := repo.FetchPackage(entry.Info.Name)
 			if err != nil {
-				log.Fatalf("Could not fetch package (%s). Error: %s\n", pkg, err)
+				log.Fatalf("Error: could not fetch package (%s): %s\n", pkg, err)
 			}
 			fmt.Printf("Package (%s) was successfully fetched!\n", value.pkgInfo.Name)
 			value.bpmFile = fetchedPackage
@@ -330,13 +333,13 @@ func resolveCommand() {
 				if pkgInfo.Type == "source" && keepTempDir {
 					fmt.Println("BPM temp directory was created at /var/tmp/bpm_source-" + pkgInfo.Name)
 				}
-				log.Fatalf("Could not install package (%s). Error: %s\n", pkg, err)
+				log.Fatalf("Error: could not install package (%s): %s\n", pkg, err)
 			}
-			fmt.Printf("Package (%s) was successfully installed!\n", pkgInfo.Name)
+			fmt.Printf("Package (%s) was successfully installed\n", pkgInfo.Name)
 			if value.isDependency {
 				err := utils.SetInstallationReason(pkgInfo.Name, utils.Dependency, rootDir)
 				if err != nil {
-					log.Fatalf("Could not set installation reason for package\nError: %s\n", err)
+					log.Fatalf("Error: could not set installation reason for package: %s\n", err)
 				}
 			}
 			if pkgInfo.Type == "source" && keepTempDir {
@@ -345,8 +348,7 @@ func resolveCommand() {
 		}
 	case update:
 		if os.Getuid() != 0 {
-			fmt.Println("This subcommand needs to be run with superuser permissions")
-			os.Exit(0)
+			log.Fatalf("Error: this subcommand needs to be run with superuser permissions")
 		}
 
 		// Sync repositories
@@ -355,7 +357,7 @@ func resolveCommand() {
 				fmt.Printf("Fetching package database for repository (%s)...\n", repo.Name)
 				err := repo.SyncLocalDatabase()
 				if err != nil {
-					log.Fatal(err)
+					log.Fatalf("Error: could not sync local database for repository (%s): %s\n", repo.Name, err)
 				}
 			}
 			fmt.Println("All package databases synced successfully!")
@@ -366,7 +368,7 @@ func resolveCommand() {
 		// Get installed packages and check for updates
 		pkgs, err := utils.GetInstalledPackages(rootDir)
 		if err != nil {
-			log.Fatalf("Could not get installed packages! Error: %s\n", err)
+			log.Fatalf("Error: could not get installed packages: %s\n", err)
 		}
 		toUpdate := orderedmap.NewOrderedMap[string, *struct {
 			isDependency bool
@@ -379,7 +381,7 @@ func resolveCommand() {
 			}
 			installedInfo := utils.GetPackageInfo(pkg, rootDir, true)
 			if installedInfo == nil {
-				log.Fatalf(pkg)
+				log.Fatalf("Error: could not get package info for (%s)\n", pkg)
 			}
 			if strings.Compare(entry.Info.GetFullVersion(), installedInfo.GetFullVersion()) > 0 {
 				toUpdate.Set(entry.Info.Name, &struct {
@@ -409,7 +411,7 @@ func resolveCommand() {
 				if _, ok := toUpdate.Get(depend); !ok {
 					entry, _, err := utils.GetRepositoryEntry(depend)
 					if err != nil {
-						log.Fatalf("Could not find package (%s) in any repository\n", depend)
+						log.Fatalf("Error: could not find package (%s) in any repository\n", depend)
 					}
 					toUpdate.Set(depend, &struct {
 						isDependency bool
@@ -421,9 +423,9 @@ func resolveCommand() {
 
 		if len(unresolved) != 0 {
 			if !force {
-				log.Fatalf("The following dependencies could not be found in any repositories: %s\n", strings.Join(unresolved, ", "))
+				log.Fatalf("Error: the following dependencies could not be found in any repositories: %s\n", strings.Join(unresolved, ", "))
 			} else {
-				log.Println("Warning: The following dependencies could not be found in any repositories: " + strings.Join(unresolved, ", "))
+				log.Printf("Warning: the following dependencies could not be found in any repositories: %s\n", strings.Join(unresolved, ", "))
 			}
 		}
 
@@ -452,7 +454,7 @@ func resolveCommand() {
 			text, _ := reader.ReadString('\n')
 			if strings.TrimSpace(strings.ToLower(text)) != "y" && strings.TrimSpace(strings.ToLower(text)) != "yes" {
 				fmt.Println("Cancelling update...")
-				os.Exit(0)
+				os.Exit(1)
 			}
 		}
 
@@ -466,11 +468,11 @@ func resolveCommand() {
 			value, _ := toUpdate.Get(pkg)
 			entry, repo, err := utils.GetRepositoryEntry(pkg)
 			if err != nil {
-				log.Fatalf("Could not find package (%s) in any repository\n", pkg)
+				log.Fatalf("Error: could not find package (%s) in any repository\n", pkg)
 			}
 			fetchedPackage, err := repo.FetchPackage(entry.Info.Name)
 			if err != nil {
-				log.Fatalf("Could not fetch package (%s). Error: %s\n", pkg, err)
+				log.Fatalf("Error: could not fetch package (%s): %s\n", pkg, err)
 			}
 			fmt.Printf("Package (%s) was successfully fetched!\n", value.entry.Info.Name)
 			pkgsToInstall.Set(fetchedPackage, value)
@@ -491,13 +493,13 @@ func resolveCommand() {
 				if pkgInfo.Type == "source" && keepTempDir {
 					fmt.Println("BPM temp directory was created at /var/tmp/bpm_source-" + pkgInfo.Name)
 				}
-				log.Fatalf("Could not install package (%s). Error: %s\n", pkg, err)
+				log.Fatalf("Error: could not install package (%s): %s\n", pkg, err)
 			}
 			fmt.Printf("Package (%s) was successfully installed!\n", pkgInfo.Name)
 			if value.isDependency {
 				err := utils.SetInstallationReason(pkgInfo.Name, utils.Dependency, rootDir)
 				if err != nil {
-					log.Fatalf("Could not set installation reason for package\nError: %s\n", err)
+					log.Fatalf("Error: could not set installation reason for package: %s\n", err)
 				}
 			}
 			if pkgInfo.Type == "source" && keepTempDir {
@@ -506,8 +508,7 @@ func resolveCommand() {
 		}
 	case sync:
 		if os.Getuid() != 0 {
-			fmt.Println("This subcommand needs to be run with superuser permissions")
-			os.Exit(0)
+			log.Fatalf("Error: this subcommand needs to be run with superuser permissions")
 		}
 		if !yesAll {
 			fmt.Printf("Are you sure you wish to sync all databases? [y\\N] ")
@@ -515,21 +516,20 @@ func resolveCommand() {
 			text, _ := reader.ReadString('\n')
 			if strings.TrimSpace(strings.ToLower(text)) != "y" && strings.TrimSpace(strings.ToLower(text)) != "yes" {
 				fmt.Println("Cancelling sync...")
-				os.Exit(0)
+				os.Exit(1)
 			}
 		}
 		for _, repo := range utils.BPMConfig.Repositories {
 			fmt.Printf("Fetching package database for repository (%s)...\n", repo.Name)
 			err := repo.SyncLocalDatabase()
 			if err != nil {
-				log.Fatal(err)
+				log.Fatalf("Error: could not sync local database for repository (%s): %s\n", repo.Name, err)
 			}
 		}
 		fmt.Println("All package databases synced successfully!")
 	case remove:
 		if os.Getuid() != 0 {
-			fmt.Println("This subcommand needs to be run with superuser permissions")
-			os.Exit(0)
+			log.Fatalf("Error: this subcommand needs to be run with superuser permissions")
 		}
 		packages := subcommandArgs
 		if len(packages) == 0 {
@@ -559,7 +559,7 @@ func resolveCommand() {
 			err := utils.RemovePackage(pkg, verbose, rootDir)
 
 			if err != nil {
-				log.Fatalf("Could not remove package\nError: %s\n", err)
+				log.Fatalf("Error: could not remove package: %s\n", err)
 			}
 			fmt.Printf("Package (%s) was successfully removed!\n", pkgInfo.Name)
 		}
@@ -572,23 +572,23 @@ func resolveCommand() {
 		for _, file := range files {
 			absFile, err := filepath.Abs(file)
 			if err != nil {
-				log.Fatalf("Could not get absolute path of %s", file)
+				log.Fatalf("Error: could not get absolute path of file (%s)\n", file)
 			}
 			stat, err := os.Stat(absFile)
 			if os.IsNotExist(err) {
-				log.Fatalf(absFile + " does not exist!")
+				log.Fatalf("Error: file (%s) does not exist!\n", absFile)
 			}
 			pkgs, err := utils.GetInstalledPackages(rootDir)
 			if err != nil {
-				log.Fatalf("Could not get installed packages. Error %s", err.Error())
+				log.Fatalf("Error: could not get installed packages: %s\n", err.Error())
 			}
 
 			if !strings.HasPrefix(absFile, rootDir) {
-				log.Fatalf("Could not get relative path of %s to root path", absFile)
+				log.Fatalf("Error: could not get path of file (%s) relative to root path", absFile)
 			}
 			absFile, err = filepath.Rel(rootDir, absFile)
 			if err != nil {
-				log.Fatalf("Could not get relative path of %s to root path", absFile)
+				log.Fatalf("Error: could not get path of file (%s) relative to root path", absFile)
 			}
 			absFile = strings.TrimPrefix(absFile, "/")
 			if stat.IsDir() {
