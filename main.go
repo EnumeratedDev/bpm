@@ -47,8 +47,8 @@ func main() {
 type commandType uint8
 
 const (
-	help commandType = iota
-	version
+	_default commandType = iota
+	help
 	info
 	list
 	search
@@ -62,7 +62,7 @@ const (
 func getCommandType() commandType {
 	switch subcommand {
 	case "version":
-		return version
+		return _default
 	case "info":
 		return info
 	case "list":
@@ -86,7 +86,7 @@ func getCommandType() commandType {
 
 func resolveCommand() {
 	switch getCommandType() {
-	case version:
+	case _default:
 		fmt.Println("Bubble Package Manager (BPM)")
 		fmt.Println("Version: " + bpmVer)
 	case info:
@@ -270,11 +270,15 @@ func resolveCommand() {
 				}
 				sourceInfo = "(From Source)"
 			}
+
 			if installedInfo == nil {
 				fmt.Printf("%s: %s (Install) %s\n", pkgInfo.Name, pkgInfo.GetFullVersion(), sourceInfo)
-			} else if strings.Compare(pkgInfo.GetFullVersion(), installedInfo.GetFullVersion()) < 0 {
+			}
+
+			comparison := utils.ComparePackageVersions(*pkgInfo, *installedInfo)
+			if comparison < 0 {
 				fmt.Printf("%s: %s -> %s (Downgrade) %s\n", pkgInfo.Name, installedInfo.GetFullVersion(), pkgInfo.GetFullVersion(), sourceInfo)
-			} else if strings.Compare(pkgInfo.GetFullVersion(), installedInfo.GetFullVersion()) > 0 {
+			} else if comparison > 0 {
 				fmt.Printf("%s: %s -> %s (Upgrade) %s\n", pkgInfo.Name, installedInfo.GetFullVersion(), pkgInfo.GetFullVersion(), sourceInfo)
 			} else {
 				fmt.Printf("%s: %s (Reinstall) %s\n", pkgInfo.Name, pkgInfo.GetFullVersion(), sourceInfo)
@@ -383,7 +387,9 @@ func resolveCommand() {
 			if installedInfo == nil {
 				log.Fatalf("Error: could not get package info for (%s)\n", pkg)
 			}
-			if strings.Compare(entry.Info.GetFullVersion(), installedInfo.GetFullVersion()) > 0 {
+
+			comparison := utils.ComparePackageVersions(*entry.Info, *installedInfo)
+			if comparison > 0 {
 				toUpdate.Set(entry.Info.Name, &struct {
 					isDependency bool
 					entry        *utils.RepositoryEntry
@@ -440,7 +446,9 @@ func resolveCommand() {
 				fmt.Printf("%s: %s (Install) %s\n", value.entry.Info.Name, value.entry.Info.GetFullVersion(), sourceInfo)
 				continue
 			}
-			if strings.Compare(value.entry.Info.GetFullVersion(), installedInfo.GetFullVersion()) > 0 {
+
+			comparison := utils.ComparePackageVersions(*value.entry.Info, *installedInfo)
+			if comparison > 0 {
 				fmt.Printf("%s: %s -> %s (Upgrade) %s\n", value.entry.Info.Name, installedInfo.GetFullVersion(), value.entry.Info.GetFullVersion(), sourceInfo)
 			} else if reinstall {
 				fmt.Printf("%s: %s -> %s (Reinstall) %s\n", value.entry.Info.Name, installedInfo.GetFullVersion(), value.entry.Info.GetFullVersion(), sourceInfo)

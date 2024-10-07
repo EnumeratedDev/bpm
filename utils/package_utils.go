@@ -6,6 +6,7 @@ import (
 	"compress/gzip"
 	"errors"
 	"fmt"
+	version "github.com/knqyf263/go-rpm-version"
 	"gopkg.in/yaml.v3"
 	"io"
 	"io/fs"
@@ -47,6 +48,13 @@ const (
 	Dependency InstallationReason = "dependency"
 	Unknown    InstallationReason = "unknown"
 )
+
+func ComparePackageVersions(info1, info2 PackageInfo) int {
+	v1 := version.NewVersion(info1.GetFullVersion())
+	v2 := version.NewVersion(info2.GetFullVersion())
+
+	return v1.Compare(v2)
+}
 
 func GetInstallationReason(pkg, rootDir string) InstallationReason {
 	installedDir := path.Join(rootDir, "var/lib/bpm/installed/")
