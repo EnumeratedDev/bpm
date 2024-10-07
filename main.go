@@ -13,10 +13,10 @@ import (
 	"strings"
 )
 
-/* ---BPM | Bubble Package Manager--- */
-/*        Made By CapCreeperGR        */
-/*   A simple-to-use package manager  */
-/* ---------------------------------- */
+/* -------------BPM | Bubble Package Manager-------------- */
+/*        Made By EnumDev (Previously CapCreeperGR)        */
+/*             A simple-to-use package manager             */
+/* ------------------------------------------------------- */
 
 var bpmVer = "0.4.2"
 
