@@ -316,6 +316,12 @@ func ExecutePackageScripts(filename, rootDir string, operation Operation, postOp
 			}
 		}
 	} else if operation == Remove {
+		if val, ok := scripts["pre_remove.sh"]; !postOperation && ok {
+			err := run("pre_remove.sh", val)
+			if err != nil {
+				return err
+			}
+		}
 		if val, ok := scripts["post_remove.sh"]; postOperation && ok {
 			err := run("post_remove.sh", val)
 			if err != nil {
