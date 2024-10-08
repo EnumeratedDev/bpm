@@ -1284,11 +1284,21 @@ func (pkgInfo *PackageInfo) CheckConflicts(rootDir string) []string {
 	return ret
 }
 
-func (pkgInfo *PackageInfo) ResolveAll(resolved, unresolved *[]string, checkMake, checkOptional, ignoreInstalled bool, rootDir string) ([]string, []string) {
+func (pkgInfo *PackageInfo) ResolveAll(resolved, unresolved *[]string, checkMake, checkOptional, ignoreInstalled, verbose bool, rootDir string) ([]string, []string) {
 	*unresolved = append(*unresolved, pkgInfo.Name)
 	for _, depend := range pkgInfo.GetAllDependencies(checkMake, checkOptional) {
+		depend = strings.TrimSpace(depend)
+		depend = strings.ToLower(depend)
 		if !slices.Contains(*resolved, depend) {
-			if slices.Contains(*unresolved, depend) || (ignoreInstalled && IsPackageInstalled(depend, rootDir)) {
+			if slices.Contains(*unresolved, depend) {
+				if verbose {
+					fmt.Printf("Circular dependency was detected (%s -> %s). Installing %s first\n", pkgInfo.Name, depend, depend)
+				}
+				if !slices.Contains(*resolved, depend) {
+					*resolved = append(*resolved, depend)
+				}
+				continue
+			} else if ignoreInstalled && IsPackageInstalled(depend, rootDir) {
 				continue
 			}
 			entry, _, err := GetRepositoryEntry(depend)
@@ -1298,7 +1308,7 @@ func (pkgInfo *PackageInfo) ResolveAll(resolved, unresolved *[]string, checkMake
 				}
 				continue
 			}
-			entry.Info.ResolveAll(resolved, unresolved, checkMake, checkOptional, ignoreInstalled, rootDir)
+			entry.Info.ResolveAll(resolved, unresolved, checkMake, checkOptional, ignoreInstalled, verbose, rootDir)
 		}
 	}
 	if !slices.Contains(*resolved, pkgInfo.Name) {

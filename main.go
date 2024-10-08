@@ -224,7 +224,7 @@ func resolveCommand() {
 		}]()
 		for _, pkg := range clone.Keys() {
 			value, _ := clone.Get(pkg)
-			resolved, unresolved := value.pkgInfo.ResolveAll(&[]string{}, &[]string{}, value.pkgInfo.Type == "source", !noOptional, !reinstall, rootDir)
+			resolved, unresolved := value.pkgInfo.ResolveAll(&[]string{}, &[]string{}, value.pkgInfo.Type == "source", !noOptional, !reinstall, verbose, rootDir)
 			unresolvedDepends = append(unresolvedDepends, unresolved...)
 			for _, depend := range resolved {
 				if _, ok := pkgsToInstall.Get(depend); !ok && depend != value.pkgInfo.Name {
@@ -411,7 +411,7 @@ func resolveCommand() {
 		clone := toUpdate.Copy()
 		for _, key := range clone.Keys() {
 			pkg, _ := clone.Get(key)
-			r, u := pkg.entry.Info.ResolveAll(&[]string{}, &[]string{}, pkg.entry.Info.Type == "source", !noOptional, true, rootDir)
+			r, u := pkg.entry.Info.ResolveAll(&[]string{}, &[]string{}, pkg.entry.Info.Type == "source", !noOptional, true, verbose, rootDir)
 			unresolved = append(unresolved, u...)
 			for _, depend := range r {
 				if _, ok := toUpdate.Get(depend); !ok {
