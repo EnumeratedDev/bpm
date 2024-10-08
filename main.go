@@ -273,15 +273,15 @@ func resolveCommand() {
 
 			if installedInfo == nil {
 				fmt.Printf("%s: %s (Install) %s\n", pkgInfo.Name, pkgInfo.GetFullVersion(), sourceInfo)
-			}
-
-			comparison := utils.ComparePackageVersions(*pkgInfo, *installedInfo)
-			if comparison < 0 {
-				fmt.Printf("%s: %s -> %s (Downgrade) %s\n", pkgInfo.Name, installedInfo.GetFullVersion(), pkgInfo.GetFullVersion(), sourceInfo)
-			} else if comparison > 0 {
-				fmt.Printf("%s: %s -> %s (Upgrade) %s\n", pkgInfo.Name, installedInfo.GetFullVersion(), pkgInfo.GetFullVersion(), sourceInfo)
 			} else {
-				fmt.Printf("%s: %s (Reinstall) %s\n", pkgInfo.Name, pkgInfo.GetFullVersion(), sourceInfo)
+				comparison := utils.ComparePackageVersions(*pkgInfo, *installedInfo)
+				if comparison < 0 {
+					fmt.Printf("%s: %s -> %s (Downgrade) %s\n", pkgInfo.Name, installedInfo.GetFullVersion(), pkgInfo.GetFullVersion(), sourceInfo)
+				} else if comparison > 0 {
+					fmt.Printf("%s: %s -> %s (Upgrade) %s\n", pkgInfo.Name, installedInfo.GetFullVersion(), pkgInfo.GetFullVersion(), sourceInfo)
+				} else {
+					fmt.Printf("%s: %s (Reinstall) %s\n", pkgInfo.Name, pkgInfo.GetFullVersion(), sourceInfo)
+				}
 			}
 		}
 		if rootDir != "/" {
@@ -386,19 +386,19 @@ func resolveCommand() {
 			installedInfo := utils.GetPackageInfo(pkg, rootDir, true)
 			if installedInfo == nil {
 				log.Fatalf("Error: could not get package info for (%s)\n", pkg)
-			}
-
-			comparison := utils.ComparePackageVersions(*entry.Info, *installedInfo)
-			if comparison > 0 {
-				toUpdate.Set(entry.Info.Name, &struct {
-					isDependency bool
-					entry        *utils.RepositoryEntry
-				}{isDependency: false, entry: entry})
-			} else if reinstall {
-				toUpdate.Set(entry.Info.Name, &struct {
-					isDependency bool
-					entry        *utils.RepositoryEntry
-				}{isDependency: false, entry: entry})
+			} else {
+				comparison := utils.ComparePackageVersions(*entry.Info, *installedInfo)
+				if comparison > 0 {
+					toUpdate.Set(entry.Info.Name, &struct {
+						isDependency bool
+						entry        *utils.RepositoryEntry
+					}{isDependency: false, entry: entry})
+				} else if reinstall {
+					toUpdate.Set(entry.Info.Name, &struct {
+						isDependency bool
+						entry        *utils.RepositoryEntry
+					}{isDependency: false, entry: entry})
+				}
 			}
 		}
 		if toUpdate.Len() == 0 {
@@ -445,13 +445,13 @@ func resolveCommand() {
 			if installedInfo == nil {
 				fmt.Printf("%s: %s (Install) %s\n", value.entry.Info.Name, value.entry.Info.GetFullVersion(), sourceInfo)
 				continue
-			}
-
-			comparison := utils.ComparePackageVersions(*value.entry.Info, *installedInfo)
-			if comparison > 0 {
-				fmt.Printf("%s: %s -> %s (Upgrade) %s\n", value.entry.Info.Name, installedInfo.GetFullVersion(), value.entry.Info.GetFullVersion(), sourceInfo)
-			} else if reinstall {
-				fmt.Printf("%s: %s -> %s (Reinstall) %s\n", value.entry.Info.Name, installedInfo.GetFullVersion(), value.entry.Info.GetFullVersion(), sourceInfo)
+			} else {
+				comparison := utils.ComparePackageVersions(*value.entry.Info, *installedInfo)
+				if comparison > 0 {
+					fmt.Printf("%s: %s -> %s (Upgrade) %s\n", value.entry.Info.Name, installedInfo.GetFullVersion(), value.entry.Info.GetFullVersion(), sourceInfo)
+				} else if reinstall {
+					fmt.Printf("%s: %s -> %s (Reinstall) %s\n", value.entry.Info.Name, installedInfo.GetFullVersion(), value.entry.Info.GetFullVersion(), sourceInfo)
+				}
 			}
 		}
 
