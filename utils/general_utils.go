@@ -49,16 +49,6 @@ func stringSliceRemove(s []string, r string) []string {
 	return s
 }
 
-func stringSliceRemoveEmpty(s []string) []string {
-	var r []string
-	for _, str := range s {
-		if str != "" {
-			r = append(r, str)
-		}
-	}
-	return r
-}
-
 func BytesToHumanReadable(b uint64) string {
 	bf := float64(b)
 	for _, unit := range []string{"", "Ki", "Mi", "Gi", "Ti", "Pi", "Ei", "Zi"} {

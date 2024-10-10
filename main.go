@@ -97,7 +97,7 @@ func resolveCommand() {
 		}
 		for n, pkg := range packages {
 			var info *utils.PackageInfo
-			info = utils.GetPackageInfo(pkg, rootDir, false)
+			info = utils.GetPackageInfo(pkg, rootDir)
 			if info == nil {
 				log.Fatalf("Error: package (%s) is not installed\n", pkg)
 			}
@@ -125,7 +125,7 @@ func resolveCommand() {
 				return
 			}
 			for n, pkg := range packages {
-				info := utils.GetPackageInfo(pkg, rootDir, false)
+				info := utils.GetPackageInfo(pkg, rootDir)
 				if info == nil {
 					fmt.Printf("Package (%s) could not be found\n", pkg)
 					continue
@@ -189,7 +189,7 @@ func resolveCommand() {
 				if err != nil {
 					log.Fatalf("Error: could not read package: %s\n", err)
 				}
-				if !reinstall && utils.IsPackageInstalled(bpmpkg.PkgInfo.Name, rootDir) && utils.GetPackageInfo(bpmpkg.PkgInfo.Name, rootDir, true).GetFullVersion() == bpmpkg.PkgInfo.GetFullVersion() {
+				if !reinstall && utils.IsPackageInstalled(bpmpkg.PkgInfo.Name, rootDir) && utils.GetPackageInfo(bpmpkg.PkgInfo.Name, rootDir).GetFullVersion() == bpmpkg.PkgInfo.GetFullVersion() {
 					continue
 				}
 				pkgsToInstall.Set(bpmpkg.PkgInfo.Name, &struct {
@@ -203,7 +203,7 @@ func resolveCommand() {
 				if err != nil {
 					log.Fatalf("Error: could not find package (%s) in any repository\n", pkg)
 				}
-				if !reinstall && utils.IsPackageInstalled(entry.Info.Name, rootDir) && utils.GetPackageInfo(entry.Info.Name, rootDir, true).GetFullVersion() == entry.Info.GetFullVersion() {
+				if !reinstall && utils.IsPackageInstalled(entry.Info.Name, rootDir) && utils.GetPackageInfo(entry.Info.Name, rootDir).GetFullVersion() == entry.Info.GetFullVersion() {
 					continue
 				}
 				pkgsToInstall.Set(entry.Info.Name, &struct {
@@ -269,7 +269,7 @@ func resolveCommand() {
 		for _, pkg := range pkgsToInstall.Keys() {
 			value, _ := pkgsToInstall.Get(pkg)
 			bpmpkg := value.bpmpkg
-			installedInfo := utils.GetPackageInfo(bpmpkg.PkgInfo.Name, rootDir, false)
+			installedInfo := utils.GetPackageInfo(bpmpkg.PkgInfo.Name, rootDir)
 			sourceInfo := ""
 			if bpmpkg.PkgInfo.Type == "source" {
 				if rootDir != "/" && !force {
@@ -398,7 +398,7 @@ func resolveCommand() {
 			if err != nil {
 				continue
 			}
-			installedInfo := utils.GetPackageInfo(pkg, rootDir, true)
+			installedInfo := utils.GetPackageInfo(pkg, rootDir)
 			if installedInfo == nil {
 				log.Fatalf("Error: could not get package info for (%s)\n", pkg)
 			} else {
@@ -452,7 +452,7 @@ func resolveCommand() {
 
 		for _, key := range toUpdate.Keys() {
 			value, _ := toUpdate.Get(key)
-			installedInfo := utils.GetPackageInfo(value.entry.Info.Name, rootDir, true)
+			installedInfo := utils.GetPackageInfo(value.entry.Info.Name, rootDir)
 			sourceInfo := ""
 			if value.entry.Info.Type == "source" {
 				sourceInfo = "(From Source)"
@@ -560,7 +560,7 @@ func resolveCommand() {
 			return
 		}
 		for _, pkg := range packages {
-			pkgInfo := utils.GetPackageInfo(pkg, rootDir, false)
+			pkgInfo := utils.GetPackageInfo(pkg, rootDir)
 			if pkgInfo == nil {
 				fmt.Printf("Package (%s) could not be found\n", pkg)
 				continue

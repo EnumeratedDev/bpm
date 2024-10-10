@@ -91,11 +91,11 @@ func GetInstallationReason(pkg, rootDir string) InstallationReason {
 	if stat, err := os.Stat(path.Join(pkgDir, "installation_reason")); err != nil || stat.IsDir() {
 		return Manual
 	}
-	bytes, err := os.ReadFile(path.Join(pkgDir, "installation_reason"))
+	b, err := os.ReadFile(path.Join(pkgDir, "installation_reason"))
 	if err != nil {
 		return Unknown
 	}
-	reason := string(bytes)
+	reason := string(b)
 	if reason == "manual" {
 		return Manual
 	} else if reason == "dependency" {
@@ -314,11 +314,11 @@ func ExecutePackageScripts(filename, rootDir string, operation Operation, postOp
 		cmd.Env = append(cmd.Env, fmt.Sprintf("BPM_PKG_DESC=%s", pkgInfo.PkgInfo.Description))
 		cmd.Env = append(cmd.Env, fmt.Sprintf("BPM_PKG_VERSION=%s", pkgInfo.PkgInfo.Version))
 		if operation != Install {
-			cmd.Env = append(cmd.Env, fmt.Sprintf("BPM_PKG_OLD_VERSION=%s", GetPackageInfo(pkgInfo.PkgInfo.Name, rootDir, true).Version))
+			cmd.Env = append(cmd.Env, fmt.Sprintf("BPM_PKG_OLD_VERSION=%s", GetPackageInfo(pkgInfo.PkgInfo.Name, rootDir).Version))
 		}
 		cmd.Env = append(cmd.Env, fmt.Sprintf("BPM_PKG_REVISION=%d", pkgInfo.PkgInfo.Revision))
 		if operation != Install {
-			cmd.Env = append(cmd.Env, fmt.Sprintf("BPM_PKG_OLD_REVISION=%d", GetPackageInfo(pkgInfo.PkgInfo.Name, rootDir, true).Revision))
+			cmd.Env = append(cmd.Env, fmt.Sprintf("BPM_PKG_OLD_REVISION=%d", GetPackageInfo(pkgInfo.PkgInfo.Name, rootDir).Revision))
 		}
 		cmd.Env = append(cmd.Env, fmt.Sprintf("BPM_PKG_URL=%s", pkgInfo.PkgInfo.Url))
 		cmd.Env = append(cmd.Env, fmt.Sprintf("BPM_PKG_ARCH=%s", pkgInfo.PkgInfo.Arch))
@@ -426,11 +426,11 @@ func ReadPackageInfo(contents string) (*PackageInfo, error) {
 }
 
 func CreateInfoFile(pkgInfo *PackageInfo) string {
-	bytes, err := yaml.Marshal(&pkgInfo)
+	b, err := yaml.Marshal(&pkgInfo)
 	if err != nil {
 		return ""
 	}
-	return string(bytes)
+	return string(b)
 }
 
 func CreateReadableInfo(showArchitecture, showType, showPackageRelations bool, pkgInfo *PackageInfo, rootDir string) string {
@@ -1249,44 +1249,6 @@ func InstallPackage(filename, rootDir string, verbose, force, binaryPkgFromSrc, 
 	return nil
 }
 
-func GetSourceScript(filename string) (string, error) {
-	pkgInfo, err := ReadPackage(filename)
-	if err != nil {
-		return "", err
-	}
-	if pkgInfo.PkgInfo.Type != "source" {
-		return "", errors.New("package not of source type")
-	}
-	file, err := os.Open(filename)
-	if err != nil {
-		return "", err
-	}
-
-	tr := tar.NewReader(file)
-	for {
-		header, err := tr.Next()
-		if err == io.EOF {
-			break
-		}
-		if header.Name == "source.sh" {
-			err := file.Close()
-			if err != nil {
-				return "", err
-			}
-			err = file.Close()
-			if err != nil {
-				return "", err
-			}
-			bs, err := io.ReadAll(tr)
-			if err != nil {
-				return "", err
-			}
-			return string(bs), nil
-		}
-	}
-	return "", errors.New("package does not contain a source.sh file")
-}
-
 func (pkgInfo *PackageInfo) GetAllDependencies(checkMake, checkOptional bool) []string {
 	allDepends := make([]string, 0)
 	allDepends = append(allDepends, pkgInfo.Depends...)
@@ -1386,7 +1348,7 @@ func IsPackageProvided(pkg, rootDir string) bool {
 		if p == pkg {
 			return true
 		}
-		i := GetPackageInfo(p, rootDir, true)
+		i := GetPackageInfo(p, rootDir)
 		if i == nil {
 			continue
 		}
@@ -1435,7 +1397,7 @@ func GetPackageFiles(pkg, rootDir string) []string {
 	return ret
 }
 
-func GetPackageInfo(pkg, rootDir string, defaultValues bool) *PackageInfo {
+func GetPackageInfo(pkg, rootDir string) *PackageInfo {
 	installedDir := path.Join(rootDir, "var/lib/bpm/installed/")
 	pkgDir := path.Join(installedDir, pkg)
 	files := path.Join(pkgDir, "info")
@@ -1463,7 +1425,7 @@ func GetPackageInfo(pkg, rootDir string, defaultValues bool) *PackageInfo {
 func RemovePackage(pkg string, verbose bool, rootDir string) error {
 	installedDir := path.Join(rootDir, "var/lib/bpm/installed/")
 	pkgDir := path.Join(installedDir, pkg)
-	pkgInfo := GetPackageInfo(pkg, rootDir, false)
+	pkgInfo := GetPackageInfo(pkg, rootDir)
 	if pkgInfo == nil {
 		return errors.New("could not get package info")
 	}
