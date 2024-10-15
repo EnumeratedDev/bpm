@@ -297,8 +297,6 @@ func resolveCommand() {
 			fmt.Printf("A total of %s will be installed after the operation finishes\n", utils.BytesToHumanReadable(operation.GetFinalActionSize(rootDir)))
 		} else if operation.GetFinalActionSize(rootDir) < 0 {
 			fmt.Printf("A total of %s will be freed after the operation finishes\n", utils.BytesToHumanReadable(operation.GetFinalActionSize(rootDir)))
-		} else {
-			fmt.Println()
 		}
 
 		if !yesAll {
