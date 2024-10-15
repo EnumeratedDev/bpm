@@ -2,7 +2,6 @@ package utils
 
 import (
 	"archive/tar"
-	"bytes"
 	"compress/gzip"
 	"errors"
 	"fmt"
@@ -488,18 +487,19 @@ func extractPackage(bpmpkg *BPMPackage, verbose bool, filename, rootDir string) 
 		return err, nil
 	}
 
-	content, err := ReadTarballContent(filename, "files.tar.gz")
+	tarballFile, err := ReadTarballContent(filename, "files.tar.gz")
 	if err != nil {
 		return err, nil
 	}
+	defer tarballFile.file.Close()
 
-	archive, err := gzip.NewReader(bytes.NewReader(content))
+	archive, err := gzip.NewReader(tarballFile.tarReader)
 	if err != nil {
 		return err, nil
 	}
-	tr := tar.NewReader(archive)
+	packageFilesReader := tar.NewReader(archive)
 	for {
-		header, err := tr.Next()
+		header, err := packageFilesReader.Next()
 		if err == io.EOF {
 			break
 		}
@@ -559,7 +559,7 @@ func extractPackage(bpmpkg *BPMPackage, verbose bool, filename, rootDir string) 
 			if err != nil {
 				return err, nil
 			}
-			if _, err := io.Copy(outFile, tr); err != nil {
+			if _, err := io.Copy(outFile, packageFilesReader); err != nil {
 				return err, nil
 			}
 			if err := os.Chmod(extractFilename, header.FileInfo().Mode()); err != nil {
@@ -1119,12 +1119,14 @@ func InstallPackage(filename, rootDir string, verbose, force, binaryPkgFromSrc, 
 	if err != nil {
 		return err
 	}
-	bs, err := ReadTarballContent(filename, "pkg.files")
+
+	tarballFile, err := ReadTarballContent(filename, "pkg.files")
 	if err != nil {
 		return err
 	}
-	_, err = f.Write(bs)
-	err = f.Close()
+	defer tarballFile.file.Close()
+
+	_, err = io.Copy(f, tarballFile.tarReader)
 	if err != nil {
 		return err
 	}
