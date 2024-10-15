@@ -44,6 +44,7 @@ type PackageInfo struct {
 
 type PackageFileEntry struct {
 	Path        string
+	OctalPerms  uint32
 	UserID      int
 	GroupID     int
 	SizeInBytes uint64
@@ -179,8 +180,12 @@ func ReadPackage(filename string) (*BPMPackage, error) {
 					continue
 				}
 				stringEntry := strings.Split(strings.TrimSpace(line), " ")
-				if len(stringEntry) < 4 {
+				if len(stringEntry) < 5 {
 					return nil, errors.New("pkg.files is not formatted correctly")
+				}
+				octalPerms, err := strconv.ParseUint(stringEntry[len(stringEntry)-4], 8, 32)
+				if err != nil {
+					return nil, err
 				}
 				uid, err := strconv.ParseInt(stringEntry[len(stringEntry)-3], 0, 32)
 				if err != nil {
@@ -195,7 +200,8 @@ func ReadPackage(filename string) (*BPMPackage, error) {
 					return nil, err
 				}
 				pkgFiles = append(pkgFiles, &PackageFileEntry{
-					Path:        strings.Join(stringEntry[:len(stringEntry)-3], " "),
+					Path:        strings.Join(stringEntry[:len(stringEntry)-4], " "),
+					OctalPerms:  uint32(octalPerms),
 					UserID:      int(uid),
 					GroupID:     int(gid),
 					SizeInBytes: size,
@@ -1393,16 +1399,21 @@ func GetPackageFiles(pkg, rootDir string) []*PackageFileEntry {
 			continue
 		}
 		stringEntry := strings.Split(strings.TrimSpace(line), " ")
-		if len(stringEntry) < 4 {
+		if len(stringEntry) < 5 {
 			pkgFiles = append(pkgFiles, &PackageFileEntry{
 				Path:        line,
+				OctalPerms:  0,
 				UserID:      0,
 				GroupID:     0,
 				SizeInBytes: 0,
 			})
 			continue
 		}
-		uid, err := strconv.ParseInt(stringEntry[len(stringEntry)-3], 0, 32)
+		uid, err := strconv.ParseInt(stringEntry[len(stringEntry)-4], 0, 32)
+		if err != nil {
+			return nil
+		}
+		octalPerms, err := strconv.ParseInt(stringEntry[len(stringEntry)-3], 0, 32)
 		if err != nil {
 			return nil
 		}
@@ -1415,7 +1426,8 @@ func GetPackageFiles(pkg, rootDir string) []*PackageFileEntry {
 			return nil
 		}
 		pkgFiles = append(pkgFiles, &PackageFileEntry{
-			Path:        strings.Join(stringEntry[:len(stringEntry)-3], " "),
+			Path:        strings.Join(stringEntry[:len(stringEntry)-4], " "),
+			OctalPerms:  uint32(octalPerms),
 			UserID:      int(uid),
 			GroupID:     int(gid),
 			SizeInBytes: size,
