@@ -238,31 +238,31 @@ func ReadPackageScripts(filename string) (map[string]string, error) {
 			return nil, err
 		}
 		if header.Name == "pre_install.sh" {
-			bs, _ := io.ReadAll(tr)
+			bs, err := io.ReadAll(tr)
 			if err != nil {
 				return nil, err
 			}
 			ret[header.Name] = string(bs)
 		} else if header.Name == "post_install.sh" {
-			bs, _ := io.ReadAll(tr)
+			bs, err := io.ReadAll(tr)
 			if err != nil {
 				return nil, err
 			}
 			ret[header.Name] = string(bs)
 		} else if header.Name == "pre_update.sh" {
-			bs, _ := io.ReadAll(tr)
+			bs, err := io.ReadAll(tr)
 			if err != nil {
 				return nil, err
 			}
 			ret[header.Name] = string(bs)
 		} else if header.Name == "post_update.sh" {
-			bs, _ := io.ReadAll(tr)
+			bs, err := io.ReadAll(tr)
 			if err != nil {
 				return nil, err
 			}
 			ret[header.Name] = string(bs)
 		} else if header.Name == "post_remove.sh" {
-			bs, _ := io.ReadAll(tr)
+			bs, err := io.ReadAll(tr)
 			if err != nil {
 				return nil, err
 			}
@@ -743,9 +743,6 @@ func compilePackage(bpmpkg *BPMPackage, filename, rootDir string, verbose, binar
 	}
 	if _, err := os.Stat(path.Join(temp, "source.sh")); os.IsNotExist(err) {
 		return errors.New("source.sh file could not be found in the temporary build directory"), nil
-	}
-	if err != nil {
-		return err, nil
 	}
 	fmt.Println("Running source.sh file...")
 	if !IsPackageInstalled(bpmpkg.PkgInfo.Name, rootDir) {
@@ -1301,7 +1298,7 @@ func (pkgInfo *PackageInfo) CheckConflicts(rootDir string) []string {
 	return ret
 }
 
-func (pkgInfo *PackageInfo) ResolveAll(resolved, unresolved *[]string, checkMake, checkOptional, ignoreInstalled, verbose bool, rootDir string) ([]string, []string) {
+func (pkgInfo *PackageInfo) ResolveDependencies(resolved, unresolved *[]string, checkMake, checkOptional, ignoreInstalled, verbose bool, rootDir string) ([]string, []string) {
 	*unresolved = append(*unresolved, pkgInfo.Name)
 	for _, depend := range pkgInfo.GetAllDependencies(checkMake, checkOptional) {
 		depend = strings.TrimSpace(depend)
@@ -1325,7 +1322,7 @@ func (pkgInfo *PackageInfo) ResolveAll(resolved, unresolved *[]string, checkMake
 				}
 				continue
 			}
-			entry.Info.ResolveAll(resolved, unresolved, checkMake, checkOptional, ignoreInstalled, verbose, rootDir)
+			entry.Info.ResolveDependencies(resolved, unresolved, checkMake, checkOptional, ignoreInstalled, verbose, rootDir)
 		}
 	}
 	if !slices.Contains(*resolved, pkgInfo.Name) {

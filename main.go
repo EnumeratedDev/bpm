@@ -4,7 +4,6 @@ import (
 	"bufio"
 	"flag"
 	"fmt"
-	"github.com/elliotchance/orderedmap/v2"
 	"gitlab.com/bubble-package-manager/bpm/utils"
 	"log"
 	"os"
@@ -174,8 +173,11 @@ func resolveCommand() {
 			return
 		}
 
-		operation := utils.BPMOperation{Actions: make([]utils.OperationAction, 0)}
-		unresolvedDepends := make([]string, 0)
+		operation := utils.BPMOperation{
+			Actions:           make([]utils.OperationAction, 0),
+			UnresolvedDepends: make([]string, 0),
+			RootDir:           rootDir,
+		}
 
 		// Search for packages
 		for _, pkg := range pkgs {
@@ -206,99 +208,24 @@ func resolveCommand() {
 				})
 			}
 		}
-		pos := 0
-		for _, value := range slices.Clone(operation.Actions) {
-			var resolved, unresolved []string
-			var pkgInfo *utils.PackageInfo
-			if value.GetActionType() == "install" {
-				action := value.(*utils.InstallPackageAction)
-				pkgInfo = action.BpmPackage.PkgInfo
-			} else if value.GetActionType() == "fetch" {
-				action := value.(*utils.FetchPackageAction)
-				pkgInfo = action.RepositoryEntry.Info
-			}
 
-			resolved, unresolved = pkgInfo.ResolveAll(&[]string{}, &[]string{}, pkgInfo.Type == "source", !noOptional, !reinstallAll, verbose, rootDir)
-
-			unresolvedDepends = append(unresolvedDepends, unresolved...)
-			for _, depend := range resolved {
-				if !operation.ActionsContainPackage(depend) && depend != pkgInfo.Name {
-					if !reinstallAll && utils.IsPackageInstalled(depend, rootDir) {
-						continue
-					}
-					entry, _, err := utils.GetRepositoryEntry(depend)
-					if err != nil {
-						log.Fatalf("Error: could not find package (%s) in any repository\n", pkgInfo.Name)
-					}
-					operation.InsertActionAt(pos, &utils.FetchPackageAction{
-						IsDependency:    true,
-						RepositoryEntry: entry,
-					})
-					pos++
-				}
-			}
-			pos++
+		// Resolve dependencies
+		err := operation.ResolveDependencies(reinstallAll, !noOptional, verbose)
+		if err != nil {
+			log.Fatalf("Error: could not resolve dependencies: %s\n", err)
 		}
-
-		// Show summary
-		if len(unresolvedDepends) != 0 {
+		if len(operation.UnresolvedDepends) != 0 {
 			if !force {
-				log.Fatalf("Error: the following dependencies could not be found in any repositories: %s\n", strings.Join(unresolvedDepends, ", "))
+				log.Fatalf("Error: the following dependencies could not be found in any repositories: %s\n", strings.Join(operation.UnresolvedDepends, ", "))
 			} else {
-				log.Println("Warning: The following dependencies could not be found in any repositories: " + strings.Join(unresolvedDepends, ", "))
-			}
-		}
-		if len(operation.Actions) == 0 {
-			fmt.Println("All packages are up to date!")
-			os.Exit(0)
-		}
-
-		for _, value := range operation.Actions {
-			var pkgInfo *utils.PackageInfo
-			if value.GetActionType() == "install" {
-				pkgInfo = value.(*utils.InstallPackageAction).BpmPackage.PkgInfo
-			} else if value.GetActionType() == "fetch" {
-				pkgInfo = value.(*utils.FetchPackageAction).RepositoryEntry.Info
-			} else {
-				pkgInfo = value.(*utils.RemovePackageAction).BpmPackage.PkgInfo
-				fmt.Printf("%s: %s (Remove)\n", pkgInfo.Name, pkgInfo.GetFullVersion())
-			}
-
-			installedInfo := utils.GetPackageInfo(pkgInfo.Name, rootDir)
-			sourceInfo := ""
-			if pkgInfo.Type == "source" {
-				if rootDir != "/" && !force {
-					log.Fatalf("Error: cannot compile and install source packages to a different root directory")
-				}
-				sourceInfo = "(From Source)"
-			}
-
-			if installedInfo == nil {
-				fmt.Printf("%s: %s (Install) %s\n", pkgInfo.Name, pkgInfo.GetFullVersion(), sourceInfo)
-			} else {
-				comparison := utils.ComparePackageVersions(*pkgInfo, *installedInfo)
-				if comparison < 0 {
-					fmt.Printf("%s: %s -> %s (Downgrade) %s\n", pkgInfo.Name, installedInfo.GetFullVersion(), pkgInfo.GetFullVersion(), sourceInfo)
-				} else if comparison > 0 {
-					fmt.Printf("%s: %s -> %s (Upgrade) %s\n", pkgInfo.Name, installedInfo.GetFullVersion(), pkgInfo.GetFullVersion(), sourceInfo)
-				} else {
-					fmt.Printf("%s: %s (Reinstall) %s\n", pkgInfo.Name, pkgInfo.GetFullVersion(), sourceInfo)
-				}
+				log.Println("Warning: The following dependencies could not be found in any repositories: " + strings.Join(operation.UnresolvedDepends, ", "))
 			}
 		}
 
-		if rootDir != "/" {
-			fmt.Println("Warning: Operating in " + rootDir)
-		}
-		if operation.GetTotalDownloadSize() > 0 {
-			fmt.Printf("%s will be downloaded to complete this operation\n", utils.BytesToHumanReadable(operation.GetTotalDownloadSize()))
-		}
-		if operation.GetFinalActionSize(rootDir) > 0 {
-			fmt.Printf("A total of %s will be installed after the operation finishes\n", utils.BytesToHumanReadable(operation.GetFinalActionSize(rootDir)))
-		} else if operation.GetFinalActionSize(rootDir) < 0 {
-			fmt.Printf("A total of %s will be freed after the operation finishes\n", utils.BytesToHumanReadable(operation.GetFinalActionSize(rootDir)))
-		}
+		// Show operation summary
+		operation.ShowOperationSummary()
 
+		// Confirmation Prompt
 		if !yesAll {
 			reader := bufio.NewReader(os.Stdin)
 			if len(operation.Actions) == 1 {
@@ -309,64 +236,15 @@ func resolveCommand() {
 
 			text, _ := reader.ReadString('\n')
 			if strings.TrimSpace(strings.ToLower(text)) != "y" && strings.TrimSpace(strings.ToLower(text)) != "yes" {
-				fmt.Println("Cancelling...")
+				fmt.Println("Cancelling package installation...")
 				os.Exit(1)
 			}
 		}
 
-		// Fetch packages from repositories
-		fmt.Println("Fetching packages from available repositories...")
-		for i, action := range operation.Actions {
-			if action.GetActionType() != "fetch" {
-				continue
-			}
-			entry := action.(*utils.FetchPackageAction).RepositoryEntry
-			fetchedPackage, err := entry.Repository.FetchPackage(entry.Info.Name)
-			if err != nil {
-				log.Fatalf("Error: could not fetch package (%s): %s\n", entry.Info.Name, err)
-			}
-			bpmpkg, err := utils.ReadPackage(fetchedPackage)
-			if err != nil {
-				log.Fatalf("Error: could not fetch package (%s): %s\n", entry.Info.Name, err)
-			}
-			fmt.Printf("Package (%s) was successfully fetched!\n", bpmpkg.PkgInfo.Name)
-			operation.Actions[i] = &utils.InstallPackageAction{
-				File:         fetchedPackage,
-				IsDependency: action.(*utils.FetchPackageAction).IsDependency,
-				BpmPackage:   bpmpkg,
-			}
-		}
-
-		// Install fetched packages
-		for _, action := range operation.Actions {
-			if action.GetActionType() != "install" {
-				continue
-			}
-			value := action.(*utils.InstallPackageAction)
-			bpmpkg := value.BpmPackage
-			var err error
-			if value.IsDependency {
-				err = utils.InstallPackage(value.File, rootDir, verbose, true, buildSource, skipCheck, keepTempDir)
-			} else {
-				err = utils.InstallPackage(value.File, rootDir, verbose, force, buildSource, skipCheck, keepTempDir)
-			}
-
-			if err != nil {
-				if bpmpkg.PkgInfo.Type == "source" && keepTempDir {
-					fmt.Println("BPM temp directory was created at /var/tmp/bpm_source-" + bpmpkg.PkgInfo.Name)
-				}
-				log.Fatalf("Error: could not install package (%s): %s\n", bpmpkg.PkgInfo.Name, err)
-			}
-			fmt.Printf("Package (%s) was successfully installed\n", bpmpkg.PkgInfo.Name)
-			if value.IsDependency {
-				err := utils.SetInstallationReason(bpmpkg.PkgInfo.Name, utils.Dependency, rootDir)
-				if err != nil {
-					log.Fatalf("Error: could not set installation reason for package: %s\n", err)
-				}
-			}
-			if bpmpkg.PkgInfo.Type == "source" && keepTempDir {
-				fmt.Println("** It is recommended you delete the temporary bpm folder in /var/tmp **")
-			}
+		// Execute operation
+		err = operation.Execute(verbose, force)
+		if err != nil {
+			log.Fatalf("Error: could not complete operation: %s\n", err)
 		}
 	case update:
 		if os.Getuid() != 0 {
@@ -392,10 +270,14 @@ func resolveCommand() {
 		if err != nil {
 			log.Fatalf("Error: could not get installed packages: %s\n", err)
 		}
-		toUpdate := orderedmap.NewOrderedMap[string, *struct {
-			isDependency bool
-			entry        *utils.RepositoryEntry
-		}]()
+
+		operation := utils.BPMOperation{
+			Actions:           make([]utils.OperationAction, 0),
+			UnresolvedDepends: make([]string, 0),
+			RootDir:           rootDir,
+		}
+
+		// Search for packages
 		for _, pkg := range pkgs {
 			entry, _, err := utils.GetRepositoryEntry(pkg)
 			if err != nil {
@@ -406,131 +288,46 @@ func resolveCommand() {
 				log.Fatalf("Error: could not get package info for (%s)\n", pkg)
 			} else {
 				comparison := utils.ComparePackageVersions(*entry.Info, *installedInfo)
-				if comparison > 0 {
-					toUpdate.Set(entry.Info.Name, &struct {
-						isDependency bool
-						entry        *utils.RepositoryEntry
-					}{isDependency: false, entry: entry})
-				} else if reinstall {
-					toUpdate.Set(entry.Info.Name, &struct {
-						isDependency bool
-						entry        *utils.RepositoryEntry
-					}{isDependency: false, entry: entry})
+				if comparison > 0 || reinstall {
+					operation.Actions = append(operation.Actions, &utils.FetchPackageAction{
+						IsDependency:    false,
+						RepositoryEntry: entry,
+					})
 				}
 			}
-		}
-		if toUpdate.Len() == 0 {
-			fmt.Println("All packages are up to date!")
-			os.Exit(0)
 		}
 
 		// Check for new dependencies in updated packages
-		unresolved := make([]string, 0)
-		clone := toUpdate.Copy()
-		for _, key := range clone.Keys() {
-			pkg, _ := clone.Get(key)
-			r, u := pkg.entry.Info.ResolveAll(&[]string{}, &[]string{}, pkg.entry.Info.Type == "source", !noOptional, true, verbose, rootDir)
-			unresolved = append(unresolved, u...)
-			for _, depend := range r {
-				if _, ok := toUpdate.Get(depend); !ok {
-					entry, _, err := utils.GetRepositoryEntry(depend)
-					if err != nil {
-						log.Fatalf("Error: could not find package (%s) in any repository\n", depend)
-					}
-					toUpdate.Set(depend, &struct {
-						isDependency bool
-						entry        *utils.RepositoryEntry
-					}{isDependency: true, entry: entry})
-				}
-			}
+		err = operation.ResolveDependencies(reinstallAll, !noOptional, verbose)
+		if err != nil {
+			log.Fatalf("Error: could not resolve dependencies: %s\n", err)
 		}
-
-		if len(unresolved) != 0 {
+		if len(operation.UnresolvedDepends) != 0 {
 			if !force {
-				log.Fatalf("Error: the following dependencies could not be found in any repositories: %s\n", strings.Join(unresolved, ", "))
+				log.Fatalf("Error: the following dependencies could not be found in any repositories: %s\n", strings.Join(operation.UnresolvedDepends, ", "))
 			} else {
-				log.Printf("Warning: the following dependencies could not be found in any repositories: %s\n", strings.Join(unresolved, ", "))
+				log.Println("Warning: The following dependencies could not be found in any repositories: " + strings.Join(operation.UnresolvedDepends, ", "))
 			}
 		}
 
-		for _, key := range toUpdate.Keys() {
-			value, _ := toUpdate.Get(key)
-			installedInfo := utils.GetPackageInfo(value.entry.Info.Name, rootDir)
-			sourceInfo := ""
-			if value.entry.Info.Type == "source" {
-				sourceInfo = "(From Source)"
-			}
-			if installedInfo == nil {
-				fmt.Printf("%s: %s (Install) %s\n", value.entry.Info.Name, value.entry.Info.GetFullVersion(), sourceInfo)
-				continue
-			} else {
-				comparison := utils.ComparePackageVersions(*value.entry.Info, *installedInfo)
-				if comparison > 0 {
-					fmt.Printf("%s: %s -> %s (Upgrade) %s\n", value.entry.Info.Name, installedInfo.GetFullVersion(), value.entry.Info.GetFullVersion(), sourceInfo)
-				} else if reinstall {
-					fmt.Printf("%s: %s -> %s (Reinstall) %s\n", value.entry.Info.Name, installedInfo.GetFullVersion(), value.entry.Info.GetFullVersion(), sourceInfo)
-				}
-			}
-		}
+		// Show operation summary
+		operation.ShowOperationSummary()
 
-		// Update confirmation prompt
+		// Confirmation Prompt
 		if !yesAll {
-			fmt.Printf("Are you sure you wish to update all %d packages? [y\\N] ", toUpdate.Len())
+			fmt.Printf("Are you sure you wish to update all %d packages? [y\\N] ", len(operation.Actions))
 			reader := bufio.NewReader(os.Stdin)
 			text, _ := reader.ReadString('\n')
 			if strings.TrimSpace(strings.ToLower(text)) != "y" && strings.TrimSpace(strings.ToLower(text)) != "yes" {
-				fmt.Println("Cancelling update...")
+				fmt.Println("Cancelling package update...")
 				os.Exit(1)
 			}
 		}
 
-		// Fetch packages
-		pkgsToInstall := orderedmap.NewOrderedMap[string, *struct {
-			isDependency bool
-			entry        *utils.RepositoryEntry
-		}]()
-		fmt.Println("Fetching packages from available repositories...")
-		for _, pkg := range toUpdate.Keys() {
-			value, _ := toUpdate.Get(pkg)
-			entry, repo, err := utils.GetRepositoryEntry(pkg)
-			if err != nil {
-				log.Fatalf("Error: could not find package (%s) in any repository\n", pkg)
-			}
-			fetchedPackage, err := repo.FetchPackage(entry.Info.Name)
-			if err != nil {
-				log.Fatalf("Error: could not fetch package (%s): %s\n", pkg, err)
-			}
-			fmt.Printf("Package (%s) was successfully fetched!\n", value.entry.Info.Name)
-			pkgsToInstall.Set(fetchedPackage, value)
-		}
-
-		// Install fetched packages
-		for _, pkg := range pkgsToInstall.Keys() {
-			value, _ := pkgsToInstall.Get(pkg)
-			pkgInfo := value.entry.Info
-			var err error
-			if value.isDependency {
-				err = utils.InstallPackage(pkg, rootDir, verbose, true, buildSource, skipCheck, keepTempDir)
-			} else {
-				err = utils.InstallPackage(pkg, rootDir, verbose, force, buildSource, skipCheck, keepTempDir)
-			}
-
-			if err != nil {
-				if pkgInfo.Type == "source" && keepTempDir {
-					fmt.Println("BPM temp directory was created at /var/tmp/bpm_source-" + pkgInfo.Name)
-				}
-				log.Fatalf("Error: could not install package (%s): %s\n", pkg, err)
-			}
-			fmt.Printf("Package (%s) was successfully installed!\n", pkgInfo.Name)
-			if value.isDependency {
-				err := utils.SetInstallationReason(pkgInfo.Name, utils.Dependency, rootDir)
-				if err != nil {
-					log.Fatalf("Error: could not set installation reason for package: %s\n", err)
-				}
-			}
-			if pkgInfo.Type == "source" && keepTempDir {
-				fmt.Println("** It is recommended you delete the temporary bpm folder in /var/tmp **")
-			}
+		// Execute operation
+		err = operation.Execute(verbose, force)
+		if err != nil {
+			log.Fatalf("Error: could not complete operation: %s\n", err)
 		}
 	case sync:
 		if os.Getuid() != 0 {
@@ -541,7 +338,7 @@ func resolveCommand() {
 			reader := bufio.NewReader(os.Stdin)
 			text, _ := reader.ReadString('\n')
 			if strings.TrimSpace(strings.ToLower(text)) != "y" && strings.TrimSpace(strings.ToLower(text)) != "yes" {
-				fmt.Println("Cancelling sync...")
+				fmt.Println("Cancelling database synchronization...")
 				os.Exit(1)
 			}
 		}
@@ -562,32 +359,40 @@ func resolveCommand() {
 			fmt.Println("No packages were given")
 			return
 		}
-		for _, pkg := range packages {
-			pkgInfo := utils.GetPackageInfo(pkg, rootDir)
-			if pkgInfo == nil {
-				fmt.Printf("Package (%s) could not be found\n", pkg)
-				continue
-			}
-			fmt.Println("----------------\n" + utils.CreateReadableInfo(false, false, false, pkgInfo, rootDir))
-			fmt.Println("----------------")
-			if rootDir != "/" {
-				fmt.Println("Warning: Operating in " + rootDir)
-			}
-			if !yesAll {
-				reader := bufio.NewReader(os.Stdin)
-				fmt.Print("Do you wish to remove this package? [y\\N] ")
-				text, _ := reader.ReadString('\n')
-				if strings.TrimSpace(strings.ToLower(text)) != "y" && strings.TrimSpace(strings.ToLower(text)) != "yes" {
-					fmt.Printf("Skipping package (%s)...\n", pkgInfo.Name)
-					continue
-				}
-			}
-			err := utils.RemovePackage(pkg, verbose, rootDir)
 
-			if err != nil {
-				log.Fatalf("Error: could not remove package: %s\n", err)
+		operation := &utils.BPMOperation{
+			Actions:           make([]utils.OperationAction, 0),
+			UnresolvedDepends: make([]string, 0),
+			RootDir:           rootDir,
+		}
+
+		// Search for packages
+		for _, pkg := range packages {
+			bpmpkg := utils.GetPackage(pkg, rootDir)
+			if bpmpkg == nil {
+				log.Fatalf("Error: package (%s) could not be found\n", pkg)
 			}
-			fmt.Printf("Package (%s) was successfully removed!\n", pkgInfo.Name)
+			operation.Actions = append(operation.Actions, &utils.RemovePackageAction{BpmPackage: bpmpkg})
+		}
+
+		// Show operation summary
+		operation.ShowOperationSummary()
+
+		// Confirmation Prompt
+		if !yesAll {
+			fmt.Printf("Are you sure you wish to remove all %d packages? [y\\N] ", len(operation.Actions))
+			reader := bufio.NewReader(os.Stdin)
+			text, _ := reader.ReadString('\n')
+			if strings.TrimSpace(strings.ToLower(text)) != "y" && strings.TrimSpace(strings.ToLower(text)) != "yes" {
+				fmt.Println("Cancelling package removal...")
+				os.Exit(1)
+			}
+		}
+
+		// Execute operation
+		err := operation.Execute(verbose, force)
+		if err != nil {
+			log.Fatalf("Error: could not complete operation: %s\n", err)
 		}
 	case file:
 		files := subcommandArgs
