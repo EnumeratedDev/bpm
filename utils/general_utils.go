@@ -5,16 +5,22 @@ import (
 	"io"
 	"math"
 	"os"
-	"os/exec"
-	"strings"
+	"syscall"
 )
 
 func GetArch() string {
-	output, err := exec.Command("/usr/bin/uname", "-m").Output()
+	uname := syscall.Utsname{}
+	err := syscall.Uname(&uname)
 	if err != nil {
 		return ""
 	}
-	return strings.TrimSpace(string(output))
+
+	var byteString [65]byte
+	var indexLength int
+	for ; uname.Machine[indexLength] != 0; indexLength++ {
+		byteString[indexLength] = uint8(uname.Machine[indexLength])
+	}
+	return string(byteString[:indexLength])
 }
 
 func copyFileContents(src, dst string) (err error) {
