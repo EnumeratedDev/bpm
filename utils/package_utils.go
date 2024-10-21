@@ -14,6 +14,7 @@ import (
 	"path"
 	"path/filepath"
 	"slices"
+	"sort"
 	"strconv"
 	"strings"
 	"syscall"
@@ -148,6 +149,7 @@ func ReadPackage(filename string) (*BPMPackage, error) {
 	var pkgFiles []*PackageFileEntry
 
 	if _, err := os.Stat(filename); os.IsNotExist(err) {
+		fmt.Println("a")
 		return nil, err
 	}
 
@@ -468,34 +470,33 @@ func CreateReadableInfo(showArchitecture, showType, showPackageRelations bool, p
 	return strings.Join(ret, "\n")
 }
 
-func extractPackage(bpmpkg *BPMPackage, verbose bool, filename, rootDir string) (error, []string) {
-	var files []string
+func extractPackage(bpmpkg *BPMPackage, verbose bool, filename, rootDir string) error {
 	if !IsPackageInstalled(bpmpkg.PkgInfo.Name, rootDir) {
 		err := ExecutePackageScripts(filename, rootDir, Install, false)
 		if err != nil {
-			return err, nil
+			return err
 		}
 	} else {
 		err := ExecutePackageScripts(filename, rootDir, Update, false)
 		if err != nil {
-			return err, nil
+			return err
 		}
 	}
 	seenHardlinks := make(map[string]string)
 	file, err := os.Open(filename)
 	if err != nil {
-		return err, nil
+		return err
 	}
 
 	tarballFile, err := ReadTarballContent(filename, "files.tar.gz")
 	if err != nil {
-		return err, nil
+		return err
 	}
 	defer tarballFile.file.Close()
 
 	archive, err := gzip.NewReader(tarballFile.tarReader)
 	if err != nil {
-		return err, nil
+		return err
 	}
 	packageFilesReader := tar.NewReader(archive)
 	for {
@@ -504,15 +505,14 @@ func extractPackage(bpmpkg *BPMPackage, verbose bool, filename, rootDir string) 
 			break
 		}
 		if err != nil {
-			return err, nil
+			return err
 		}
 		extractFilename := path.Join(rootDir, header.Name)
 		switch header.Typeflag {
 		case tar.TypeDir:
-			files = append(files, strings.TrimPrefix(header.Name, "./"))
 			if err := os.Mkdir(extractFilename, 0755); err != nil {
 				if !os.IsExist(err) {
-					return err, nil
+					return err
 				}
 			} else {
 				if verbose {
@@ -526,18 +526,16 @@ func extractPackage(bpmpkg *BPMPackage, verbose bool, filename, rootDir string) 
 					if strings.HasSuffix(k, "/") {
 						if strings.HasPrefix(header.Name, k) {
 							if verbose {
-								fmt.Println("Skipping File: " + extractFilename + " (Containing directory is set to be kept during installs/updates)")
+								fmt.Println("Skipping File: " + extractFilename + " (Containing directory is set to be kept during reinstalls/updates)")
 							}
-							files = append(files, strings.TrimPrefix(header.Name, "./"))
 							skip = true
 							continue
 						}
 					} else {
 						if header.Name == k {
 							if verbose {
-								fmt.Println("Skipping File: " + extractFilename + " (File is configured to be kept during installs/updates)")
+								fmt.Println("Skipping File: " + extractFilename + " (File is configured to be kept during reinstalls/updates)")
 							}
-							files = append(files, strings.TrimPrefix(header.Name, "./"))
 							skip = true
 							continue
 						}
@@ -549,51 +547,48 @@ func extractPackage(bpmpkg *BPMPackage, verbose bool, filename, rootDir string) 
 			}
 			err := os.Remove(extractFilename)
 			if err != nil && !os.IsNotExist(err) {
-				return err, nil
+				return err
 			}
 			outFile, err := os.Create(extractFilename)
 			if verbose {
 				fmt.Println("Creating File: " + extractFilename)
 			}
-			files = append(files, strings.TrimPrefix(header.Name, "./"))
 			if err != nil {
-				return err, nil
+				return err
 			}
 			if _, err := io.Copy(outFile, packageFilesReader); err != nil {
-				return err, nil
+				return err
 			}
 			if err := os.Chmod(extractFilename, header.FileInfo().Mode()); err != nil {
-				return err, nil
+				return err
 			}
 			err = outFile.Close()
 			if err != nil {
-				return err, nil
+				return err
 			}
 		case tar.TypeSymlink:
 			if verbose {
 				fmt.Println("Creating Symlink: " + extractFilename + " -> " + header.Linkname)
 			}
-			files = append(files, strings.TrimPrefix(header.Name, "./"))
 			err := os.Remove(extractFilename)
 			if err != nil && !os.IsNotExist(err) {
-				return err, nil
+				return err
 			}
 			err = os.Symlink(header.Linkname, extractFilename)
 			if err != nil {
-				return err, nil
+				return err
 			}
 		case tar.TypeLink:
 			if verbose {
 				fmt.Println("Detected Hard Link: " + extractFilename + " -> " + path.Join(rootDir, strings.TrimPrefix(header.Linkname, "files/")))
 			}
-			files = append(files, strings.TrimPrefix(header.Name, "./"))
 			seenHardlinks[extractFilename] = path.Join(strings.TrimPrefix(header.Linkname, "files/"))
 			err := os.Remove(extractFilename)
 			if err != nil && !os.IsNotExist(err) {
-				return err, nil
+				return err
 			}
 		default:
-			return errors.New("unknown type (" + strconv.Itoa(int(header.Typeflag)) + ") in " + extractFilename), nil
+			return errors.New("unknown type (" + strconv.Itoa(int(header.Typeflag)) + ") in " + extractFilename)
 		}
 	}
 	for extractFilename, destination := range seenHardlinks {
@@ -602,12 +597,12 @@ func extractPackage(bpmpkg *BPMPackage, verbose bool, filename, rootDir string) 
 		}
 		err := os.Link(path.Join(rootDir, destination), extractFilename)
 		if err != nil {
-			return err, nil
+			return err
 		}
 	}
 	defer archive.Close()
 	defer file.Close()
-	return nil, files
+	return nil
 }
 
 func isSplitPackage(filename string) bool {
@@ -1054,17 +1049,103 @@ func InstallPackage(filename, rootDir string, verbose, force, binaryPkgFromSrc, 
 	if _, err := os.Stat(filename); os.IsNotExist(err) {
 		return err
 	}
-	var oldFiles []string
-	var files []string
 	bpmpkg, err := ReadPackage(filename)
 	if err != nil {
 		return err
 	}
 	packageInstalled := IsPackageInstalled(bpmpkg.PkgInfo.Name, rootDir)
+	// Check if package is installed and remove current files
 	if packageInstalled {
+		// Fetching and reversing package file entry list
 		fileEntries := GetPackageFiles(bpmpkg.PkgInfo.Name, rootDir)
+		sort.Slice(fileEntries, func(i, j int) bool {
+			return fileEntries[i].Path < fileEntries[j].Path
+		})
+		slices.Reverse(fileEntries)
+		files, err := GetAllPackageFiles(rootDir, bpmpkg.PkgInfo.Name)
+		if err != nil {
+			return err
+		}
+
+		// Removing old package files
+		if verbose {
+			fmt.Printf("Removing old files for package (%s)...\n", bpmpkg.PkgInfo.Name)
+		}
 		for _, entry := range fileEntries {
-			files = append(files, entry.Path)
+			file := path.Join(rootDir, entry.Path)
+			stat, err := os.Lstat(file)
+			if os.IsNotExist(err) {
+				continue
+			}
+			if err != nil {
+				return err
+			}
+			if len(files[entry.Path]) != 0 {
+				if verbose {
+					fmt.Println("Skipping path: " + file + " (Path is managed by multiple packages)")
+				}
+				continue
+			}
+			shouldContinue := false
+			for _, value := range bpmpkg.PkgInfo.Keep {
+				if strings.HasSuffix(value, "/") {
+					if strings.HasPrefix(entry.Path, value) || entry.Path == strings.TrimSuffix(value, "/") {
+						if verbose {
+							fmt.Println("Skipping path: " + file + " (Path is set to be kept during reinstalls/updates)")
+						}
+						shouldContinue = true
+						continue
+					}
+				} else {
+					if entry.Path == value {
+						if verbose {
+							fmt.Println("Skipping path: " + file + " (Path is set to be kept during reinstalls/updates)")
+						}
+						shouldContinue = true
+						continue
+					}
+				}
+			}
+			if shouldContinue {
+				continue
+			}
+			if stat.Mode()&os.ModeSymlink != 0 {
+				if verbose {
+					fmt.Println("Removing: " + file)
+				}
+				err := os.Remove(file)
+				if err != nil {
+					return err
+				}
+				continue
+			}
+			if stat.IsDir() {
+				dir, err := os.ReadDir(file)
+				if err != nil {
+					return err
+				}
+				if len(dir) != 0 {
+					if verbose {
+						fmt.Println("Skipping non-empty directory: " + file)
+					}
+					continue
+				}
+				if verbose {
+					fmt.Println("Removing: " + file)
+				}
+				err = os.Remove(file)
+				if err != nil {
+					return err
+				}
+			} else {
+				if verbose {
+					fmt.Println("Removing: " + file)
+				}
+				err := os.Remove(file)
+				if err != nil {
+					return err
+				}
+			}
 		}
 	}
 	if !force {
@@ -1072,30 +1153,27 @@ func InstallPackage(filename, rootDir string, verbose, force, binaryPkgFromSrc, 
 			return errors.New("cannot install a package with a different architecture")
 		}
 	}
+
+	if verbose {
+		fmt.Printf("Extracting files for package (%s)...\n", bpmpkg.PkgInfo.Name)
+	}
+
 	if bpmpkg.PkgInfo.Type == "binary" {
-		err, i := extractPackage(bpmpkg, verbose, filename, rootDir)
+		err := extractPackage(bpmpkg, verbose, filename, rootDir)
 		if err != nil {
 			return err
 		}
-		files = i
 	} else if bpmpkg.PkgInfo.Type == "source" {
 		if isSplitPackage(filename) {
 			return errors.New("BPM is unable to install split source packages")
 		}
-		err, i := compilePackage(bpmpkg, filename, rootDir, verbose, binaryPkgFromSrc, skipCheck, keepTempDir)
+		err, _ := compilePackage(bpmpkg, filename, rootDir, verbose, binaryPkgFromSrc, skipCheck, keepTempDir)
 		if err != nil {
 			return err
 		}
-		files = i
 	} else {
 		return errors.New("unknown package type: " + bpmpkg.PkgInfo.Type)
 	}
-	slices.Sort(files)
-	slices.Reverse(files)
-
-	filesDiff := slices.DeleteFunc(oldFiles, func(f string) bool {
-		return slices.Contains(files, f)
-	})
 
 	installedDir := path.Join(rootDir, "var/lib/bpm/installed/")
 	err = os.MkdirAll(installedDir, 0755)
@@ -1164,79 +1242,6 @@ func InstallPackage(filename, rootDir string, verbose, force, binaryPkgFromSrc, 
 		}
 	}
 
-	if len(filesDiff) != 0 {
-		fmt.Println("Removing obsolete files...")
-		var symlinks []string
-		for _, f := range filesDiff {
-			f = path.Join(rootDir, f)
-			lstat, err := os.Lstat(f)
-			if os.IsNotExist(err) {
-				continue
-			} else if err != nil {
-				return err
-			}
-			if lstat.Mode()&os.ModeSymlink != 0 {
-				symlinks = append(symlinks, f)
-				continue
-			}
-			stat, err := os.Stat(f)
-			if os.IsNotExist(err) {
-				continue
-			} else if err != nil {
-				return err
-			}
-			if stat.IsDir() {
-				dir, err := os.ReadDir(f)
-				if err != nil {
-					return err
-				}
-				if len(dir) == 0 {
-					if verbose {
-						fmt.Println("Removing: " + f)
-					}
-					err := os.Remove(f)
-					if err != nil {
-						return err
-					}
-				}
-			} else {
-				if verbose {
-					fmt.Println("Removing: " + f)
-				}
-				err := os.Remove(f)
-				if err != nil {
-					return err
-				}
-			}
-		}
-		removals := -1
-		for len(symlinks) > 0 && removals != 0 {
-			removals = 0
-			for i := len(symlinks) - 1; i >= 0; i-- {
-				f := symlinks[i]
-				f = path.Join(rootDir, f)
-				_, err := os.Lstat(f)
-				if os.IsNotExist(err) {
-					continue
-				} else if err != nil {
-					return err
-				}
-				_, err = filepath.EvalSymlinks(f)
-				if os.IsNotExist(err) {
-					err := os.Remove(f)
-					if err != nil {
-						return err
-					}
-					removals++
-					if verbose {
-						fmt.Println("Removing: " + f)
-					}
-				} else if err != nil {
-					return err
-				}
-			}
-		}
-	}
 	if !packageInstalled {
 		err = ExecutePackageScripts(filename, rootDir, Install, true)
 		if err != nil {
@@ -1400,7 +1405,7 @@ func GetPackageFiles(pkg, rootDir string) []*PackageFileEntry {
 		stringEntry := strings.Split(strings.TrimSpace(line), " ")
 		if len(stringEntry) < 5 {
 			pkgFiles = append(pkgFiles, &PackageFileEntry{
-				Path:        line,
+				Path:        strings.TrimSuffix(line, "/"),
 				OctalPerms:  0,
 				UserID:      0,
 				GroupID:     0,
@@ -1425,7 +1430,7 @@ func GetPackageFiles(pkg, rootDir string) []*PackageFileEntry {
 			return nil
 		}
 		pkgFiles = append(pkgFiles, &PackageFileEntry{
-			Path:        strings.Join(stringEntry[:len(stringEntry)-4], " "),
+			Path:        strings.TrimSuffix(strings.Join(stringEntry[:len(stringEntry)-4], " "), "/"),
 			OctalPerms:  uint32(octalPerms),
 			UserID:      int(uid),
 			GroupID:     int(gid),
@@ -1472,6 +1477,34 @@ func GetPackage(pkg, rootDir string) *BPMPackage {
 	}
 }
 
+func GetAllPackageFiles(rootDir string, excludePackages ...string) (map[string][]*BPMPackage, error) {
+	ret := make(map[string][]*BPMPackage)
+
+	pkgNames, err := GetInstalledPackages(rootDir)
+	if err != nil {
+		return nil, err
+	}
+
+	for _, pkgName := range pkgNames {
+		if slices.Contains(excludePackages, pkgName) {
+			continue
+		}
+		bpmpkg := GetPackage(pkgName, rootDir)
+		if bpmpkg == nil {
+			return nil, errors.New(fmt.Sprintf("could not get BPM package (%s)", pkgName))
+		}
+		for _, entry := range bpmpkg.PkgFiles {
+			if _, ok := ret[entry.Path]; ok {
+				ret[entry.Path] = append(ret[entry.Path], bpmpkg)
+			} else {
+				ret[entry.Path] = []*BPMPackage{bpmpkg}
+			}
+		}
+	}
+
+	return ret, nil
+}
+
 func RemovePackage(pkg string, verbose bool, rootDir string) error {
 	installedDir := path.Join(rootDir, "var/lib/bpm/installed/")
 	pkgDir := path.Join(installedDir, pkg)
@@ -1479,8 +1512,19 @@ func RemovePackage(pkg string, verbose bool, rootDir string) error {
 	if pkgInfo == nil {
 		return errors.New("could not get package info")
 	}
+
+	// Fetching and reversing package file entry list
 	fileEntries := GetPackageFiles(pkg, rootDir)
-	var symlinks []string
+	sort.Slice(fileEntries, func(i, j int) bool {
+		return fileEntries[i].Path < fileEntries[j].Path
+	})
+	slices.Reverse(fileEntries)
+	files, err := GetAllPackageFiles(rootDir, pkg)
+	if err != nil {
+		return err
+	}
+
+	// Removing package files
 	for _, entry := range fileEntries {
 		file := path.Join(rootDir, entry.Path)
 		lstat, err := os.Lstat(file)
@@ -1490,8 +1534,20 @@ func RemovePackage(pkg string, verbose bool, rootDir string) error {
 		if err != nil {
 			return err
 		}
+		if len(files[entry.Path]) != 0 {
+			if verbose {
+				fmt.Println("Skipping path: " + file + "(Path is managed by multiple packages)")
+			}
+			continue
+		}
 		if lstat.Mode()&os.ModeSymlink != 0 {
-			symlinks = append(symlinks, file)
+			if verbose {
+				fmt.Println("Removing: " + file)
+			}
+			err := os.Remove(file)
+			if err != nil {
+				return err
+			}
 			continue
 		}
 		stat, err := os.Stat(file)
@@ -1506,14 +1562,18 @@ func RemovePackage(pkg string, verbose bool, rootDir string) error {
 			if err != nil {
 				return err
 			}
-			if len(dir) == 0 {
+			if len(dir) != 0 {
 				if verbose {
-					fmt.Println("Removing: " + file)
+					fmt.Println("Skipping non-empty directory: " + file)
 				}
-				err := os.Remove(file)
-				if err != nil {
-					return err
-				}
+				continue
+			}
+			if verbose {
+				fmt.Println("Removing: " + file)
+			}
+			err = os.Remove(file)
+			if err != nil {
+				return err
 			}
 		} else {
 			if verbose {
@@ -1525,33 +1585,8 @@ func RemovePackage(pkg string, verbose bool, rootDir string) error {
 			}
 		}
 	}
-	removals := -1
-	for len(symlinks) > 0 && removals != 0 {
-		removals = 0
-		for i := len(symlinks) - 1; i >= 0; i-- {
-			file := symlinks[i]
-			file = path.Join(rootDir, file)
-			_, err := os.Lstat(file)
-			if os.IsNotExist(err) {
-				continue
-			} else if err != nil {
-				return err
-			}
-			_, err = filepath.EvalSymlinks(file)
-			if os.IsNotExist(err) {
-				err := os.Remove(file)
-				if err != nil {
-					return err
-				}
-				removals++
-				if verbose {
-					fmt.Println("Removing: " + file)
-				}
-			} else if err != nil {
-				return err
-			}
-		}
-	}
+
+	// Executing post_remove script
 	if _, err := os.Stat(path.Join(pkgDir, "post_remove.sh")); err == nil {
 		cmd := exec.Command("/bin/bash", path.Join(pkgDir, "post_remove.sh"))
 		if !BPMConfig.SilentCompilation {
@@ -1586,12 +1621,15 @@ func RemovePackage(pkg string, verbose bool, rootDir string) error {
 			return err
 		}
 	}
-	err := os.RemoveAll(pkgDir)
-	if err != nil {
-		return err
-	}
+
+	// Removing package directory
 	if verbose {
 		fmt.Println("Removing: " + pkgDir)
 	}
+	err = os.RemoveAll(pkgDir)
+	if err != nil {
+		return err
+	}
+
 	return nil
 }
