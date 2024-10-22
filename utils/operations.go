@@ -18,11 +18,17 @@ type BPMOperation struct {
 func (operation *BPMOperation) ActionsContainPackage(pkg string) bool {
 	for _, action := range operation.Actions {
 		if action.GetActionType() == "install" {
-			return action.(*InstallPackageAction).BpmPackage.PkgInfo.Name == pkg
+			if action.(*InstallPackageAction).BpmPackage.PkgInfo.Name == pkg {
+				return true
+			}
 		} else if action.GetActionType() == "fetch" {
-			return action.(*FetchPackageAction).RepositoryEntry.Info.Name == pkg
+			if action.(*FetchPackageAction).RepositoryEntry.Info.Name == pkg {
+				return true
+			}
 		} else if action.GetActionType() == "remove" {
-			return action.(*RemovePackageAction).BpmPackage.PkgInfo.Name == pkg
+			if action.(*RemovePackageAction).BpmPackage.PkgInfo.Name == pkg {
+				return true
+			}
 		}
 	}
 	return false
