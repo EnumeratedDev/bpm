@@ -1,18 +1,26 @@
 package utils
 
 import (
+	"fmt"
 	"io"
+	"math"
 	"os"
-	"os/exec"
-	"strings"
+	"syscall"
 )
 
 func GetArch() string {
-	output, err := exec.Command("/usr/bin/uname", "-m").Output()
+	uname := syscall.Utsname{}
+	err := syscall.Uname(&uname)
 	if err != nil {
 		return ""
 	}
-	return strings.TrimSpace(string(output))
+
+	var byteString [65]byte
+	var indexLength int
+	for ; uname.Machine[indexLength] != 0; indexLength++ {
+		byteString[indexLength] = uint8(uname.Machine[indexLength])
+	}
+	return string(byteString[:indexLength])
 }
 
 func copyFileContents(src, dst string) (err error) {
@@ -47,12 +55,24 @@ func stringSliceRemove(s []string, r string) []string {
 	return s
 }
 
-func stringSliceRemoveEmpty(s []string) []string {
-	var r []string
-	for _, str := range s {
-		if str != "" {
-			r = append(r, str)
+func UnsignedBytesToHumanReadable(b uint64) string {
+	bf := float64(b)
+	for _, unit := range []string{"", "Ki", "Mi", "Gi", "Ti", "Pi", "Ei", "Zi"} {
+		if math.Abs(bf) < 1024.0 {
+			return fmt.Sprintf("%3.1f%sB", bf, unit)
 		}
+		bf /= 1024.0
 	}
-	return r
+	return fmt.Sprintf("%.1fYiB", bf)
+}
+
+func BytesToHumanReadable(b int64) string {
+	bf := float64(b)
+	for _, unit := range []string{"", "Ki", "Mi", "Gi", "Ti", "Pi", "Ei", "Zi"} {
+		if math.Abs(bf) < 1024.0 {
+			return fmt.Sprintf("%3.1f%sB", bf, unit)
+		}
+		bf /= 1024.0
+	}
+	return fmt.Sprintf("%.1fYiB", bf)
 }

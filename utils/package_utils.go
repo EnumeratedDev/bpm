@@ -2,7 +2,6 @@ package utils
 
 import (
 	"archive/tar"
-	"bufio"
 	"compress/gzip"
 	"errors"
 	"fmt"
@@ -15,10 +14,16 @@ import (
 	"path"
 	"path/filepath"
 	"slices"
+	"sort"
 	"strconv"
 	"strings"
 	"syscall"
 )
+
+type BPMPackage struct {
+	PkgInfo  *PackageInfo
+	PkgFiles []*PackageFileEntry
+}
 
 type PackageInfo struct {
 	Name            string   `yaml:"name,omitempty"`
@@ -35,6 +40,30 @@ type PackageInfo struct {
 	OptionalDepends []string `yaml:"optional_depends,omitempty"`
 	Conflicts       []string `yaml:"conflicts,omitempty"`
 	Provides        []string `yaml:"provides,omitempty"`
+}
+
+type PackageFileEntry struct {
+	Path        string
+	OctalPerms  uint32
+	UserID      int
+	GroupID     int
+	SizeInBytes uint64
+}
+
+func (pkg *BPMPackage) GetInstalledSize() uint64 {
+	var totalSize uint64 = 0
+	for _, entry := range pkg.PkgFiles {
+		totalSize += entry.SizeInBytes
+	}
+	return totalSize
+}
+
+func (pkg *BPMPackage) ConvertFilesToString() string {
+	str := ""
+	for _, file := range pkg.PkgFiles {
+		str += fmt.Sprintf("%s %d %d %d\n", file.Path, file.UserID, file.GroupID, file.SizeInBytes)
+	}
+	return str
 }
 
 func (pkgInfo *PackageInfo) GetFullVersion() string {
@@ -62,11 +91,11 @@ func GetInstallationReason(pkg, rootDir string) InstallationReason {
 	if stat, err := os.Stat(path.Join(pkgDir, "installation_reason")); err != nil || stat.IsDir() {
 		return Manual
 	}
-	bytes, err := os.ReadFile(path.Join(pkgDir, "installation_reason"))
+	b, err := os.ReadFile(path.Join(pkgDir, "installation_reason"))
 	if err != nil {
 		return Unknown
 	}
-	reason := string(bytes)
+	reason := string(b)
 	if reason == "manual" {
 		return Manual
 	} else if reason == "dependency" {
@@ -93,11 +122,8 @@ func GetPackageInfoRaw(filename string) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	archive, err := gzip.NewReader(file)
-	if err != nil {
-		return "", err
-	}
-	tr := tar.NewReader(archive)
+
+	tr := tar.NewReader(file)
 	for {
 		header, err := tr.Next()
 		if err == io.EOF {
@@ -118,19 +144,22 @@ func GetPackageInfoRaw(filename string) (string, error) {
 	return "", errors.New("pkg.info not found in archive")
 }
 
-func ReadPackage(filename string) (*PackageInfo, error) {
+func ReadPackage(filename string) (*BPMPackage, error) {
+	var pkgInfo *PackageInfo
+	var pkgFiles []*PackageFileEntry
+
 	if _, err := os.Stat(filename); os.IsNotExist(err) {
+		fmt.Println("a")
 		return nil, err
 	}
+
 	file, err := os.Open(filename)
+	defer file.Close()
 	if err != nil {
 		return nil, err
 	}
-	archive, err := gzip.NewReader(file)
-	if err != nil {
-		return nil, err
-	}
-	tr := tar.NewReader(archive)
+
+	tr := tar.NewReader(file)
 	for {
 		header, err := tr.Next()
 		if err == io.EOF {
@@ -141,18 +170,54 @@ func ReadPackage(filename string) (*PackageInfo, error) {
 		}
 		if header.Name == "pkg.info" {
 			bs, _ := io.ReadAll(tr)
-			err := file.Close()
+			pkgInfo, err = ReadPackageInfo(string(bs))
 			if err != nil {
 				return nil, err
 			}
-			pkgInfo, err := ReadPackageInfo(string(bs))
-			if err != nil {
-				return nil, err
+		} else if header.Name == "pkg.files" {
+			bs, _ := io.ReadAll(tr)
+			for _, line := range strings.Split(string(bs), "\n") {
+				if strings.TrimSpace(line) == "" {
+					continue
+				}
+				stringEntry := strings.Split(strings.TrimSpace(line), " ")
+				if len(stringEntry) < 5 {
+					return nil, errors.New("pkg.files is not formatted correctly")
+				}
+				octalPerms, err := strconv.ParseUint(stringEntry[len(stringEntry)-4], 8, 32)
+				if err != nil {
+					return nil, err
+				}
+				uid, err := strconv.ParseInt(stringEntry[len(stringEntry)-3], 0, 32)
+				if err != nil {
+					return nil, err
+				}
+				gid, err := strconv.ParseInt(stringEntry[len(stringEntry)-2], 0, 32)
+				if err != nil {
+					return nil, err
+				}
+				size, err := strconv.ParseUint(stringEntry[len(stringEntry)-1], 0, 64)
+				if err != nil {
+					return nil, err
+				}
+				pkgFiles = append(pkgFiles, &PackageFileEntry{
+					Path:        strings.Join(stringEntry[:len(stringEntry)-4], " "),
+					OctalPerms:  uint32(octalPerms),
+					UserID:      int(uid),
+					GroupID:     int(gid),
+					SizeInBytes: size,
+				})
 			}
-			return pkgInfo, nil
 		}
 	}
-	return nil, errors.New("pkg.info not found in archive")
+
+	if pkgInfo == nil {
+		return nil, errors.New("pkg.info not found in archive")
+	}
+	return &BPMPackage{
+		PkgInfo:  pkgInfo,
+		PkgFiles: pkgFiles,
+	}, nil
 }
 
 func ReadPackageScripts(filename string) (map[string]string, error) {
@@ -163,11 +228,8 @@ func ReadPackageScripts(filename string) (map[string]string, error) {
 	if err != nil {
 		return nil, err
 	}
-	archive, err := gzip.NewReader(file)
-	if err != nil {
-		return nil, err
-	}
-	tr := tar.NewReader(archive)
+
+	tr := tar.NewReader(file)
 	ret := make(map[string]string)
 	for {
 		header, err := tr.Next()
@@ -178,41 +240,38 @@ func ReadPackageScripts(filename string) (map[string]string, error) {
 			return nil, err
 		}
 		if header.Name == "pre_install.sh" {
-			bs, _ := io.ReadAll(tr)
+			bs, err := io.ReadAll(tr)
 			if err != nil {
 				return nil, err
 			}
 			ret[header.Name] = string(bs)
 		} else if header.Name == "post_install.sh" {
-			bs, _ := io.ReadAll(tr)
+			bs, err := io.ReadAll(tr)
 			if err != nil {
 				return nil, err
 			}
 			ret[header.Name] = string(bs)
 		} else if header.Name == "pre_update.sh" {
-			bs, _ := io.ReadAll(tr)
+			bs, err := io.ReadAll(tr)
 			if err != nil {
 				return nil, err
 			}
 			ret[header.Name] = string(bs)
 		} else if header.Name == "post_update.sh" {
-			bs, _ := io.ReadAll(tr)
+			bs, err := io.ReadAll(tr)
 			if err != nil {
 				return nil, err
 			}
 			ret[header.Name] = string(bs)
 		} else if header.Name == "post_remove.sh" {
-			bs, _ := io.ReadAll(tr)
+			bs, err := io.ReadAll(tr)
 			if err != nil {
 				return nil, err
 			}
 			ret[header.Name] = string(bs)
 		}
 	}
-	err = archive.Close()
-	if err != nil {
-		return nil, err
-	}
+
 	err = file.Close()
 	if err != nil {
 		return nil, err
@@ -257,25 +316,25 @@ func ExecutePackageScripts(filename, rootDir string, operation Operation, postOp
 		cmd.Dir = rootDir
 		cmd.Env = os.Environ()
 		cmd.Env = append(cmd.Env, fmt.Sprintf("BPM_ROOT=%s", rootDir))
-		cmd.Env = append(cmd.Env, fmt.Sprintf("BPM_PKG_NAME=%s", pkgInfo.Name))
-		cmd.Env = append(cmd.Env, fmt.Sprintf("BPM_PKG_DESC=%s", pkgInfo.Description))
-		cmd.Env = append(cmd.Env, fmt.Sprintf("BPM_PKG_VERSION=%s", pkgInfo.Version))
+		cmd.Env = append(cmd.Env, fmt.Sprintf("BPM_PKG_NAME=%s", pkgInfo.PkgInfo.Name))
+		cmd.Env = append(cmd.Env, fmt.Sprintf("BPM_PKG_DESC=%s", pkgInfo.PkgInfo.Description))
+		cmd.Env = append(cmd.Env, fmt.Sprintf("BPM_PKG_VERSION=%s", pkgInfo.PkgInfo.Version))
 		if operation != Install {
-			cmd.Env = append(cmd.Env, fmt.Sprintf("BPM_PKG_OLD_VERSION=%s", GetPackageInfo(pkgInfo.Name, rootDir, true).Version))
+			cmd.Env = append(cmd.Env, fmt.Sprintf("BPM_PKG_OLD_VERSION=%s", GetPackageInfo(pkgInfo.PkgInfo.Name, rootDir).Version))
 		}
-		cmd.Env = append(cmd.Env, fmt.Sprintf("BPM_PKG_REVISION=%d", pkgInfo.Revision))
+		cmd.Env = append(cmd.Env, fmt.Sprintf("BPM_PKG_REVISION=%d", pkgInfo.PkgInfo.Revision))
 		if operation != Install {
-			cmd.Env = append(cmd.Env, fmt.Sprintf("BPM_PKG_OLD_REVISION=%d", GetPackageInfo(pkgInfo.Name, rootDir, true).Revision))
+			cmd.Env = append(cmd.Env, fmt.Sprintf("BPM_PKG_OLD_REVISION=%d", GetPackageInfo(pkgInfo.PkgInfo.Name, rootDir).Revision))
 		}
-		cmd.Env = append(cmd.Env, fmt.Sprintf("BPM_PKG_URL=%s", pkgInfo.Url))
-		cmd.Env = append(cmd.Env, fmt.Sprintf("BPM_PKG_ARCH=%s", pkgInfo.Arch))
-		depends := make([]string, len(pkgInfo.Depends))
-		copy(depends, pkgInfo.Depends)
+		cmd.Env = append(cmd.Env, fmt.Sprintf("BPM_PKG_URL=%s", pkgInfo.PkgInfo.Url))
+		cmd.Env = append(cmd.Env, fmt.Sprintf("BPM_PKG_ARCH=%s", pkgInfo.PkgInfo.Arch))
+		depends := make([]string, len(pkgInfo.PkgInfo.Depends))
+		copy(depends, pkgInfo.PkgInfo.Depends)
 		for i := 0; i < len(depends); i++ {
 			depends[i] = fmt.Sprintf("\"%s\"", depends[i])
 		}
-		makeDepends := make([]string, len(pkgInfo.MakeDepends))
-		copy(makeDepends, pkgInfo.MakeDepends)
+		makeDepends := make([]string, len(pkgInfo.PkgInfo.MakeDepends))
+		copy(makeDepends, pkgInfo.PkgInfo.MakeDepends)
 		for i := 0; i < len(makeDepends); i++ {
 			makeDepends[i] = fmt.Sprintf("\"%s\"", makeDepends[i])
 		}
@@ -373,11 +432,11 @@ func ReadPackageInfo(contents string) (*PackageInfo, error) {
 }
 
 func CreateInfoFile(pkgInfo *PackageInfo) string {
-	bytes, err := yaml.Marshal(&pkgInfo)
+	b, err := yaml.Marshal(&pkgInfo)
 	if err != nil {
 		return ""
 	}
-	return string(bytes)
+	return string(b)
 }
 
 func CreateReadableInfo(showArchitecture, showType, showPackageRelations bool, pkgInfo *PackageInfo, rootDir string) string {
@@ -411,128 +470,125 @@ func CreateReadableInfo(showArchitecture, showType, showPackageRelations bool, p
 	return strings.Join(ret, "\n")
 }
 
-func extractPackage(pkgInfo *PackageInfo, verbose bool, filename, rootDir string) (error, []string) {
-	var files []string
-	if !IsPackageInstalled(pkgInfo.Name, rootDir) {
+func extractPackage(bpmpkg *BPMPackage, verbose bool, filename, rootDir string) error {
+	if !IsPackageInstalled(bpmpkg.PkgInfo.Name, rootDir) {
 		err := ExecutePackageScripts(filename, rootDir, Install, false)
 		if err != nil {
-			return err, nil
+			return err
 		}
 	} else {
 		err := ExecutePackageScripts(filename, rootDir, Update, false)
 		if err != nil {
-			return err, nil
+			return err
 		}
 	}
 	seenHardlinks := make(map[string]string)
 	file, err := os.Open(filename)
 	if err != nil {
-		return err, nil
+		return err
 	}
-	archive, err := gzip.NewReader(file)
+
+	tarballFile, err := ReadTarballContent(filename, "files.tar.gz")
 	if err != nil {
-		return err, nil
+		return err
 	}
-	tr := tar.NewReader(archive)
+	defer tarballFile.file.Close()
+
+	archive, err := gzip.NewReader(tarballFile.tarReader)
+	if err != nil {
+		return err
+	}
+	packageFilesReader := tar.NewReader(archive)
 	for {
-		header, err := tr.Next()
+		header, err := packageFilesReader.Next()
 		if err == io.EOF {
 			break
 		}
 		if err != nil {
-			return err, nil
+			return err
 		}
-		if strings.HasPrefix(header.Name, "files/") && header.Name != "files/" {
-			trimmedName := strings.TrimPrefix(header.Name, "files/")
-			extractFilename := path.Join(rootDir, trimmedName)
-			switch header.Typeflag {
-			case tar.TypeDir:
-				files = append(files, strings.TrimPrefix(header.Name, "files/"))
-				if err := os.Mkdir(extractFilename, 0755); err != nil {
-					if !os.IsExist(err) {
-						return err, nil
-					}
-				} else {
-					if verbose {
-						fmt.Println("Creating Directory: " + extractFilename)
-					}
+		extractFilename := path.Join(rootDir, header.Name)
+		switch header.Typeflag {
+		case tar.TypeDir:
+			if err := os.Mkdir(extractFilename, 0755); err != nil {
+				if !os.IsExist(err) {
+					return err
 				}
-			case tar.TypeReg:
-				skip := false
-				if _, err := os.Stat(extractFilename); err == nil {
-					for _, k := range pkgInfo.Keep {
-						if strings.HasSuffix(k, "/") {
-							if strings.HasPrefix(trimmedName, k) {
-								if verbose {
-									fmt.Println("Skipping File: " + extractFilename + " (Containing directory is set to be kept during installs/updates)")
-								}
-								files = append(files, strings.TrimPrefix(header.Name, "files/"))
-								skip = true
-								continue
+			} else {
+				if verbose {
+					fmt.Println("Creating Directory: " + extractFilename)
+				}
+			}
+		case tar.TypeReg:
+			skip := false
+			if _, err := os.Stat(extractFilename); err == nil {
+				for _, k := range bpmpkg.PkgInfo.Keep {
+					if strings.HasSuffix(k, "/") {
+						if strings.HasPrefix(header.Name, k) {
+							if verbose {
+								fmt.Println("Skipping File: " + extractFilename + " (Containing directory is set to be kept during reinstalls/updates)")
 							}
-						} else {
-							if trimmedName == k {
-								if verbose {
-									fmt.Println("Skipping File: " + extractFilename + " (File is configured to be kept during installs/updates)")
-								}
-								files = append(files, strings.TrimPrefix(header.Name, "files/"))
-								skip = true
-								continue
+							skip = true
+							continue
+						}
+					} else {
+						if header.Name == k {
+							if verbose {
+								fmt.Println("Skipping File: " + extractFilename + " (File is configured to be kept during reinstalls/updates)")
 							}
+							skip = true
+							continue
 						}
 					}
 				}
-				if skip {
-					continue
-				}
-				err := os.Remove(extractFilename)
-				if err != nil && !os.IsNotExist(err) {
-					return err, nil
-				}
-				outFile, err := os.Create(extractFilename)
-				if verbose {
-					fmt.Println("Creating File: " + extractFilename)
-				}
-				files = append(files, strings.TrimPrefix(header.Name, "files/"))
-				if err != nil {
-					return err, nil
-				}
-				if _, err := io.Copy(outFile, tr); err != nil {
-					return err, nil
-				}
-				if err := os.Chmod(extractFilename, header.FileInfo().Mode()); err != nil {
-					return err, nil
-				}
-				err = outFile.Close()
-				if err != nil {
-					return err, nil
-				}
-			case tar.TypeSymlink:
-				if verbose {
-					fmt.Println("Creating Symlink: " + extractFilename + " -> " + header.Linkname)
-				}
-				files = append(files, strings.TrimPrefix(header.Name, "files/"))
-				err := os.Remove(extractFilename)
-				if err != nil && !os.IsNotExist(err) {
-					return err, nil
-				}
-				err = os.Symlink(header.Linkname, extractFilename)
-				if err != nil {
-					return err, nil
-				}
-			case tar.TypeLink:
-				if verbose {
-					fmt.Println("Detected Hard Link: " + extractFilename + " -> " + path.Join(rootDir, strings.TrimPrefix(header.Linkname, "files/")))
-				}
-				files = append(files, strings.TrimPrefix(header.Name, "files/"))
-				seenHardlinks[extractFilename] = path.Join(strings.TrimPrefix(header.Linkname, "files/"))
-				err := os.Remove(extractFilename)
-				if err != nil && !os.IsNotExist(err) {
-					return err, nil
-				}
-			default:
-				return errors.New("unknown type (" + strconv.Itoa(int(header.Typeflag)) + ") in " + extractFilename), nil
 			}
+			if skip {
+				continue
+			}
+			err := os.Remove(extractFilename)
+			if err != nil && !os.IsNotExist(err) {
+				return err
+			}
+			outFile, err := os.Create(extractFilename)
+			if verbose {
+				fmt.Println("Creating File: " + extractFilename)
+			}
+			if err != nil {
+				return err
+			}
+			if _, err := io.Copy(outFile, packageFilesReader); err != nil {
+				return err
+			}
+			if err := os.Chmod(extractFilename, header.FileInfo().Mode()); err != nil {
+				return err
+			}
+			err = outFile.Close()
+			if err != nil {
+				return err
+			}
+		case tar.TypeSymlink:
+			if verbose {
+				fmt.Println("Creating Symlink: " + extractFilename + " -> " + header.Linkname)
+			}
+			err := os.Remove(extractFilename)
+			if err != nil && !os.IsNotExist(err) {
+				return err
+			}
+			err = os.Symlink(header.Linkname, extractFilename)
+			if err != nil {
+				return err
+			}
+		case tar.TypeLink:
+			if verbose {
+				fmt.Println("Detected Hard Link: " + extractFilename + " -> " + path.Join(rootDir, strings.TrimPrefix(header.Linkname, "files/")))
+			}
+			seenHardlinks[extractFilename] = path.Join(strings.TrimPrefix(header.Linkname, "files/"))
+			err := os.Remove(extractFilename)
+			if err != nil && !os.IsNotExist(err) {
+				return err
+			}
+		default:
+			return errors.New("unknown type (" + strconv.Itoa(int(header.Typeflag)) + ") in " + extractFilename)
 		}
 	}
 	for extractFilename, destination := range seenHardlinks {
@@ -541,12 +597,12 @@ func extractPackage(pkgInfo *PackageInfo, verbose bool, filename, rootDir string
 		}
 		err := os.Link(path.Join(rootDir, destination), extractFilename)
 		if err != nil {
-			return err, nil
+			return err
 		}
 	}
 	defer archive.Close()
 	defer file.Close()
-	return nil, files
+	return nil
 }
 
 func isSplitPackage(filename string) bool {
@@ -554,7 +610,7 @@ func isSplitPackage(filename string) bool {
 	if err != nil {
 		return false
 	}
-	if pkgInfo.Type != "source" {
+	if pkgInfo.PkgInfo.Type != "source" {
 		return false
 	}
 	cmd := exec.Command("/bin/bash", "-c", fmt.Sprintf("test $(tar -tf %s | grep '^pkg.info' | wc -l) -eq 1", filename))
@@ -564,9 +620,9 @@ func isSplitPackage(filename string) bool {
 	return true
 }
 
-func compilePackage(pkgInfo *PackageInfo, filename, rootDir string, verbose, binaryPkgFromSrc, skipCheck, keepTempDir bool) (error, []string) {
+func compilePackage(bpmpkg *BPMPackage, filename, rootDir string, verbose, binaryPkgFromSrc, skipCheck, keepTempDir bool) (error, []string) {
 	var files []string
-	if !IsPackageInstalled(pkgInfo.Name, rootDir) {
+	if !IsPackageInstalled(bpmpkg.PkgInfo.Name, rootDir) {
 		err := ExecutePackageScripts(filename, rootDir, Install, false)
 		if err != nil {
 			return err, nil
@@ -582,13 +638,10 @@ func compilePackage(pkgInfo *PackageInfo, filename, rootDir string, verbose, bin
 	if err != nil {
 		return err, nil
 	}
-	archive, err := gzip.NewReader(file)
-	if err != nil {
-		return err, nil
-	}
-	tr := tar.NewReader(archive)
 
-	temp := path.Join(BPMConfig.CompilationDir, "bpm_source-"+pkgInfo.Name)
+	tr := tar.NewReader(file)
+
+	temp := path.Join(BPMConfig.CompilationDir, "bpm_source-"+bpmpkg.PkgInfo.Name)
 	err = os.RemoveAll(temp)
 	if err != nil {
 		return err, nil
@@ -686,11 +739,8 @@ func compilePackage(pkgInfo *PackageInfo, filename, rootDir string, verbose, bin
 	if _, err := os.Stat(path.Join(temp, "source.sh")); os.IsNotExist(err) {
 		return errors.New("source.sh file could not be found in the temporary build directory"), nil
 	}
-	if err != nil {
-		return err, nil
-	}
 	fmt.Println("Running source.sh file...")
-	if !IsPackageInstalled(pkgInfo.Name, rootDir) {
+	if !IsPackageInstalled(bpmpkg.PkgInfo.Name, rootDir) {
 		err = ExecutePackageScripts(filename, rootDir, Install, false)
 		if err != nil {
 			return err, nil
@@ -800,19 +850,19 @@ fi
 	cmd.Env = append(cmd.Env, "SKIPCHECK="+strconv.FormatBool(skipCheck))
 
 	cmd.Env = append(cmd.Env, fmt.Sprintf("BPM_ROOT=%s", rootDir))
-	cmd.Env = append(cmd.Env, fmt.Sprintf("BPM_PKG_NAME=%s", pkgInfo.Name))
-	cmd.Env = append(cmd.Env, fmt.Sprintf("BPM_PKG_DESC=%s", pkgInfo.Description))
-	cmd.Env = append(cmd.Env, fmt.Sprintf("BPM_PKG_VERSION=%s", pkgInfo.Version))
-	cmd.Env = append(cmd.Env, fmt.Sprintf("BPM_PKG_REVISION=%d", pkgInfo.Revision))
-	cmd.Env = append(cmd.Env, fmt.Sprintf("BPM_PKG_URL=%s", pkgInfo.Url))
-	cmd.Env = append(cmd.Env, fmt.Sprintf("BPM_PKG_ARCH=%s", pkgInfo.Arch))
-	depends := make([]string, len(pkgInfo.Depends))
-	copy(depends, pkgInfo.Depends)
+	cmd.Env = append(cmd.Env, fmt.Sprintf("BPM_PKG_NAME=%s", bpmpkg.PkgInfo.Name))
+	cmd.Env = append(cmd.Env, fmt.Sprintf("BPM_PKG_DESC=%s", bpmpkg.PkgInfo.Description))
+	cmd.Env = append(cmd.Env, fmt.Sprintf("BPM_PKG_VERSION=%s", bpmpkg.PkgInfo.Version))
+	cmd.Env = append(cmd.Env, fmt.Sprintf("BPM_PKG_REVISION=%d", bpmpkg.PkgInfo.Revision))
+	cmd.Env = append(cmd.Env, fmt.Sprintf("BPM_PKG_URL=%s", bpmpkg.PkgInfo.Url))
+	cmd.Env = append(cmd.Env, fmt.Sprintf("BPM_PKG_ARCH=%s", bpmpkg.PkgInfo.Arch))
+	depends := make([]string, len(bpmpkg.PkgInfo.Depends))
+	copy(depends, bpmpkg.PkgInfo.Depends)
 	for i := 0; i < len(depends); i++ {
 		depends[i] = fmt.Sprintf("\"%s\"", depends[i])
 	}
-	makeDepends := make([]string, len(pkgInfo.MakeDepends))
-	copy(makeDepends, pkgInfo.MakeDepends)
+	makeDepends := make([]string, len(bpmpkg.PkgInfo.MakeDepends))
+	copy(makeDepends, bpmpkg.PkgInfo.MakeDepends)
 	for i := 0; i < len(makeDepends); i++ {
 		makeDepends[i] = fmt.Sprintf("\"%s\"", makeDepends[i])
 	}
@@ -864,7 +914,7 @@ fi
 			}
 		} else if d.Type().IsRegular() {
 			if _, err := os.Stat(extractFilename); err == nil {
-				if slices.Contains(pkgInfo.Keep, relFilename) {
+				if slices.Contains(bpmpkg.PkgInfo.Keep, relFilename) {
 					if verbose {
 						fmt.Println("Skipping File: " + extractFilename + "(File is configured to be kept during installs/updates)")
 					}
@@ -933,7 +983,7 @@ fi
 		compiledDir := path.Join(BPMConfig.BinaryOutputDir)
 		err = os.MkdirAll(compiledDir, 0755)
 		compiledInfo := PackageInfo{}
-		compiledInfo = *pkgInfo
+		compiledInfo = *bpmpkg.PkgInfo
 		compiledInfo.Type = "binary"
 		compiledInfo.Arch = GetArch()
 		err = os.WriteFile(path.Join(temp, "pkg.info"), []byte(CreateInfoFile(&compiledInfo)), 0644)
@@ -991,7 +1041,6 @@ fi
 		return errors.New("no output files for source package. Cancelling package installation"), nil
 	}
 
-	defer archive.Close()
 	defer file.Close()
 	return nil, files
 }
@@ -1000,55 +1049,138 @@ func InstallPackage(filename, rootDir string, verbose, force, binaryPkgFromSrc, 
 	if _, err := os.Stat(filename); os.IsNotExist(err) {
 		return err
 	}
-	var oldFiles []string
-	var files []string
-	pkgInfo, err := ReadPackage(filename)
+	bpmpkg, err := ReadPackage(filename)
 	if err != nil {
 		return err
 	}
-	packageInstalled := IsPackageInstalled(pkgInfo.Name, rootDir)
+	packageInstalled := IsPackageInstalled(bpmpkg.PkgInfo.Name, rootDir)
+	// Check if package is installed and remove current files
 	if packageInstalled {
-		oldFiles = GetPackageFiles(pkgInfo.Name, rootDir)
-	}
-	if !force {
-		if pkgInfo.Arch != "any" && pkgInfo.Arch != GetArch() {
-			return errors.New("cannot install a package with a different architecture")
-		}
-		if unresolved := pkgInfo.CheckDependencies(pkgInfo.Type == "source", true, rootDir); len(unresolved) != 0 {
-			return errors.New("the following dependencies are not installed: " + strings.Join(unresolved, ", "))
-		}
-	}
-	if pkgInfo.Type == "binary" {
-		err, i := extractPackage(pkgInfo, verbose, filename, rootDir)
+		// Fetching and reversing package file entry list
+		fileEntries := GetPackageFiles(bpmpkg.PkgInfo.Name, rootDir)
+		sort.Slice(fileEntries, func(i, j int) bool {
+			return fileEntries[i].Path < fileEntries[j].Path
+		})
+		slices.Reverse(fileEntries)
+		files, err := GetAllPackageFiles(rootDir, bpmpkg.PkgInfo.Name)
 		if err != nil {
 			return err
 		}
-		files = i
-	} else if pkgInfo.Type == "source" {
+
+		// Removing old package files
+		if verbose {
+			fmt.Printf("Removing old files for package (%s)...\n", bpmpkg.PkgInfo.Name)
+		}
+		for _, entry := range fileEntries {
+			file := path.Join(rootDir, entry.Path)
+			stat, err := os.Lstat(file)
+			if os.IsNotExist(err) {
+				continue
+			}
+			if err != nil {
+				return err
+			}
+			if len(files[entry.Path]) != 0 {
+				if verbose {
+					fmt.Println("Skipping path: " + file + " (Path is managed by multiple packages)")
+				}
+				continue
+			}
+			shouldContinue := false
+			for _, value := range bpmpkg.PkgInfo.Keep {
+				if strings.HasSuffix(value, "/") {
+					if strings.HasPrefix(entry.Path, value) || entry.Path == strings.TrimSuffix(value, "/") {
+						if verbose {
+							fmt.Println("Skipping path: " + file + " (Path is set to be kept during reinstalls/updates)")
+						}
+						shouldContinue = true
+						continue
+					}
+				} else {
+					if entry.Path == value {
+						if verbose {
+							fmt.Println("Skipping path: " + file + " (Path is set to be kept during reinstalls/updates)")
+						}
+						shouldContinue = true
+						continue
+					}
+				}
+			}
+			if shouldContinue {
+				continue
+			}
+			if stat.Mode()&os.ModeSymlink != 0 {
+				if verbose {
+					fmt.Println("Removing: " + file)
+				}
+				err := os.Remove(file)
+				if err != nil {
+					return err
+				}
+				continue
+			}
+			if stat.IsDir() {
+				dir, err := os.ReadDir(file)
+				if err != nil {
+					return err
+				}
+				if len(dir) != 0 {
+					if verbose {
+						fmt.Println("Skipping non-empty directory: " + file)
+					}
+					continue
+				}
+				if verbose {
+					fmt.Println("Removing: " + file)
+				}
+				err = os.Remove(file)
+				if err != nil {
+					return err
+				}
+			} else {
+				if verbose {
+					fmt.Println("Removing: " + file)
+				}
+				err := os.Remove(file)
+				if err != nil {
+					return err
+				}
+			}
+		}
+	}
+	if !force {
+		if bpmpkg.PkgInfo.Arch != "any" && bpmpkg.PkgInfo.Arch != GetArch() {
+			return errors.New("cannot install a package with a different architecture")
+		}
+	}
+
+	if verbose {
+		fmt.Printf("Extracting files for package (%s)...\n", bpmpkg.PkgInfo.Name)
+	}
+
+	if bpmpkg.PkgInfo.Type == "binary" {
+		err := extractPackage(bpmpkg, verbose, filename, rootDir)
+		if err != nil {
+			return err
+		}
+	} else if bpmpkg.PkgInfo.Type == "source" {
 		if isSplitPackage(filename) {
 			return errors.New("BPM is unable to install split source packages")
 		}
-		err, i := compilePackage(pkgInfo, filename, rootDir, verbose, binaryPkgFromSrc, skipCheck, keepTempDir)
+		err, _ := compilePackage(bpmpkg, filename, rootDir, verbose, binaryPkgFromSrc, skipCheck, keepTempDir)
 		if err != nil {
 			return err
 		}
-		files = i
 	} else {
-		return errors.New("unknown package type: " + pkgInfo.Type)
+		return errors.New("unknown package type: " + bpmpkg.PkgInfo.Type)
 	}
-	slices.Sort(files)
-	slices.Reverse(files)
-
-	filesDiff := slices.DeleteFunc(oldFiles, func(f string) bool {
-		return slices.Contains(files, f)
-	})
 
 	installedDir := path.Join(rootDir, "var/lib/bpm/installed/")
 	err = os.MkdirAll(installedDir, 0755)
 	if err != nil {
 		return err
 	}
-	pkgDir := path.Join(installedDir, pkgInfo.Name)
+	pkgDir := path.Join(installedDir, bpmpkg.PkgInfo.Name)
 	err = os.RemoveAll(pkgDir)
 	if err != nil {
 		return err
@@ -1062,13 +1194,14 @@ func InstallPackage(filename, rootDir string, verbose, force, binaryPkgFromSrc, 
 	if err != nil {
 		return err
 	}
-	for _, line := range files {
-		_, err := f.WriteString(line + "\n")
-		if err != nil {
-			return err
-		}
+
+	tarballFile, err := ReadTarballContent(filename, "pkg.files")
+	if err != nil {
+		return err
 	}
-	err = f.Close()
+	defer tarballFile.file.Close()
+
+	_, err = io.Copy(f, tarballFile.tarReader)
 	if err != nil {
 		return err
 	}
@@ -1109,79 +1242,6 @@ func InstallPackage(filename, rootDir string, verbose, force, binaryPkgFromSrc, 
 		}
 	}
 
-	if len(filesDiff) != 0 {
-		fmt.Println("Removing obsolete files...")
-		var symlinks []string
-		for _, f := range filesDiff {
-			f = path.Join(rootDir, f)
-			lstat, err := os.Lstat(f)
-			if os.IsNotExist(err) {
-				continue
-			} else if err != nil {
-				return err
-			}
-			if lstat.Mode()&os.ModeSymlink != 0 {
-				symlinks = append(symlinks, f)
-				continue
-			}
-			stat, err := os.Stat(f)
-			if os.IsNotExist(err) {
-				continue
-			} else if err != nil {
-				return err
-			}
-			if stat.IsDir() {
-				dir, err := os.ReadDir(f)
-				if err != nil {
-					return err
-				}
-				if len(dir) == 0 {
-					if verbose {
-						fmt.Println("Removing: " + f)
-					}
-					err := os.Remove(f)
-					if err != nil {
-						return err
-					}
-				}
-			} else {
-				if verbose {
-					fmt.Println("Removing: " + f)
-				}
-				err := os.Remove(f)
-				if err != nil {
-					return err
-				}
-			}
-		}
-		removals := -1
-		for len(symlinks) > 0 && removals != 0 {
-			removals = 0
-			for i := len(symlinks) - 1; i >= 0; i-- {
-				f := symlinks[i]
-				f = path.Join(rootDir, f)
-				_, err := os.Lstat(f)
-				if os.IsNotExist(err) {
-					continue
-				} else if err != nil {
-					return err
-				}
-				_, err = filepath.EvalSymlinks(f)
-				if os.IsNotExist(err) {
-					err := os.Remove(f)
-					if err != nil {
-						return err
-					}
-					removals++
-					if verbose {
-						fmt.Println("Removing: " + f)
-					}
-				} else if err != nil {
-					return err
-				}
-			}
-		}
-	}
 	if !packageInstalled {
 		err = ExecutePackageScripts(filename, rootDir, Install, true)
 		if err != nil {
@@ -1194,47 +1254,6 @@ func InstallPackage(filename, rootDir string, verbose, force, binaryPkgFromSrc, 
 		}
 	}
 	return nil
-}
-
-func GetSourceScript(filename string) (string, error) {
-	pkgInfo, err := ReadPackage(filename)
-	if err != nil {
-		return "", err
-	}
-	if pkgInfo.Type != "source" {
-		return "", errors.New("package not of source type")
-	}
-	file, err := os.Open(filename)
-	if err != nil {
-		return "", err
-	}
-	archive, err := gzip.NewReader(file)
-	if err != nil {
-		return "", err
-	}
-	tr := tar.NewReader(archive)
-	for {
-		header, err := tr.Next()
-		if err == io.EOF {
-			break
-		}
-		if header.Name == "source.sh" {
-			err := archive.Close()
-			if err != nil {
-				return "", err
-			}
-			err = file.Close()
-			if err != nil {
-				return "", err
-			}
-			bs, err := io.ReadAll(tr)
-			if err != nil {
-				return "", err
-			}
-			return string(bs), nil
-		}
-	}
-	return "", errors.New("package does not contain a source.sh file")
 }
 
 func (pkgInfo *PackageInfo) GetAllDependencies(checkMake, checkOptional bool) []string {
@@ -1284,7 +1303,7 @@ func (pkgInfo *PackageInfo) CheckConflicts(rootDir string) []string {
 	return ret
 }
 
-func (pkgInfo *PackageInfo) ResolveAll(resolved, unresolved *[]string, checkMake, checkOptional, ignoreInstalled, verbose bool, rootDir string) ([]string, []string) {
+func (pkgInfo *PackageInfo) ResolveDependencies(resolved, unresolved *[]string, checkMake, checkOptional, ignoreInstalled, verbose bool, rootDir string) ([]string, []string) {
 	*unresolved = append(*unresolved, pkgInfo.Name)
 	for _, depend := range pkgInfo.GetAllDependencies(checkMake, checkOptional) {
 		depend = strings.TrimSpace(depend)
@@ -1308,7 +1327,7 @@ func (pkgInfo *PackageInfo) ResolveAll(resolved, unresolved *[]string, checkMake
 				}
 				continue
 			}
-			entry.Info.ResolveAll(resolved, unresolved, checkMake, checkOptional, ignoreInstalled, verbose, rootDir)
+			entry.Info.ResolveDependencies(resolved, unresolved, checkMake, checkOptional, ignoreInstalled, verbose, rootDir)
 		}
 	}
 	if !slices.Contains(*resolved, pkgInfo.Name) {
@@ -1336,7 +1355,7 @@ func IsPackageProvided(pkg, rootDir string) bool {
 		if p == pkg {
 			return true
 		}
-		i := GetPackageInfo(p, rootDir, true)
+		i := GetPackageInfo(p, rootDir)
 		if i == nil {
 			continue
 		}
@@ -1363,8 +1382,8 @@ func GetInstalledPackages(rootDir string) ([]string, error) {
 	return ret, nil
 }
 
-func GetPackageFiles(pkg, rootDir string) []string {
-	var ret []string
+func GetPackageFiles(pkg, rootDir string) []*PackageFileEntry {
+	var pkgFiles []*PackageFileEntry
 	installedDir := path.Join(rootDir, "var/lib/bpm/installed/")
 	pkgDir := path.Join(installedDir, pkg)
 	files := path.Join(pkgDir, "files")
@@ -1374,18 +1393,55 @@ func GetPackageFiles(pkg, rootDir string) []string {
 	if _, err := os.Stat(pkgDir); os.IsNotExist(err) {
 		return nil
 	}
-	file, err := os.Open(files)
+	bs, err := os.ReadFile(files)
 	if err != nil {
 		return nil
 	}
-	scanner := bufio.NewScanner(file)
-	for scanner.Scan() {
-		ret = append(ret, scanner.Text())
+
+	for _, line := range strings.Split(string(bs), "\n") {
+		if strings.TrimSpace(line) == "" {
+			continue
+		}
+		stringEntry := strings.Split(strings.TrimSpace(line), " ")
+		if len(stringEntry) < 5 {
+			pkgFiles = append(pkgFiles, &PackageFileEntry{
+				Path:        strings.TrimSuffix(line, "/"),
+				OctalPerms:  0,
+				UserID:      0,
+				GroupID:     0,
+				SizeInBytes: 0,
+			})
+			continue
+		}
+		uid, err := strconv.ParseInt(stringEntry[len(stringEntry)-4], 0, 32)
+		if err != nil {
+			return nil
+		}
+		octalPerms, err := strconv.ParseInt(stringEntry[len(stringEntry)-3], 0, 32)
+		if err != nil {
+			return nil
+		}
+		gid, err := strconv.ParseInt(stringEntry[len(stringEntry)-2], 0, 32)
+		if err != nil {
+			return nil
+		}
+		size, err := strconv.ParseUint(stringEntry[len(stringEntry)-1], 0, 64)
+		if err != nil {
+			return nil
+		}
+		pkgFiles = append(pkgFiles, &PackageFileEntry{
+			Path:        strings.TrimSuffix(strings.Join(stringEntry[:len(stringEntry)-4], " "), "/"),
+			OctalPerms:  uint32(octalPerms),
+			UserID:      int(uid),
+			GroupID:     int(gid),
+			SizeInBytes: size,
+		})
 	}
-	return ret
+
+	return pkgFiles
 }
 
-func GetPackageInfo(pkg, rootDir string, defaultValues bool) *PackageInfo {
+func GetPackageInfo(pkg, rootDir string) *PackageInfo {
 	installedDir := path.Join(rootDir, "var/lib/bpm/installed/")
 	pkgDir := path.Join(installedDir, pkg)
 	files := path.Join(pkgDir, "info")
@@ -1410,17 +1466,67 @@ func GetPackageInfo(pkg, rootDir string, defaultValues bool) *PackageInfo {
 	return info
 }
 
+func GetPackage(pkg, rootDir string) *BPMPackage {
+	if !IsPackageInstalled(pkg, rootDir) {
+		return nil
+	}
+
+	return &BPMPackage{
+		PkgInfo:  GetPackageInfo(pkg, rootDir),
+		PkgFiles: GetPackageFiles(pkg, rootDir),
+	}
+}
+
+func GetAllPackageFiles(rootDir string, excludePackages ...string) (map[string][]*BPMPackage, error) {
+	ret := make(map[string][]*BPMPackage)
+
+	pkgNames, err := GetInstalledPackages(rootDir)
+	if err != nil {
+		return nil, err
+	}
+
+	for _, pkgName := range pkgNames {
+		if slices.Contains(excludePackages, pkgName) {
+			continue
+		}
+		bpmpkg := GetPackage(pkgName, rootDir)
+		if bpmpkg == nil {
+			return nil, errors.New(fmt.Sprintf("could not get BPM package (%s)", pkgName))
+		}
+		for _, entry := range bpmpkg.PkgFiles {
+			if _, ok := ret[entry.Path]; ok {
+				ret[entry.Path] = append(ret[entry.Path], bpmpkg)
+			} else {
+				ret[entry.Path] = []*BPMPackage{bpmpkg}
+			}
+		}
+	}
+
+	return ret, nil
+}
+
 func RemovePackage(pkg string, verbose bool, rootDir string) error {
 	installedDir := path.Join(rootDir, "var/lib/bpm/installed/")
 	pkgDir := path.Join(installedDir, pkg)
-	pkgInfo := GetPackageInfo(pkg, rootDir, false)
+	pkgInfo := GetPackageInfo(pkg, rootDir)
 	if pkgInfo == nil {
 		return errors.New("could not get package info")
 	}
-	files := GetPackageFiles(pkg, rootDir)
-	var symlinks []string
-	for _, file := range files {
-		file = path.Join(rootDir, file)
+
+	// Fetching and reversing package file entry list
+	fileEntries := GetPackageFiles(pkg, rootDir)
+	sort.Slice(fileEntries, func(i, j int) bool {
+		return fileEntries[i].Path < fileEntries[j].Path
+	})
+	slices.Reverse(fileEntries)
+	files, err := GetAllPackageFiles(rootDir, pkg)
+	if err != nil {
+		return err
+	}
+
+	// Removing package files
+	for _, entry := range fileEntries {
+		file := path.Join(rootDir, entry.Path)
 		lstat, err := os.Lstat(file)
 		if os.IsNotExist(err) {
 			continue
@@ -1428,8 +1534,20 @@ func RemovePackage(pkg string, verbose bool, rootDir string) error {
 		if err != nil {
 			return err
 		}
+		if len(files[entry.Path]) != 0 {
+			if verbose {
+				fmt.Println("Skipping path: " + file + "(Path is managed by multiple packages)")
+			}
+			continue
+		}
 		if lstat.Mode()&os.ModeSymlink != 0 {
-			symlinks = append(symlinks, file)
+			if verbose {
+				fmt.Println("Removing: " + file)
+			}
+			err := os.Remove(file)
+			if err != nil {
+				return err
+			}
 			continue
 		}
 		stat, err := os.Stat(file)
@@ -1444,14 +1562,18 @@ func RemovePackage(pkg string, verbose bool, rootDir string) error {
 			if err != nil {
 				return err
 			}
-			if len(dir) == 0 {
+			if len(dir) != 0 {
 				if verbose {
-					fmt.Println("Removing: " + file)
+					fmt.Println("Skipping non-empty directory: " + file)
 				}
-				err := os.Remove(file)
-				if err != nil {
-					return err
-				}
+				continue
+			}
+			if verbose {
+				fmt.Println("Removing: " + file)
+			}
+			err = os.Remove(file)
+			if err != nil {
+				return err
 			}
 		} else {
 			if verbose {
@@ -1463,33 +1585,8 @@ func RemovePackage(pkg string, verbose bool, rootDir string) error {
 			}
 		}
 	}
-	removals := -1
-	for len(symlinks) > 0 && removals != 0 {
-		removals = 0
-		for i := len(symlinks) - 1; i >= 0; i-- {
-			file := symlinks[i]
-			file = path.Join(rootDir, file)
-			_, err := os.Lstat(file)
-			if os.IsNotExist(err) {
-				continue
-			} else if err != nil {
-				return err
-			}
-			_, err = filepath.EvalSymlinks(file)
-			if os.IsNotExist(err) {
-				err := os.Remove(file)
-				if err != nil {
-					return err
-				}
-				removals++
-				if verbose {
-					fmt.Println("Removing: " + file)
-				}
-			} else if err != nil {
-				return err
-			}
-		}
-	}
+
+	// Executing post_remove script
 	if _, err := os.Stat(path.Join(pkgDir, "post_remove.sh")); err == nil {
 		cmd := exec.Command("/bin/bash", path.Join(pkgDir, "post_remove.sh"))
 		if !BPMConfig.SilentCompilation {
@@ -1524,12 +1621,15 @@ func RemovePackage(pkg string, verbose bool, rootDir string) error {
 			return err
 		}
 	}
-	err := os.RemoveAll(pkgDir)
-	if err != nil {
-		return err
-	}
+
+	// Removing package directory
 	if verbose {
 		fmt.Println("Removing: " + pkgDir)
 	}
+	err = os.RemoveAll(pkgDir)
+	if err != nil {
+		return err
+	}
+
 	return nil
 }

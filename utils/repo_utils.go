@@ -22,7 +22,10 @@ type Repository struct {
 type RepositoryEntry struct {
 	Info             *PackageInfo `yaml:"info"`
 	Download         string       `yaml:"download"`
+	DownloadSize     uint64       `yaml:"download_size"`
+	InstalledSize    uint64       `yaml:"installed_size"`
 	IsVirtualPackage bool         `yaml:"-"`
+	Repository       *Repository
 }
 
 func (repo *Repository) ContainsPackage(pkg string) bool {
@@ -63,7 +66,10 @@ func (repo *Repository) ReadLocalDatabase() error {
 				Provides:        make([]string, 0),
 			},
 			Download:         "",
+			DownloadSize:     0,
+			InstalledSize:    0,
 			IsVirtualPackage: false,
+			Repository:       repo,
 		}
 		err := yaml.Unmarshal([]byte(b), &entry)
 		if err != nil {
@@ -84,7 +90,10 @@ func (repo *Repository) ReadLocalDatabase() error {
 		entry := RepositoryEntry{
 			Info:             repo.Entries[value[0]].Info,
 			Download:         repo.Entries[value[0]].Download,
+			DownloadSize:     repo.Entries[value[0]].DownloadSize,
+			InstalledSize:    repo.Entries[value[0]].InstalledSize,
 			IsVirtualPackage: true,
+			Repository:       repo,
 		}
 		repo.Entries[key] = &entry
 	}
