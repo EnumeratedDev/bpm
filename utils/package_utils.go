@@ -95,7 +95,7 @@ func GetInstallationReason(pkg, rootDir string) InstallationReason {
 	if err != nil {
 		return Unknown
 	}
-	reason := string(b)
+	reason := strings.TrimSpace(string(b))
 	if reason == "manual" {
 		return Manual
 	} else if reason == "dependency" {
