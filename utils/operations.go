@@ -122,6 +122,53 @@ func (operation *BPMOperation) ResolveDependencies(reinstallDependencies, instal
 	return nil
 }
 
+func (operation *BPMOperation) CheckForConflicts() (map[string][]string, error) {
+	conflicts := make(map[string][]string)
+	installedPackages, err := GetInstalledPackages(operation.RootDir)
+	if err != nil {
+		return nil, err
+	}
+	allPackages := make([]*PackageInfo, len(installedPackages))
+	for i, value := range installedPackages {
+		bpmpkg := GetPackage(value, operation.RootDir)
+		if bpmpkg == nil {
+			return nil, errors.New(fmt.Sprintf("could not find installed package (%s)", value))
+		}
+		allPackages[i] = bpmpkg.PkgInfo
+	}
+
+	// Add all new packages to the allPackages slice
+	for _, value := range slices.Clone(operation.Actions) {
+		if value.GetActionType() == "install" {
+			action := value.(*InstallPackageAction)
+			pkgInfo := action.BpmPackage.PkgInfo
+			allPackages = append(allPackages, pkgInfo)
+		} else if value.GetActionType() == "fetch" {
+			action := value.(*FetchPackageAction)
+			pkgInfo := action.RepositoryEntry.Info
+			allPackages = append(allPackages, pkgInfo)
+		} else if value.GetActionType() == "remove" {
+			action := value.(*RemovePackageAction)
+			pkgInfo := action.BpmPackage.PkgInfo
+			slices.DeleteFunc(allPackages, func(info *PackageInfo) bool {
+				return info.Name == pkgInfo.Name
+			})
+		}
+	}
+
+	for _, value := range allPackages {
+		for _, conflict := range value.Conflicts {
+			if slices.ContainsFunc(allPackages, func(info *PackageInfo) bool {
+				return info.Name == conflict
+			}) {
+				conflicts[value.Name] = append(conflicts[value.Name], conflict)
+			}
+		}
+	}
+
+	return conflicts, nil
+}
+
 func (operation *BPMOperation) ShowOperationSummary() {
 	if len(operation.Actions) == 0 {
 		fmt.Println("All packages are up to date!")

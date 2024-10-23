@@ -222,6 +222,25 @@ func resolveCommand() {
 			}
 		}
 
+		// Check for conflicts
+		conflicts, err := operation.CheckForConflicts()
+		if err != nil {
+			log.Fatalf("Error: could not complete package conflict check: %s\n", err)
+		}
+		if len(conflicts) > 0 {
+			if !force {
+				log.Println("Error: conflicting packages found")
+			} else {
+				log.Fatalf("Warning: conflicting packages found")
+			}
+			for pkg, conflict := range conflicts {
+				fmt.Printf("%s is in conflict with the following packages: %s\n", pkg, strings.Join(conflict, ", "))
+			}
+			if !force {
+				os.Exit(0)
+			}
+		}
+
 		// Show operation summary
 		operation.ShowOperationSummary()
 
