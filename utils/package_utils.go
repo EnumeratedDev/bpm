@@ -6,6 +6,7 @@ import (
 	"compress/gzip"
 	"errors"
 	"fmt"
+	version "github.com/knqyf263/go-rpm-version"
 	"gopkg.in/yaml.v3"
 	"io"
 	"io/fs"
@@ -47,6 +48,13 @@ const (
 	Dependency InstallationReason = "dependency"
 	Unknown    InstallationReason = "unknown"
 )
+
+func ComparePackageVersions(info1, info2 PackageInfo) int {
+	v1 := version.NewVersion(info1.GetFullVersion())
+	v2 := version.NewVersion(info2.GetFullVersion())
+
+	return v1.Compare(v2)
+}
 
 func GetInstallationReason(pkg, rootDir string) InstallationReason {
 	installedDir := path.Join(rootDir, "var/lib/bpm/installed/")
@@ -308,6 +316,12 @@ func ExecutePackageScripts(filename, rootDir string, operation Operation, postOp
 			}
 		}
 	} else if operation == Remove {
+		if val, ok := scripts["pre_remove.sh"]; !postOperation && ok {
+			err := run("pre_remove.sh", val)
+			if err != nil {
+				return err
+			}
+		}
 		if val, ok := scripts["post_remove.sh"]; postOperation && ok {
 			err := run("post_remove.sh", val)
 			if err != nil {
@@ -1270,11 +1284,21 @@ func (pkgInfo *PackageInfo) CheckConflicts(rootDir string) []string {
 	return ret
 }
 
-func (pkgInfo *PackageInfo) ResolveAll(resolved, unresolved *[]string, checkMake, checkOptional, ignoreInstalled bool, rootDir string) ([]string, []string) {
+func (pkgInfo *PackageInfo) ResolveAll(resolved, unresolved *[]string, checkMake, checkOptional, ignoreInstalled, verbose bool, rootDir string) ([]string, []string) {
 	*unresolved = append(*unresolved, pkgInfo.Name)
 	for _, depend := range pkgInfo.GetAllDependencies(checkMake, checkOptional) {
+		depend = strings.TrimSpace(depend)
+		depend = strings.ToLower(depend)
 		if !slices.Contains(*resolved, depend) {
-			if slices.Contains(*unresolved, depend) || (ignoreInstalled && IsPackageInstalled(depend, rootDir)) {
+			if slices.Contains(*unresolved, depend) {
+				if verbose {
+					fmt.Printf("Circular dependency was detected (%s -> %s). Installing %s first\n", pkgInfo.Name, depend, depend)
+				}
+				if !slices.Contains(*resolved, depend) {
+					*resolved = append(*resolved, depend)
+				}
+				continue
+			} else if ignoreInstalled && IsPackageInstalled(depend, rootDir) {
 				continue
 			}
 			entry, _, err := GetRepositoryEntry(depend)
@@ -1284,7 +1308,7 @@ func (pkgInfo *PackageInfo) ResolveAll(resolved, unresolved *[]string, checkMake
 				}
 				continue
 			}
-			entry.Info.ResolveAll(resolved, unresolved, checkMake, checkOptional, ignoreInstalled, rootDir)
+			entry.Info.ResolveAll(resolved, unresolved, checkMake, checkOptional, ignoreInstalled, verbose, rootDir)
 		}
 	}
 	if !slices.Contains(*resolved, pkgInfo.Name) {

@@ -8,6 +8,7 @@ import (
 	"net/url"
 	"os"
 	"path"
+	"sort"
 	"strings"
 )
 
@@ -19,8 +20,9 @@ type Repository struct {
 }
 
 type RepositoryEntry struct {
-	Info     *PackageInfo `yaml:"info"`
-	Download string       `yaml:"download"`
+	Info             *PackageInfo `yaml:"info"`
+	Download         string       `yaml:"download"`
+	IsVirtualPackage bool         `yaml:"-"`
 }
 
 func (repo *Repository) ContainsPackage(pkg string) bool {
@@ -38,6 +40,8 @@ func (repo *Repository) ReadLocalDatabase() error {
 	if err != nil {
 		return err
 	}
+
+	virtualPackages := make(map[string][]string)
 
 	data := string(bytes)
 	for _, b := range strings.Split(data, "---") {
@@ -58,13 +62,31 @@ func (repo *Repository) ReadLocalDatabase() error {
 				Conflicts:       make([]string, 0),
 				Provides:        make([]string, 0),
 			},
-			Download: "",
+			Download:         "",
+			IsVirtualPackage: false,
 		}
 		err := yaml.Unmarshal([]byte(b), &entry)
 		if err != nil {
 			return err
 		}
+
+		for _, p := range entry.Info.Provides {
+			virtualPackages[p] = append(virtualPackages[p], entry.Info.Name)
+		}
 		repo.Entries[entry.Info.Name] = &entry
+	}
+
+	for key, value := range virtualPackages {
+		if _, ok := repo.Entries[key]; ok {
+			continue
+		}
+		sort.Strings(value)
+		entry := RepositoryEntry{
+			Info:             repo.Entries[value[0]].Info,
+			Download:         repo.Entries[value[0]].Download,
+			IsVirtualPackage: true,
+		}
+		repo.Entries[key] = &entry
 	}
 	return nil
 }
