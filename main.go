@@ -55,6 +55,7 @@ const (
 	update
 	sync
 	remove
+	cleanup
 	file
 )
 
@@ -76,6 +77,8 @@ func getCommandType() commandType {
 		return sync
 	case "remove":
 		return remove
+	case "cleanup":
+		return cleanup
 	case "file":
 		return file
 	default:
@@ -413,6 +416,76 @@ func resolveCommand() {
 		if err != nil {
 			log.Fatalf("Error: could not complete operation: %s\n", err)
 		}
+	case cleanup:
+		if os.Getuid() != 0 {
+			log.Fatalf("Error: this subcommand needs to be run with superuser permissions")
+		}
+
+		operation := &utils.BPMOperation{
+			Actions:           make([]utils.OperationAction, 0),
+			UnresolvedDepends: make([]string, 0),
+			RootDir:           rootDir,
+		}
+
+		// Get all installed packages
+		installedPackageNames, err := utils.GetInstalledPackages(operation.RootDir)
+		if err != nil {
+			log.Fatalf("Error: could not get installed packages: %s\n", err)
+		}
+		installedPackages := make([]*utils.PackageInfo, len(installedPackageNames))
+		for i, value := range installedPackageNames {
+			bpmpkg := utils.GetPackage(value, operation.RootDir)
+			if bpmpkg == nil {
+				log.Fatalf("Error: could not find installed package (%s)", value)
+			}
+			installedPackages[i] = bpmpkg.PkgInfo
+		}
+
+		// Get manually installed packages, resolve all their dependencies and add them to the keepPackages list
+		keepPackages := make([]string, 0)
+		for _, pkg := range slices.Clone(installedPackages) {
+			if utils.GetInstallationReason(pkg.Name, rootDir) != utils.Manual {
+				continue
+			}
+			keepPackages = append(keepPackages, pkg.Name)
+			resolved, _ := pkg.ResolveDependencies(&[]string{}, &[]string{}, false, true, false, verbose, rootDir)
+			for _, value := range resolved {
+				if !slices.Contains(keepPackages, value) && slices.Contains(installedPackageNames, value) {
+					keepPackages = append(keepPackages, value)
+				}
+			}
+		}
+
+		// Get all installed packages that are not in the keepPackages slice and add them to the BPM operation
+		for _, pkg := range installedPackageNames {
+			if !slices.Contains(keepPackages, pkg) {
+				bpmpkg := utils.GetPackage(pkg, rootDir)
+				if bpmpkg == nil {
+					log.Fatalf("Error: could not find installed package (%s)", pkg)
+				}
+				operation.Actions = append(operation.Actions, &utils.RemovePackageAction{BpmPackage: bpmpkg})
+			}
+		}
+
+		// Show operation summary
+		operation.ShowOperationSummary()
+
+		// Confirmation Prompt
+		if !yesAll {
+			fmt.Printf("Are you sure you wish to remove all %d packages? [y\\N] ", len(operation.Actions))
+			reader := bufio.NewReader(os.Stdin)
+			text, _ := reader.ReadString('\n')
+			if strings.TrimSpace(strings.ToLower(text)) != "y" && strings.TrimSpace(strings.ToLower(text)) != "yes" {
+				fmt.Println("Cancelling package removal...")
+				os.Exit(1)
+			}
+		}
+
+		// Execute operation
+		err = operation.Execute(verbose, force)
+		if err != nil {
+			log.Fatalf("Error: could not complete operation: %s\n", err)
+		}
 	case file:
 		files := subcommandArgs
 		if len(files) == 0 {
@@ -507,6 +580,10 @@ func printHelp() {
 	fmt.Println("       -v Show additional information about what BPM is doing")
 	fmt.Println("       -R=<path> lets you define the root path which will be used")
 	fmt.Println("       -y skips the confirmation prompt")
+	fmt.Println("-> bpm cleanup [-R, -v, -y] | remove all unused dependency packages")
+	fmt.Println("       -v Show additional information about what BPM is doing")
+	fmt.Println("       -R=<path> lets you define the root path which will be used")
+	fmt.Println("       -y skips the confirmation prompt")
 	fmt.Println("-> bpm file [-R] <files...> | shows what packages the following packages are managed by")
 	fmt.Println("       -R=<root_path> lets you define the root path which will be used")
 	fmt.Println("\033[1m----------------\033[0m")
@@ -559,6 +636,12 @@ func resolveFlags() {
 	removeFlagSet.BoolVar(&verbose, "v", false, "Show additional information about what BPM is doing")
 	removeFlagSet.BoolVar(&yesAll, "y", false, "Skip confirmation prompts")
 	removeFlagSet.Usage = printHelp
+	// Cleanup flags
+	cleanupFlagSet := flag.NewFlagSet("Cleanup flags", flag.ExitOnError)
+	cleanupFlagSet.StringVar(&rootDir, "R", "/", "Set the destination root")
+	cleanupFlagSet.BoolVar(&verbose, "v", false, "Show additional information about what BPM is doing")
+	cleanupFlagSet.BoolVar(&yesAll, "y", false, "Skip confirmation prompts")
+	cleanupFlagSet.Usage = printHelp
 	// File flags
 	fileFlagSet := flag.NewFlagSet("Remove flags", flag.ExitOnError)
 	fileFlagSet.StringVar(&rootDir, "R", "/", "Set the destination root")
