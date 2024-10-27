@@ -224,6 +224,7 @@ func resolveCommand() {
 		operation := utils.BPMOperation{
 			Actions:                 make([]utils.OperationAction, 0),
 			UnresolvedDepends:       make([]string, 0),
+			Changes:                 make(map[string]string),
 			RootDir:                 rootDir,
 			ForceInstallationReason: ir,
 		}
@@ -238,7 +239,7 @@ func resolveCommand() {
 				if !reinstall && utils.IsPackageInstalled(bpmpkg.PkgInfo.Name, rootDir) && utils.GetPackageInfo(bpmpkg.PkgInfo.Name, rootDir).GetFullVersion() == bpmpkg.PkgInfo.GetFullVersion() {
 					continue
 				}
-				operation.Actions = append(operation.Actions, &utils.InstallPackageAction{
+				operation.AppendAction(&utils.InstallPackageAction{
 					File:         pkg,
 					IsDependency: false,
 					BpmPackage:   bpmpkg,
@@ -261,7 +262,7 @@ func resolveCommand() {
 				if !reinstall && utils.IsPackageInstalled(entry.Info.Name, rootDir) && utils.GetPackageInfo(entry.Info.Name, rootDir).GetFullVersion() == entry.Info.GetFullVersion() {
 					continue
 				}
-				operation.Actions = append(operation.Actions, &utils.FetchPackageAction{
+				operation.AppendAction(&utils.FetchPackageAction{
 					IsDependency:    false,
 					RepositoryEntry: entry,
 				})
@@ -327,6 +328,13 @@ func resolveCommand() {
 		if err != nil {
 			log.Fatalf("Error: could not complete operation: %s\n", err)
 		}
+
+		// Executing hooks
+		fmt.Println("Running hooks...")
+		err = operation.RunHooks(verbose)
+		if err != nil {
+			log.Fatalf("Error: could not run hooks: %s\n", err)
+		}
 	case update:
 		if os.Getuid() != 0 {
 			log.Fatalf("Error: this subcommand needs to be run with superuser permissions")
@@ -355,6 +363,7 @@ func resolveCommand() {
 		operation := utils.BPMOperation{
 			Actions:                 make([]utils.OperationAction, 0),
 			UnresolvedDepends:       make([]string, 0),
+			Changes:                 make(map[string]string),
 			RootDir:                 rootDir,
 			ForceInstallationReason: utils.Unknown,
 		}
@@ -378,7 +387,7 @@ func resolveCommand() {
 			} else {
 				comparison := utils.ComparePackageVersions(*entry.Info, *installedInfo)
 				if comparison > 0 || reinstall {
-					operation.Actions = append(operation.Actions, &utils.FetchPackageAction{
+					operation.AppendAction(&utils.FetchPackageAction{
 						IsDependency:    false,
 						RepositoryEntry: entry,
 					})
@@ -421,6 +430,13 @@ func resolveCommand() {
 		if err != nil {
 			log.Fatalf("Error: could not complete operation: %s\n", err)
 		}
+
+		// Executing hooks
+		fmt.Println("Running hooks...")
+		err = operation.RunHooks(verbose)
+		if err != nil {
+			log.Fatalf("Error: could not run hooks: %s\n", err)
+		}
 	case sync:
 		if os.Getuid() != 0 {
 			log.Fatalf("Error: this subcommand needs to be run with superuser permissions")
@@ -455,6 +471,7 @@ func resolveCommand() {
 		operation := &utils.BPMOperation{
 			Actions:           make([]utils.OperationAction, 0),
 			UnresolvedDepends: make([]string, 0),
+			Changes:           make(map[string]string),
 			RootDir:           rootDir,
 		}
 
@@ -464,7 +481,7 @@ func resolveCommand() {
 			if bpmpkg == nil {
 				continue
 			}
-			operation.Actions = append(operation.Actions, &utils.RemovePackageAction{BpmPackage: bpmpkg})
+			operation.AppendAction(&utils.RemovePackageAction{BpmPackage: bpmpkg})
 		}
 
 		// Skip needed packages if the --unused flag is on
@@ -502,6 +519,13 @@ func resolveCommand() {
 		if err != nil {
 			log.Fatalf("Error: could not complete operation: %s\n", err)
 		}
+
+		// Executing hooks
+		fmt.Println("Running hooks...")
+		err = operation.RunHooks(verbose)
+		if err != nil {
+			log.Fatalf("Error: could not run hooks: %s\n", err)
+		}
 	case cleanup:
 		if os.Getuid() != 0 {
 			log.Fatalf("Error: this subcommand needs to be run with superuser permissions")
@@ -510,6 +534,7 @@ func resolveCommand() {
 		operation := &utils.BPMOperation{
 			Actions:           make([]utils.OperationAction, 0),
 			UnresolvedDepends: make([]string, 0),
+			Changes:           make(map[string]string),
 			RootDir:           rootDir,
 		}
 
@@ -537,6 +562,13 @@ func resolveCommand() {
 		err = operation.Execute(verbose, force)
 		if err != nil {
 			log.Fatalf("Error: could not complete operation: %s\n", err)
+		}
+
+		// Executing hooks
+		fmt.Println("Running hooks...")
+		err = operation.RunHooks(verbose)
+		if err != nil {
+			log.Fatalf("Error: could not run hooks: %s\n", err)
 		}
 	case file:
 		files := subcommandArgs
