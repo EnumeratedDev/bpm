@@ -36,6 +36,7 @@ var reinstall = false
 var reinstallAll = false
 var noOptional = false
 var nosync = true
+var removeUnused = false
 
 func main() {
 	utils.ReadConfig()
@@ -392,9 +393,17 @@ func resolveCommand() {
 		for _, pkg := range packages {
 			bpmpkg := utils.GetPackage(pkg, rootDir)
 			if bpmpkg == nil {
-				log.Fatalf("Error: package (%s) could not be found\n", pkg)
+				continue
 			}
 			operation.Actions = append(operation.Actions, &utils.RemovePackageAction{BpmPackage: bpmpkg})
+		}
+
+		// Skip needed packages if the --unused flag is on
+		if removeUnused {
+			err := operation.RemoveNeededPackages()
+			if err != nil {
+				log.Fatalf("Error: could not skip needed packages: %s\n", err)
+			}
 		}
 
 		// Show operation summary
@@ -576,10 +585,11 @@ func printHelp() {
 	fmt.Println("       -R=<path> lets you define the root path which will be used")
 	fmt.Println("       -v Show additional information about what BPM is doing")
 	fmt.Println("       -y skips the confirmation prompt")
-	fmt.Println("-> bpm remove [-R, -v, -y] <packages...> | removes the following packages")
+	fmt.Println("-> bpm remove [-R, -v, -y, --unused] <packages...> | removes the following packages")
 	fmt.Println("       -v Show additional information about what BPM is doing")
 	fmt.Println("       -R=<path> lets you define the root path which will be used")
 	fmt.Println("       -y skips the confirmation prompt")
+	fmt.Println("       -unused removes only packages that aren't required as dependencies by other packages")
 	fmt.Println("-> bpm cleanup [-R, -v, -y] | remove all unused dependency packages")
 	fmt.Println("       -v Show additional information about what BPM is doing")
 	fmt.Println("       -R=<path> lets you define the root path which will be used")
@@ -635,6 +645,7 @@ func resolveFlags() {
 	removeFlagSet.StringVar(&rootDir, "R", "/", "Set the destination root")
 	removeFlagSet.BoolVar(&verbose, "v", false, "Show additional information about what BPM is doing")
 	removeFlagSet.BoolVar(&yesAll, "y", false, "Skip confirmation prompts")
+	removeFlagSet.BoolVar(&removeUnused, "unused", false, "Removes only packages that aren't required as dependencies by other packages")
 	removeFlagSet.Usage = printHelp
 	// Cleanup flags
 	cleanupFlagSet := flag.NewFlagSet("Cleanup flags", flag.ExitOnError)

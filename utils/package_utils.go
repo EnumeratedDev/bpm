@@ -1293,6 +1293,26 @@ func (pkgInfo *PackageInfo) CheckDependencies(checkMake, checkOptional bool, roo
 	return ret
 }
 
+func (pkgInfo *PackageInfo) GetDependants(rootDir string) ([]string, error) {
+	ret := make([]string, 0)
+
+	pkgs, err := GetInstalledPackages(rootDir)
+	if err != nil {
+		return nil, errors.New("could not get installed packages")
+	}
+	for _, pkg := range pkgs {
+		bpmpkg := GetPackage(pkg, rootDir)
+		if bpmpkg == nil {
+			return nil, errors.New("package not found: " + pkg)
+		}
+		if bpmpkg.PkgInfo.Name != pkgInfo.Name && slices.Contains(bpmpkg.PkgInfo.GetAllDependencies(false, true), pkgInfo.Name) {
+			ret = append(ret, pkg)
+		}
+	}
+
+	return ret, nil
+}
+
 func (pkgInfo *PackageInfo) CheckConflicts(rootDir string) []string {
 	var ret []string
 	for _, conflict := range pkgInfo.Conflicts {

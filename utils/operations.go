@@ -42,6 +42,22 @@ func (operation *BPMOperation) InsertActionAt(index int, action OperationAction)
 	operation.Actions[index] = action
 }
 
+func (operation *BPMOperation) RemoveAction(pkg, actionType string) {
+	operation.Actions = slices.DeleteFunc(operation.Actions, func(a OperationAction) bool {
+		if a.GetActionType() != actionType {
+			return false
+		}
+		if a.GetActionType() == "install" {
+			return a.(*InstallPackageAction).BpmPackage.PkgInfo.Name == pkg
+		} else if a.GetActionType() == "fetch" {
+			return a.(*FetchPackageAction).RepositoryEntry.Info.Name == pkg
+		} else if a.GetActionType() == "remove" {
+			return a.(*RemovePackageAction).BpmPackage.PkgInfo.Name == pkg
+		}
+		return false
+	})
+}
+
 func (operation *BPMOperation) GetTotalDownloadSize() uint64 {
 	var ret uint64 = 0
 	for _, action := range operation.Actions {
@@ -117,6 +133,33 @@ func (operation *BPMOperation) ResolveDependencies(reinstallDependencies, instal
 			}
 		}
 		pos++
+	}
+
+	return nil
+}
+
+func (operation *BPMOperation) RemoveNeededPackages() error {
+	removeActions := make(map[string]*RemovePackageAction)
+	for _, action := range slices.Clone(operation.Actions) {
+		if action.GetActionType() == "remove" {
+			removeActions[action.(*RemovePackageAction).BpmPackage.PkgInfo.Name] = action.(*RemovePackageAction)
+		}
+	}
+
+	for pkg, action := range removeActions {
+		dependants, err := action.BpmPackage.PkgInfo.GetDependants(operation.RootDir)
+		if err != nil {
+			return errors.New("could not get dependant packages for package (" + pkg + ")")
+		}
+		dependants = slices.DeleteFunc(dependants, func(d string) bool {
+			if _, ok := removeActions[d]; ok {
+				return true
+			}
+			return false
+		})
+		if len(dependants) != 0 {
+			operation.RemoveAction(pkg, action.GetActionType())
+		}
 	}
 
 	return nil
