@@ -462,6 +462,10 @@ func CreateReadableInfo(showArchitecture, showType, showPackageRelations bool, p
 		appendArray("Dependencies", pkgInfo.Depends)
 		appendArray("Make Dependencies", pkgInfo.MakeDepends)
 		appendArray("Optional dependencies", pkgInfo.OptionalDepends)
+		dependants, err := pkgInfo.GetDependants(rootDir)
+		if err == nil {
+			appendArray("Dependant packages", dependants)
+		}
 		appendArray("Conflicting packages", pkgInfo.Conflicts)
 		appendArray("Provided packages", pkgInfo.Provides)
 
