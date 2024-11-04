@@ -165,6 +165,68 @@ func (operation *BPMOperation) RemoveNeededPackages() error {
 	return nil
 }
 
+func (operation *BPMOperation) Cleanup(verbose bool) error {
+	// Get all installed packages
+	installedPackageNames, err := GetInstalledPackages(operation.RootDir)
+	if err != nil {
+		log.Fatalf("Error: could not get installed packages: %s\n", err)
+	}
+	installedPackages := make([]*PackageInfo, len(installedPackageNames))
+	for i, value := range installedPackageNames {
+		bpmpkg := GetPackage(value, operation.RootDir)
+		if bpmpkg == nil {
+			return errors.New("could not find installed package (" + value + ")")
+		}
+		installedPackages[i] = bpmpkg.PkgInfo
+	}
+
+	// Get packages to remove
+	removeActions := make(map[string]*RemovePackageAction)
+	for _, action := range slices.Clone(operation.Actions) {
+		if action.GetActionType() == "remove" {
+			removeActions[action.(*RemovePackageAction).BpmPackage.PkgInfo.Name] = action.(*RemovePackageAction)
+		}
+	}
+
+	// Get manually installed packages, resolve all their dependencies and add them to the keepPackages slice
+	keepPackages := make([]string, 0)
+	for _, pkg := range slices.Clone(installedPackages) {
+		if GetInstallationReason(pkg.Name, operation.RootDir) != Manual {
+			continue
+		}
+
+		// Do not resolve dependencies or add package to keepPackages slice if package removal action exists for it
+		if _, ok := removeActions[pkg.Name]; ok {
+			continue
+		}
+
+		keepPackages = append(keepPackages, pkg.Name)
+		resolved, _ := pkg.ResolveDependencies(&[]string{}, &[]string{}, false, true, false, verbose, operation.RootDir)
+		for _, value := range resolved {
+			if !slices.Contains(keepPackages, value) && slices.Contains(installedPackageNames, value) {
+				keepPackages = append(keepPackages, value)
+			}
+		}
+	}
+
+	// Get all installed packages that are not in the keepPackages slice and add them to the BPM operation
+	for _, pkg := range installedPackageNames {
+		// Do not add package removal action if there already is one
+		if _, ok := removeActions[pkg]; ok {
+			continue
+		}
+		if !slices.Contains(keepPackages, pkg) {
+			bpmpkg := GetPackage(pkg, operation.RootDir)
+			if bpmpkg == nil {
+				return errors.New("Error: could not find installed package (" + pkg + ")")
+			}
+			operation.Actions = append(operation.Actions, &RemovePackageAction{BpmPackage: bpmpkg})
+		}
+	}
+
+	return nil
+}
+
 func (operation *BPMOperation) CheckForConflicts() (map[string][]string, error) {
 	conflicts := make(map[string][]string)
 	installedPackages, err := GetInstalledPackages(operation.RootDir)

@@ -37,6 +37,7 @@ var reinstallAll = false
 var noOptional = false
 var nosync = true
 var removeUnused = false
+var doCleanup = false
 
 func main() {
 	utils.ReadConfig()
@@ -406,6 +407,14 @@ func resolveCommand() {
 			}
 		}
 
+		// Do package cleanup
+		if doCleanup {
+			err := operation.Cleanup(verbose)
+			if err != nil {
+				log.Fatalf("Error: could not perform cleanup for operation: %s\n", err)
+			}
+		}
+
 		// Show operation summary
 		operation.ShowOperationSummary()
 
@@ -436,44 +445,10 @@ func resolveCommand() {
 			RootDir:           rootDir,
 		}
 
-		// Get all installed packages
-		installedPackageNames, err := utils.GetInstalledPackages(operation.RootDir)
+		// Do package cleanup
+		err := operation.Cleanup(verbose)
 		if err != nil {
-			log.Fatalf("Error: could not get installed packages: %s\n", err)
-		}
-		installedPackages := make([]*utils.PackageInfo, len(installedPackageNames))
-		for i, value := range installedPackageNames {
-			bpmpkg := utils.GetPackage(value, operation.RootDir)
-			if bpmpkg == nil {
-				log.Fatalf("Error: could not find installed package (%s)", value)
-			}
-			installedPackages[i] = bpmpkg.PkgInfo
-		}
-
-		// Get manually installed packages, resolve all their dependencies and add them to the keepPackages list
-		keepPackages := make([]string, 0)
-		for _, pkg := range slices.Clone(installedPackages) {
-			if utils.GetInstallationReason(pkg.Name, rootDir) != utils.Manual {
-				continue
-			}
-			keepPackages = append(keepPackages, pkg.Name)
-			resolved, _ := pkg.ResolveDependencies(&[]string{}, &[]string{}, false, true, false, verbose, rootDir)
-			for _, value := range resolved {
-				if !slices.Contains(keepPackages, value) && slices.Contains(installedPackageNames, value) {
-					keepPackages = append(keepPackages, value)
-				}
-			}
-		}
-
-		// Get all installed packages that are not in the keepPackages slice and add them to the BPM operation
-		for _, pkg := range installedPackageNames {
-			if !slices.Contains(keepPackages, pkg) {
-				bpmpkg := utils.GetPackage(pkg, rootDir)
-				if bpmpkg == nil {
-					log.Fatalf("Error: could not find installed package (%s)", pkg)
-				}
-				operation.Actions = append(operation.Actions, &utils.RemovePackageAction{BpmPackage: bpmpkg})
-			}
+			log.Fatalf("Error: could not perform cleanup for operation: %s\n", err)
 		}
 
 		// Show operation summary
@@ -646,6 +621,7 @@ func resolveFlags() {
 	removeFlagSet.BoolVar(&verbose, "v", false, "Show additional information about what BPM is doing")
 	removeFlagSet.BoolVar(&yesAll, "y", false, "Skip confirmation prompts")
 	removeFlagSet.BoolVar(&removeUnused, "unused", false, "Removes only packages that aren't required as dependencies by other packages")
+	removeFlagSet.BoolVar(&doCleanup, "cleanup", false, "Perform a dependency cleanup ")
 	removeFlagSet.Usage = printHelp
 	// Cleanup flags
 	cleanupFlagSet := flag.NewFlagSet("Cleanup flags", flag.ExitOnError)
