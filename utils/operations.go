@@ -387,6 +387,7 @@ func (operation *BPMOperation) Execute(verbose, force bool) error {
 		} else if action.GetActionType() == "install" {
 			value := action.(*InstallPackageAction)
 			bpmpkg := value.BpmPackage
+			isReinstall := IsPackageInstalled(bpmpkg.PkgInfo.Name, operation.RootDir)
 			var err error
 			if value.IsDependency {
 				err = InstallPackage(value.File, operation.RootDir, verbose, true, false, false, false)
@@ -396,18 +397,18 @@ func (operation *BPMOperation) Execute(verbose, force bool) error {
 			if err != nil {
 				return errors.New(fmt.Sprintf("could not install package (%s): %s\n", bpmpkg.PkgInfo.Name, err))
 			}
-			fmt.Printf("Package (%s) was successfully installed\n", bpmpkg.PkgInfo.Name)
-			if operation.ForceInstallationReason != Unknown {
+			if operation.ForceInstallationReason != Unknown && !value.IsDependency {
 				err := SetInstallationReason(bpmpkg.PkgInfo.Name, operation.ForceInstallationReason, operation.RootDir)
 				if err != nil {
 					return errors.New(fmt.Sprintf("could not set installation reason for package (%s): %s\n", value.BpmPackage.PkgInfo.Name, err))
 				}
-			} else if value.IsDependency && !IsPackageInstalled(bpmpkg.PkgInfo.Name, operation.RootDir) {
+			} else if value.IsDependency && !isReinstall {
 				err := SetInstallationReason(bpmpkg.PkgInfo.Name, Dependency, operation.RootDir)
 				if err != nil {
 					return errors.New(fmt.Sprintf("could not set installation reason for package (%s): %s\n", value.BpmPackage.PkgInfo.Name, err))
 				}
 			}
+			fmt.Printf("Package (%s) was successfully installed\n", bpmpkg.PkgInfo.Name)
 		}
 	}
 	fmt.Println("Operation complete!")
