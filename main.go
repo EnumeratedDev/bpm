@@ -35,6 +35,7 @@ var pkgListNames = false
 var reinstall = false
 var reinstallAll = false
 var noOptional = false
+var installationReason = ""
 var nosync = true
 var removeUnused = false
 var doCleanup = false
@@ -178,10 +179,21 @@ func resolveCommand() {
 			return
 		}
 
+		// Check if installationReason argument is valid
+		ir := utils.Unknown
+		if installationReason == "manual" {
+			ir = utils.Manual
+		} else if installationReason == "dependency" {
+			ir = utils.Dependency
+		} else if installationReason != "" {
+			log.Fatalf("Error: %s is not a valid installation reason", installationReason)
+		}
+
 		operation := utils.BPMOperation{
-			Actions:           make([]utils.OperationAction, 0),
-			UnresolvedDepends: make([]string, 0),
-			RootDir:           rootDir,
+			Actions:                 make([]utils.OperationAction, 0),
+			UnresolvedDepends:       make([]string, 0),
+			RootDir:                 rootDir,
+			ForceInstallationReason: ir,
 		}
 
 		// Search for packages
@@ -296,9 +308,10 @@ func resolveCommand() {
 		}
 
 		operation := utils.BPMOperation{
-			Actions:           make([]utils.OperationAction, 0),
-			UnresolvedDepends: make([]string, 0),
-			RootDir:           rootDir,
+			Actions:                 make([]utils.OperationAction, 0),
+			UnresolvedDepends:       make([]string, 0),
+			RootDir:                 rootDir,
+			ForceInstallationReason: utils.Unknown,
 		}
 
 		// Search for packages
@@ -537,7 +550,7 @@ func printHelp() {
 	fmt.Println("       -c lists the amount of installed packages")
 	fmt.Println("       -n lists only the names of installed packages")
 	fmt.Println("-> bpm search <search terms...> | Searches for packages through declared repositories")
-	fmt.Println("-> bpm install [-R, -v, -y, -f, -o, -c, -b, -k, --reinstall, --reinstall-all, --no-optional] <packages...> | installs the following files")
+	fmt.Println("-> bpm install [-R, -v, -y, -f, -o, -c, -b, -k, --reinstall, --reinstall-all, --no-optional, --installation-reason] <packages...> | installs the following files")
 	fmt.Println("       -R=<path> lets you define the root path which will be used")
 	fmt.Println("       -v Show additional information about what BPM is doing")
 	fmt.Println("       -y skips the confirmation prompt")
@@ -549,6 +562,7 @@ func printHelp() {
 	fmt.Println("       --reinstall Reinstalls packages even if they do not have a newer version available")
 	fmt.Println("       --reinstall-all Same as --reinstall but also reinstalls dependencies")
 	fmt.Println("       --no-optional Prevents installation of optional dependencies")
+	fmt.Println("       --installation-reason=<manual/dependency> sets the installation reason for all newly installed packages")
 	fmt.Println("-> bpm update [-R, -v, -y, -f, --reinstall, --no-sync] | updates all packages that are available in the repositories")
 	fmt.Println("       -R=<path> lets you define the root path which will be used")
 	fmt.Println("       -v Show additional information about what BPM is doing")
@@ -560,11 +574,12 @@ func printHelp() {
 	fmt.Println("       -R=<path> lets you define the root path which will be used")
 	fmt.Println("       -v Show additional information about what BPM is doing")
 	fmt.Println("       -y skips the confirmation prompt")
-	fmt.Println("-> bpm remove [-R, -v, -y, --unused] <packages...> | removes the following packages")
+	fmt.Println("-> bpm remove [-R, -v, -y, --unused, --cleanup] <packages...> | removes the following packages")
 	fmt.Println("       -v Show additional information about what BPM is doing")
 	fmt.Println("       -R=<path> lets you define the root path which will be used")
 	fmt.Println("       -y skips the confirmation prompt")
 	fmt.Println("       -unused removes only packages that aren't required as dependencies by other packages")
+	fmt.Println("       -cleanup performs a dependency cleanup")
 	fmt.Println("-> bpm cleanup [-R, -v, -y] | remove all unused dependency packages")
 	fmt.Println("       -v Show additional information about what BPM is doing")
 	fmt.Println("       -R=<path> lets you define the root path which will be used")
@@ -599,6 +614,7 @@ func resolveFlags() {
 	installFlagSet.BoolVar(&reinstall, "reinstall", false, "Reinstalls packages even if they do not have a newer version available")
 	installFlagSet.BoolVar(&reinstallAll, "reinstall-all", false, "Same as --reinstall but also reinstalls dependencies")
 	installFlagSet.BoolVar(&noOptional, "no-optional", false, "Prevents installation of optional dependencies")
+	installFlagSet.StringVar(&installationReason, "installation-reason", "", "Set the installation reason for all newly installed packages")
 	installFlagSet.Usage = printHelp
 	// Update flags
 	updateFlagSet := flag.NewFlagSet("Update flags", flag.ExitOnError)
@@ -621,7 +637,7 @@ func resolveFlags() {
 	removeFlagSet.BoolVar(&verbose, "v", false, "Show additional information about what BPM is doing")
 	removeFlagSet.BoolVar(&yesAll, "y", false, "Skip confirmation prompts")
 	removeFlagSet.BoolVar(&removeUnused, "unused", false, "Removes only packages that aren't required as dependencies by other packages")
-	removeFlagSet.BoolVar(&doCleanup, "cleanup", false, "Perform a dependency cleanup ")
+	removeFlagSet.BoolVar(&doCleanup, "cleanup", false, "Perform a dependency cleanup")
 	removeFlagSet.Usage = printHelp
 	// Cleanup flags
 	cleanupFlagSet := flag.NewFlagSet("Cleanup flags", flag.ExitOnError)

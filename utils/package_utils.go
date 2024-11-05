@@ -1185,11 +1185,8 @@ func InstallPackage(filename, rootDir string, verbose, force, binaryPkgFromSrc, 
 		return err
 	}
 	pkgDir := path.Join(installedDir, bpmpkg.PkgInfo.Name)
-	err = os.RemoveAll(pkgDir)
-	if err != nil {
-		return err
-	}
-	err = os.Mkdir(pkgDir, 0755)
+
+	err = os.MkdirAll(pkgDir, 0755)
 	if err != nil {
 		return err
 	}

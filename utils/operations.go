@@ -10,9 +10,10 @@ import (
 )
 
 type BPMOperation struct {
-	Actions           []OperationAction
-	UnresolvedDepends []string
-	RootDir           string
+	Actions                 []OperationAction
+	UnresolvedDepends       []string
+	RootDir                 string
+	ForceInstallationReason InstallationReason
 }
 
 func (operation *BPMOperation) ActionsContainPackage(pkg string) bool {
@@ -396,7 +397,12 @@ func (operation *BPMOperation) Execute(verbose, force bool) error {
 				return errors.New(fmt.Sprintf("could not install package (%s): %s\n", bpmpkg.PkgInfo.Name, err))
 			}
 			fmt.Printf("Package (%s) was successfully installed\n", bpmpkg.PkgInfo.Name)
-			if value.IsDependency {
+			if operation.ForceInstallationReason != Unknown {
+				err := SetInstallationReason(bpmpkg.PkgInfo.Name, operation.ForceInstallationReason, operation.RootDir)
+				if err != nil {
+					return errors.New(fmt.Sprintf("could not set installation reason for package (%s): %s\n", value.BpmPackage.PkgInfo.Name, err))
+				}
+			} else if value.IsDependency && !IsPackageInstalled(bpmpkg.PkgInfo.Name, operation.RootDir) {
 				err := SetInstallationReason(bpmpkg.PkgInfo.Name, Dependency, operation.RootDir)
 				if err != nil {
 					return errors.New(fmt.Sprintf("could not set installation reason for package (%s): %s\n", value.BpmPackage.PkgInfo.Name, err))
