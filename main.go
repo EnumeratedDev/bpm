@@ -39,6 +39,7 @@ var installationReason = ""
 var nosync = true
 var removeUnused = false
 var doCleanup = false
+var showRepoInfo = false
 
 func main() {
 	utils.ReadConfig()
@@ -103,7 +104,13 @@ func resolveCommand() {
 		for n, pkg := range packages {
 			var info *utils.PackageInfo
 			isFile := false
-			if stat, err := os.Stat(pkg); err == nil && !stat.IsDir() {
+			if showRepoInfo {
+				entry, _, err := utils.GetRepositoryEntry(pkg)
+				if err != nil {
+					log.Fatalf("Error: could not find package (%s) in any repository\n", pkg)
+				}
+				info = entry.Info
+			} else if stat, err := os.Stat(pkg); err == nil && !stat.IsDir() {
 				bpmpkg, err := utils.ReadPackage(pkg)
 				if err != nil {
 					log.Fatalf("Error: could not read package: %s\n", err)
@@ -162,7 +169,7 @@ func resolveCommand() {
 		if len(searchTerms) == 0 {
 			log.Fatalf("Error: no search terms given")
 		}
-		for _, term := range searchTerms {
+		for i, term := range searchTerms {
 			nameResults := make([]*utils.PackageInfo, 0)
 			descResults := make([]*utils.PackageInfo, 0)
 			for _, repo := range utils.BPMConfig.Repositories {
@@ -178,10 +185,12 @@ func resolveCommand() {
 			if len(results) == 0 {
 				log.Fatalf("Error: no results for term (%s) were found\n", term)
 			}
+			if i > 0 {
+				fmt.Println()
+			}
 			fmt.Printf("Results for term (%s)\n", term)
-			for i, result := range results {
-				fmt.Println("----------------")
-				fmt.Printf("%d) %s: %s (%s)\n", i+1, result.Name, result.Description, result.GetFullVersion())
+			for j, result := range results {
+				fmt.Printf("%d) %s: %s (%s)\n", j+1, result.Name, result.Description, result.GetFullVersion())
 			}
 		}
 	case install:
@@ -558,8 +567,9 @@ func printHelp() {
 	fmt.Println("-> flags will be read if passed right after the subcommand otherwise they will be read as subcommand arguments")
 	fmt.Println("\033[1m---- Command List ----\033[0m")
 	fmt.Println("-> bpm version | shows information on the installed version of bpm")
-	fmt.Println("-> bpm info [-R] <packages...> | shows information on an installed package")
+	fmt.Println("-> bpm info [-R, --repos] <packages...> | shows information on an installed package")
 	fmt.Println("       -R=<path> lets you define the root path which will be used")
+	fmt.Println("       --repos show information on package in repository")
 	fmt.Println("-> bpm list [-R, -c, -n] | lists all installed packages")
 	fmt.Println("       -R=<path> lets you define the root path which will be used")
 	fmt.Println("       -c lists the amount of installed packages")
@@ -614,6 +624,7 @@ func resolveFlags() {
 	// Info flags
 	infoFlagSet := flag.NewFlagSet("Info flags", flag.ExitOnError)
 	infoFlagSet.StringVar(&rootDir, "R", "/", "Set the destination root")
+	infoFlagSet.BoolVar(&showRepoInfo, "repos", false, "Show information on package in repository")
 	infoFlagSet.Usage = printHelp
 	// Install flags
 	installFlagSet := flag.NewFlagSet("Install flags", flag.ExitOnError)
