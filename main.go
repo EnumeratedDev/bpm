@@ -102,15 +102,31 @@ func resolveCommand() {
 		}
 		for n, pkg := range packages {
 			var info *utils.PackageInfo
-			info = utils.GetPackageInfo(pkg, rootDir)
+			isFile := false
+			if stat, err := os.Stat(pkg); err == nil && !stat.IsDir() {
+				bpmpkg, err := utils.ReadPackage(pkg)
+				if err != nil {
+					log.Fatalf("Error: could not read package: %s\n", err)
+				}
+				info = bpmpkg.PkgInfo
+				isFile = true
+			} else {
+				info = utils.GetPackageInfo(pkg, rootDir)
+			}
 			if info == nil {
 				log.Fatalf("Error: package (%s) is not installed\n", pkg)
 			}
-			fmt.Println("----------------")
-			fmt.Println(utils.CreateReadableInfo(true, true, true, info, rootDir))
-			if n == len(packages)-1 {
-				fmt.Println("----------------")
+			if n != 0 {
+				fmt.Println()
 			}
+			if isFile {
+				abs, err := filepath.Abs(pkg)
+				if err != nil {
+					log.Fatalf("Error: could not get absolute path of file (%s)\n", abs)
+				}
+				fmt.Println("File: " + abs)
+			}
+			fmt.Println(utils.CreateReadableInfo(true, true, true, info, rootDir))
 		}
 	case list:
 		packages, err := utils.GetInstalledPackages(rootDir)
@@ -135,10 +151,10 @@ func resolveCommand() {
 					fmt.Printf("Package (%s) could not be found\n", pkg)
 					continue
 				}
-				fmt.Println("----------------\n" + utils.CreateReadableInfo(true, true, true, info, rootDir))
-				if n == len(packages)-1 {
-					fmt.Println("----------------")
+				if n != 0 {
+					fmt.Println()
 				}
+				fmt.Println(utils.CreateReadableInfo(true, true, true, info, rootDir))
 			}
 		}
 	case search:
@@ -146,7 +162,6 @@ func resolveCommand() {
 		if len(searchTerms) == 0 {
 			log.Fatalf("Error: no search terms given")
 		}
-
 		for _, term := range searchTerms {
 			nameResults := make([]*utils.PackageInfo, 0)
 			descResults := make([]*utils.PackageInfo, 0)
