@@ -1,3 +1,5 @@
+SHELL = /bin/bash
+
 ifeq ($(PREFIX),)
     PREFIX := /usr/local
 endif
