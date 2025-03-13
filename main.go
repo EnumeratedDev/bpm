@@ -340,6 +340,9 @@ func resolveCommand() {
 
 		// Search for packages
 		for _, pkg := range pkgs {
+			if slices.Contains(utils.BPMConfig.IgnorePackages, pkg) {
+				continue
+			}
 			entry, _, err := utils.GetRepositoryEntry(pkg)
 			if err != nil {
 				continue

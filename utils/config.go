@@ -11,6 +11,7 @@ type BPMConfigStruct struct {
 	SilentCompilation bool          `yaml:"silent_compilation"`
 	BinaryOutputDir   string        `yaml:"binary_output_dir"`
 	CompilationDir    string        `yaml:"compilation_dir"`
+	IgnorePackages    []string      `yaml:"ignore_packages"`
 	Repositories      []*Repository `yaml:"repositories"`
 }
 
