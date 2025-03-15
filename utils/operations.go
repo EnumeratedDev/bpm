@@ -228,6 +228,30 @@ func (operation *BPMOperation) Cleanup(verbose bool) error {
 	return nil
 }
 
+func (operation *BPMOperation) ReplaceObsoletePackages() {
+	for _, value := range slices.Clone(operation.Actions) {
+		var pkgInfo *PackageInfo
+		if value.GetActionType() == "install" {
+			action := value.(*InstallPackageAction)
+			pkgInfo = action.BpmPackage.PkgInfo
+
+		} else if value.GetActionType() == "fetch" {
+			action := value.(*FetchPackageAction)
+			pkgInfo = action.RepositoryEntry.Info
+		} else {
+			continue
+		}
+
+		for _, r := range pkgInfo.Replaces {
+			if bpmpkg := GetPackage(r, operation.RootDir); bpmpkg != nil && !operation.ActionsContainPackage(bpmpkg.PkgInfo.Name) {
+				operation.InsertActionAt(0, &RemovePackageAction{
+					BpmPackage: bpmpkg,
+				})
+			}
+		}
+	}
+}
+
 func (operation *BPMOperation) CheckForConflicts() (map[string][]string, error) {
 	conflicts := make(map[string][]string)
 	installedPackages, err := GetInstalledPackages(operation.RootDir)
@@ -256,9 +280,12 @@ func (operation *BPMOperation) CheckForConflicts() (map[string][]string, error) 
 		} else if value.GetActionType() == "remove" {
 			action := value.(*RemovePackageAction)
 			pkgInfo := action.BpmPackage.PkgInfo
-			slices.DeleteFunc(allPackages, func(info *PackageInfo) bool {
-				return info.Name == pkgInfo.Name
-			})
+			for i := len(allPackages) - 1; i >= 0; i-- {
+				info := allPackages[i]
+				if info.Name == pkgInfo.Name {
+					allPackages = append(allPackages[:i], allPackages[i+1:]...)
+				}
+			}
 		}
 	}
 

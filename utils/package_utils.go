@@ -39,6 +39,7 @@ type PackageInfo struct {
 	MakeDepends     []string `yaml:"make_depends,omitempty"`
 	OptionalDepends []string `yaml:"optional_depends,omitempty"`
 	Conflicts       []string `yaml:"conflicts,omitempty"`
+	Replaces        []string `yaml:"replaces,omitempty"`
 	Provides        []string `yaml:"provides,omitempty"`
 }
 
@@ -406,6 +407,7 @@ func ReadPackageInfo(contents string) (*PackageInfo, error) {
 		MakeDepends:     make([]string, 0),
 		OptionalDepends: make([]string, 0),
 		Conflicts:       make([]string, 0),
+		Replaces:        make([]string, 0),
 		Provides:        make([]string, 0),
 	}
 	err := yaml.Unmarshal([]byte(contents), &pkgInfo)
@@ -468,7 +470,7 @@ func CreateReadableInfo(showArchitecture, showType, showPackageRelations bool, p
 		}
 		appendArray("Conflicting packages", pkgInfo.Conflicts)
 		appendArray("Provided packages", pkgInfo.Provides)
-
+		appendArray("Replaces packages", pkgInfo.Replaces)
 	}
 	ret = append(ret, "Installation Reason: "+string(GetInstallationReason(pkgInfo.Name, rootDir)))
 	return strings.Join(ret, "\n")

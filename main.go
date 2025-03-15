@@ -263,6 +263,9 @@ func resolveCommand() {
 			}
 		}
 
+		// Replace obsolete packages
+		operation.ReplaceObsoletePackages()
+
 		// Check for conflicts
 		conflicts, err := operation.CheckForConflicts()
 		if err != nil {
@@ -343,10 +346,14 @@ func resolveCommand() {
 			if slices.Contains(utils.BPMConfig.IgnorePackages, pkg) {
 				continue
 			}
-			entry, _, err := utils.GetRepositoryEntry(pkg)
-			if err != nil {
+			var entry *utils.RepositoryEntry
+			// Check if installed package can be replaced and install that instead
+			if e := utils.FindReplacement(pkg); e != nil {
+				entry = e
+			} else if entry, _, err = utils.GetRepositoryEntry(pkg); err != nil {
 				continue
 			}
+
 			installedInfo := utils.GetPackageInfo(pkg, rootDir)
 			if installedInfo == nil {
 				log.Fatalf("Error: could not get package info for (%s)\n", pkg)
@@ -373,6 +380,9 @@ func resolveCommand() {
 				log.Println("Warning: The following dependencies could not be found in any repositories: " + strings.Join(operation.UnresolvedDepends, ", "))
 			}
 		}
+
+		// Replace obsolete packages
+		operation.ReplaceObsoletePackages()
 
 		// Show operation summary
 		operation.ShowOperationSummary()

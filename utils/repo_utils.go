@@ -167,6 +167,23 @@ func GetRepositoryEntry(str string) (*RepositoryEntry, *Repository, error) {
 	}
 }
 
+func FindReplacement(pkg string) *RepositoryEntry {
+	for _, repo := range BPMConfig.Repositories {
+		for _, entry := range repo.Entries {
+			if entry.IsVirtualPackage {
+				continue
+			}
+			for _, replaced := range entry.Info.Replaces {
+				if replaced == pkg {
+					return entry
+				}
+			}
+		}
+	}
+
+	return nil
+}
+
 func (repo *Repository) FetchPackage(pkg string) (string, error) {
 	if !repo.ContainsPackage(pkg) {
 		return "", errors.New("could not fetch package '" + pkg + "'")
