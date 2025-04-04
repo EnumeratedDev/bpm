@@ -42,6 +42,7 @@ func ReadConfig() {
 	}
 	for _, repo := range BPMConfig.Repositories {
 		repo.Entries = make(map[string]*RepositoryEntry)
+		repo.VirtualPackages = make(map[string][]string)
 		err := repo.ReadLocalDatabase()
 		if err != nil {
 			log.Fatal(err)

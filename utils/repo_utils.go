@@ -8,24 +8,23 @@ import (
 	"net/url"
 	"os"
 	"path"
-	"sort"
 	"strings"
 )
 
 type Repository struct {
-	Name     string `yaml:"name"`
-	Source   string `yaml:"source"`
-	Disabled *bool  `yaml:"disabled"`
-	Entries  map[string]*RepositoryEntry
+	Name            string `yaml:"name"`
+	Source          string `yaml:"source"`
+	Disabled        *bool  `yaml:"disabled"`
+	Entries         map[string]*RepositoryEntry
+	VirtualPackages map[string][]string
 }
 
 type RepositoryEntry struct {
-	Info             *PackageInfo `yaml:"info"`
-	Download         string       `yaml:"download"`
-	DownloadSize     uint64       `yaml:"download_size"`
-	InstalledSize    uint64       `yaml:"installed_size"`
-	IsVirtualPackage bool         `yaml:"-"`
-	Repository       *Repository
+	Info          *PackageInfo `yaml:"info"`
+	Download      string       `yaml:"download"`
+	DownloadSize  uint64       `yaml:"download_size"`
+	InstalledSize uint64       `yaml:"installed_size"`
+	Repository    *Repository
 }
 
 func (repo *Repository) ContainsPackage(pkg string) bool {
@@ -43,8 +42,6 @@ func (repo *Repository) ReadLocalDatabase() error {
 	if err != nil {
 		return err
 	}
-
-	virtualPackages := make(map[string][]string)
 
 	data := string(bytes)
 	for _, b := range strings.Split(data, "---") {
@@ -65,11 +62,10 @@ func (repo *Repository) ReadLocalDatabase() error {
 				Conflicts:       make([]string, 0),
 				Provides:        make([]string, 0),
 			},
-			Download:         "",
-			DownloadSize:     0,
-			InstalledSize:    0,
-			IsVirtualPackage: false,
-			Repository:       repo,
+			Download:      "",
+			DownloadSize:  0,
+			InstalledSize: 0,
+			Repository:    repo,
 		}
 		err := yaml.Unmarshal([]byte(b), &entry)
 		if err != nil {
@@ -77,26 +73,11 @@ func (repo *Repository) ReadLocalDatabase() error {
 		}
 
 		for _, p := range entry.Info.Provides {
-			virtualPackages[p] = append(virtualPackages[p], entry.Info.Name)
+			repo.VirtualPackages[p] = append(repo.VirtualPackages[p], entry.Info.Name)
 		}
 		repo.Entries[entry.Info.Name] = &entry
 	}
 
-	for key, value := range virtualPackages {
-		if _, ok := repo.Entries[key]; ok {
-			continue
-		}
-		sort.Strings(value)
-		entry := RepositoryEntry{
-			Info:             repo.Entries[value[0]].Info,
-			Download:         repo.Entries[value[0]].Download,
-			DownloadSize:     repo.Entries[value[0]].DownloadSize,
-			InstalledSize:    repo.Entries[value[0]].InstalledSize,
-			IsVirtualPackage: true,
-			Repository:       repo,
-		}
-		repo.Entries[key] = &entry
-	}
 	return nil
 }
 
@@ -170,13 +151,22 @@ func GetRepositoryEntry(str string) (*RepositoryEntry, *Repository, error) {
 func FindReplacement(pkg string) *RepositoryEntry {
 	for _, repo := range BPMConfig.Repositories {
 		for _, entry := range repo.Entries {
-			if entry.IsVirtualPackage {
-				continue
-			}
 			for _, replaced := range entry.Info.Replaces {
 				if replaced == pkg {
 					return entry
 				}
+			}
+		}
+	}
+
+	return nil
+}
+
+func ResolveVirtualPackage(vpkg string) *RepositoryEntry {
+	for _, repo := range BPMConfig.Repositories {
+		if v, ok := repo.VirtualPackages[vpkg]; ok {
+			for _, pkg := range v {
+				return repo.Entries[pkg]
 			}
 		}
 	}

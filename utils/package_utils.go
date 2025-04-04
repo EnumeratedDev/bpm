@@ -1340,15 +1340,19 @@ func (pkgInfo *PackageInfo) ResolveDependencies(resolved, unresolved *[]string, 
 					*resolved = append(*resolved, depend)
 				}
 				continue
-			} else if ignoreInstalled && IsPackageInstalled(depend, rootDir) {
+			} else if ignoreInstalled && IsPackageProvided(depend, rootDir) {
 				continue
 			}
-			entry, _, err := GetRepositoryEntry(depend)
+			var err error
+			var entry *RepositoryEntry
+			entry, _, err = GetRepositoryEntry(depend)
 			if err != nil {
-				if !slices.Contains(*unresolved, depend) {
-					*unresolved = append(*unresolved, depend)
+				if entry = ResolveVirtualPackage(depend); entry == nil {
+					if !slices.Contains(*unresolved, depend) {
+						*unresolved = append(*unresolved, depend)
+					}
+					continue
 				}
-				continue
 			}
 			entry.Info.ResolveDependencies(resolved, unresolved, checkMake, checkOptional, ignoreInstalled, verbose, rootDir)
 		}
@@ -1367,6 +1371,26 @@ func IsPackageInstalled(pkg, rootDir string) bool {
 		return false
 	}
 	return true
+}
+
+func IsVirtualPackage(pkg, rootDir string) (bool, string) {
+	pkgs, err := GetInstalledPackages(rootDir)
+	if err != nil {
+		return false, ""
+	}
+	for _, p := range pkgs {
+		if p == pkg {
+			return false, ""
+		}
+		i := GetPackageInfo(p, rootDir)
+		if i == nil {
+			continue
+		}
+		if slices.Contains(i.Provides, pkg) {
+			return true, p
+		}
+	}
+	return false, ""
 }
 
 func IsPackageProvided(pkg, rootDir string) bool {

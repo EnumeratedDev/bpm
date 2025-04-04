@@ -105,9 +105,13 @@ func resolveCommand() {
 			var info *utils.PackageInfo
 			isFile := false
 			if showRepoInfo {
-				entry, _, err := utils.GetRepositoryEntry(pkg)
+				var err error
+				var entry *utils.RepositoryEntry
+				entry, _, err = utils.GetRepositoryEntry(pkg)
 				if err != nil {
-					log.Fatalf("Error: could not find package (%s) in any repository\n", pkg)
+					if entry = utils.ResolveVirtualPackage(pkg); entry == nil {
+						log.Fatalf("Error: could not find package (%s) in any repository\n", pkg)
+					}
 				}
 				info = entry.Info
 			} else if stat, err := os.Stat(pkg); err == nil && !stat.IsDir() {
@@ -118,7 +122,11 @@ func resolveCommand() {
 				info = bpmpkg.PkgInfo
 				isFile = true
 			} else {
-				info = utils.GetPackageInfo(pkg, rootDir)
+				if isVirtual, p := utils.IsVirtualPackage(pkg, rootDir); isVirtual {
+					info = utils.GetPackageInfo(p, rootDir)
+				} else {
+					info = utils.GetPackageInfo(pkg, rootDir)
+				}
 			}
 			if info == nil {
 				log.Fatalf("Error: package (%s) is not installed\n", pkg)
@@ -236,8 +244,18 @@ func resolveCommand() {
 					BpmPackage:   bpmpkg,
 				})
 			} else {
-				entry, _, err := utils.GetRepositoryEntry(pkg)
-				if err != nil {
+				var entry *utils.RepositoryEntry
+
+				if e, _, err := utils.GetRepositoryEntry(pkg); err == nil {
+					entry = e
+				} else if isVirtual, p := utils.IsVirtualPackage(pkg, rootDir); isVirtual {
+					entry, _, err = utils.GetRepositoryEntry(p)
+					if err != nil {
+						log.Fatalf("Error: could not find package (%s) in any repository\n", p)
+					}
+				} else if e := utils.ResolveVirtualPackage(pkg); e != nil {
+					entry = e
+				} else {
 					log.Fatalf("Error: could not find package (%s) in any repository\n", pkg)
 				}
 				if !reinstall && utils.IsPackageInstalled(entry.Info.Name, rootDir) && utils.GetPackageInfo(entry.Info.Name, rootDir).GetFullVersion() == entry.Info.GetFullVersion() {
