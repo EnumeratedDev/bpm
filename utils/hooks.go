@@ -6,6 +6,8 @@ import (
 	"gopkg.in/yaml.v3"
 	"os"
 	"os/exec"
+	"path"
+	"path/filepath"
 	"slices"
 	"strings"
 	"syscall"
@@ -102,20 +104,24 @@ func (hook *BPMHook) Execute(packageChanges map[string]string, verbose bool, roo
 
 	// Check if any targets are met
 	targetMet := false
-	for _, t1 := range hook.Targets {
+	for _, target := range hook.Targets {
 		if targetMet {
 			break
 		}
 		if hook.TargetType == "package" {
-			for t2, operation := range packageChanges {
-				if t1 == t2 && slices.Contains(hook.TriggerOperations, operation) {
+			for change, operation := range packageChanges {
+				if target == change && slices.Contains(hook.TriggerOperations, operation) {
 					targetMet = true
 					break
 				}
 			}
 		} else {
-			for _, t2 := range modifiedFiles {
-				if strings.HasPrefix(t2.Path, t1) {
+			glob, err := filepath.Glob(path.Join(rootDir, target))
+			if err != nil {
+				return err
+			}
+			for _, change := range modifiedFiles {
+				if slices.Contains(glob, path.Join(rootDir, change.Path)) {
 					targetMet = true
 					break
 				}
