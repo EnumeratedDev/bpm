@@ -98,7 +98,7 @@ func (hook *BPMHook) Execute(packageChanges map[string]string, verbose bool, roo
 
 	// Get modified files slice
 	modifiedFiles := make([]*PackageFileEntry, 0)
-	for pkg, _ := range packageChanges {
+	for pkg := range packageChanges {
 		modifiedFiles = append(modifiedFiles, GetPackageFiles(pkg, rootDir)...)
 	}
 
