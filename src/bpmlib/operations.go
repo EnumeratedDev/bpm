@@ -372,12 +372,12 @@ func (operation *BPMOperation) ShowOperationSummary() {
 		fmt.Println("Warning: Operating in " + operation.RootDir)
 	}
 	if operation.GetTotalDownloadSize() > 0 {
-		fmt.Printf("%s will be downloaded to complete this operation\n", UnsignedBytesToHumanReadable(operation.GetTotalDownloadSize()))
+		fmt.Printf("%s will be downloaded to complete this operation\n", unsignedBytesToHumanReadable(operation.GetTotalDownloadSize()))
 	}
 	if operation.GetFinalActionSize(operation.RootDir) > 0 {
-		fmt.Printf("A total of %s will be installed after the operation finishes\n", BytesToHumanReadable(operation.GetFinalActionSize(operation.RootDir)))
+		fmt.Printf("A total of %s will be installed after the operation finishes\n", bytesToHumanReadable(operation.GetFinalActionSize(operation.RootDir)))
 	} else if operation.GetFinalActionSize(operation.RootDir) < 0 {
-		fmt.Printf("A total of %s will be freed after the operation finishes\n", strings.TrimPrefix(BytesToHumanReadable(operation.GetFinalActionSize(operation.RootDir)), "-"))
+		fmt.Printf("A total of %s will be freed after the operation finishes\n", strings.TrimPrefix(bytesToHumanReadable(operation.GetFinalActionSize(operation.RootDir)), "-"))
 	}
 }
 
@@ -391,7 +391,7 @@ func (operation *BPMOperation) RunHooks(verbose bool) error {
 	// Find all hooks, validate and execute them
 	for _, entry := range dirEntries {
 		if entry.Type().IsRegular() && strings.HasSuffix(entry.Name(), ".bpmhook") {
-			hook, err := CreateHook(path.Join(operation.RootDir, "var/lib/bpm/hooks", entry.Name()))
+			hook, err := createHook(path.Join(operation.RootDir, "var/lib/bpm/hooks", entry.Name()))
 			if err != nil {
 				log.Printf("Error while reading hook (%s): %s", entry.Name(), err)
 			}
@@ -458,7 +458,7 @@ func (operation *BPMOperation) Execute(verbose, force bool) error {
 	for _, action := range operation.Actions {
 		if action.GetActionType() == "remove" {
 			pkgInfo := action.(*RemovePackageAction).BpmPackage.PkgInfo
-			err := RemovePackage(pkgInfo.Name, verbose, operation.RootDir)
+			err := removePackage(pkgInfo.Name, verbose, operation.RootDir)
 			if err != nil {
 				return errors.New(fmt.Sprintf("could not remove package (%s): %s\n", pkgInfo.Name, err))
 			}
@@ -468,9 +468,9 @@ func (operation *BPMOperation) Execute(verbose, force bool) error {
 			isReinstall := IsPackageInstalled(bpmpkg.PkgInfo.Name, operation.RootDir)
 			var err error
 			if value.IsDependency {
-				err = InstallPackage(value.File, operation.RootDir, verbose, true, false, false, false)
+				err = installPackage(value.File, operation.RootDir, verbose, true, false, false, false)
 			} else {
-				err = InstallPackage(value.File, operation.RootDir, verbose, force, false, false, false)
+				err = installPackage(value.File, operation.RootDir, verbose, force, false, false, false)
 			}
 			if err != nil {
 				return errors.New(fmt.Sprintf("could not install package (%s): %s\n", bpmpkg.PkgInfo.Name, err))

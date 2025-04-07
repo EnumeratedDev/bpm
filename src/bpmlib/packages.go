@@ -288,7 +288,7 @@ const (
 	Remove            = 2
 )
 
-func ExecutePackageScripts(filename, rootDir string, operation Operation, postOperation bool) error {
+func executePackageScripts(filename, rootDir string, operation Operation, postOperation bool) error {
 	pkgInfo, err := ReadPackage(filename)
 	if err != nil {
 		return err
@@ -478,12 +478,12 @@ func CreateReadableInfo(showArchitecture, showType, showPackageRelations bool, p
 
 func extractPackage(bpmpkg *BPMPackage, verbose bool, filename, rootDir string) error {
 	if !IsPackageInstalled(bpmpkg.PkgInfo.Name, rootDir) {
-		err := ExecutePackageScripts(filename, rootDir, Install, false)
+		err := executePackageScripts(filename, rootDir, Install, false)
 		if err != nil {
 			return err
 		}
 	} else {
-		err := ExecutePackageScripts(filename, rootDir, Update, false)
+		err := executePackageScripts(filename, rootDir, Update, false)
 		if err != nil {
 			return err
 		}
@@ -494,7 +494,7 @@ func extractPackage(bpmpkg *BPMPackage, verbose bool, filename, rootDir string) 
 		return err
 	}
 
-	tarballFile, err := ReadTarballContent(filename, "files.tar.gz")
+	tarballFile, err := readTarballContent(filename, "files.tar.gz")
 	if err != nil {
 		return err
 	}
@@ -629,12 +629,12 @@ func isSplitPackage(filename string) bool {
 func compilePackage(bpmpkg *BPMPackage, filename, rootDir string, verbose, binaryPkgFromSrc, skipCheck, keepTempDir bool) (error, []string) {
 	var files []string
 	if !IsPackageInstalled(bpmpkg.PkgInfo.Name, rootDir) {
-		err := ExecutePackageScripts(filename, rootDir, Install, false)
+		err := executePackageScripts(filename, rootDir, Install, false)
 		if err != nil {
 			return err, nil
 		}
 	} else {
-		err := ExecutePackageScripts(filename, rootDir, Update, false)
+		err := executePackageScripts(filename, rootDir, Update, false)
 		if err != nil {
 			return err, nil
 		}
@@ -747,12 +747,12 @@ func compilePackage(bpmpkg *BPMPackage, filename, rootDir string, verbose, binar
 	}
 	fmt.Println("Running source.sh file...")
 	if !IsPackageInstalled(bpmpkg.PkgInfo.Name, rootDir) {
-		err = ExecutePackageScripts(filename, rootDir, Install, false)
+		err = executePackageScripts(filename, rootDir, Install, false)
 		if err != nil {
 			return err, nil
 		}
 	} else {
-		err = ExecutePackageScripts(filename, rootDir, Update, false)
+		err = executePackageScripts(filename, rootDir, Update, false)
 		if err != nil {
 			return err, nil
 		}
@@ -1051,7 +1051,7 @@ fi
 	return nil, files
 }
 
-func InstallPackage(filename, rootDir string, verbose, force, binaryPkgFromSrc, skipCheck, keepTempDir bool) error {
+func installPackage(filename, rootDir string, verbose, force, binaryPkgFromSrc, skipCheck, keepTempDir bool) error {
 	if _, err := os.Stat(filename); os.IsNotExist(err) {
 		return err
 	}
@@ -1198,7 +1198,7 @@ func InstallPackage(filename, rootDir string, verbose, force, binaryPkgFromSrc, 
 		return err
 	}
 
-	tarballFile, err := ReadTarballContent(filename, "pkg.files")
+	tarballFile, err := readTarballContent(filename, "pkg.files")
 	if err != nil {
 		return err
 	}
@@ -1246,12 +1246,12 @@ func InstallPackage(filename, rootDir string, verbose, force, binaryPkgFromSrc, 
 	}
 
 	if !packageInstalled {
-		err = ExecutePackageScripts(filename, rootDir, Install, true)
+		err = executePackageScripts(filename, rootDir, Install, true)
 		if err != nil {
 			return err
 		}
 	} else {
-		err = ExecutePackageScripts(filename, rootDir, Update, true)
+		err = executePackageScripts(filename, rootDir, Update, true)
 		if err != nil {
 			return err
 		}
@@ -1552,7 +1552,7 @@ func GetAllPackageFiles(rootDir string, excludePackages ...string) (map[string][
 	return ret, nil
 }
 
-func RemovePackage(pkg string, verbose bool, rootDir string) error {
+func removePackage(pkg string, verbose bool, rootDir string) error {
 	installedDir := path.Join(rootDir, "var/lib/bpm/installed/")
 	pkgDir := path.Join(installedDir, pkg)
 	pkgInfo := GetPackageInfo(pkg, rootDir)

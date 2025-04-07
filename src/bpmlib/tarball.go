@@ -7,12 +7,12 @@ import (
 	"os"
 )
 
-type TarballFileReader struct {
+type tarballFileReader struct {
 	tarReader *tar.Reader
 	file      *os.File
 }
 
-func ReadTarballContent(tarballPath, fileToExtract string) (*TarballFileReader, error) {
+func readTarballContent(tarballPath, fileToExtract string) (*tarballFileReader, error) {
 	file, err := os.Open(tarballPath)
 	if err != nil {
 		return nil, err
@@ -32,7 +32,7 @@ func ReadTarballContent(tarballPath, fileToExtract string) (*TarballFileReader, 
 				return nil, errors.New("file to extract must be a regular file")
 			}
 
-			return &TarballFileReader{
+			return &tarballFileReader{
 				tarReader: tr,
 				file:      file,
 			}, nil

@@ -23,8 +23,8 @@ type BPMHook struct {
 	Run               string   `yaml:"run"`
 }
 
-// CreateHook returns a BPMHook instance based on the content of the given string
-func CreateHook(sourcePath string) (*BPMHook, error) {
+// createHook returns a BPMHook instance based on the content of the given string
+func createHook(sourcePath string) (*BPMHook, error) {
 	// Read hook from source path
 	bytes, err := os.ReadFile(sourcePath)
 	if err != nil {
