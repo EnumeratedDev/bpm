@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"log"
 	"os"
+	"path"
 	"slices"
 	"strings"
 )
@@ -12,6 +13,7 @@ import (
 type BPMOperation struct {
 	Actions                 []OperationAction
 	UnresolvedDepends       []string
+	Changes                 map[string]string
 	RootDir                 string
 	ForceInstallationReason InstallationReason
 }
@@ -35,12 +37,35 @@ func (operation *BPMOperation) ActionsContainPackage(pkg string) bool {
 	return false
 }
 
+func (operation *BPMOperation) AppendAction(action OperationAction) {
+	operation.InsertActionAt(len(operation.Actions), action)
+}
+
 func (operation *BPMOperation) InsertActionAt(index int, action OperationAction) {
 	if len(operation.Actions) == index { // nil or empty slice or after last element
 		operation.Actions = append(operation.Actions, action)
+	} else {
+		operation.Actions = append(operation.Actions[:index+1], operation.Actions[index:]...) // index < len(a)
+		operation.Actions[index] = action
 	}
-	operation.Actions = append(operation.Actions[:index+1], operation.Actions[index:]...) // index < len(a)
-	operation.Actions[index] = action
+
+	if action.GetActionType() == "install" {
+		pkgInfo := action.(*InstallPackageAction).BpmPackage.PkgInfo
+		if !IsPackageInstalled(pkgInfo.Name, operation.RootDir) {
+			operation.Changes[pkgInfo.Name] = "install"
+		} else {
+			operation.Changes[pkgInfo.Name] = "upgrade"
+		}
+	} else if action.GetActionType() == "fetch" {
+		pkgInfo := action.(*FetchPackageAction).RepositoryEntry.Info
+		if !IsPackageInstalled(pkgInfo.Name, operation.RootDir) {
+			operation.Changes[pkgInfo.Name] = "install"
+		} else {
+			operation.Changes[pkgInfo.Name] = "upgrade"
+		}
+	} else if action.GetActionType() == "remove" {
+		operation.Changes[action.(*RemovePackageAction).BpmPackage.PkgInfo.Name] = "remove"
+	}
 }
 
 func (operation *BPMOperation) RemoveAction(pkg, actionType string) {
@@ -354,6 +379,32 @@ func (operation *BPMOperation) ShowOperationSummary() {
 	} else if operation.GetFinalActionSize(operation.RootDir) < 0 {
 		fmt.Printf("A total of %s will be freed after the operation finishes\n", strings.TrimPrefix(BytesToHumanReadable(operation.GetFinalActionSize(operation.RootDir)), "-"))
 	}
+}
+
+func (operation *BPMOperation) RunHooks(verbose bool) error {
+	// Get directory entries in hooks directory
+	dirEntries, err := os.ReadDir(path.Join(operation.RootDir, "var/lib/bpm/hooks"))
+	if err != nil {
+		return err
+	}
+
+	// Find all hooks, validate and execute them
+	for _, entry := range dirEntries {
+		if entry.Type().IsRegular() && strings.HasSuffix(entry.Name(), ".bpmhook") {
+			hook, err := CreateHook(path.Join(operation.RootDir, "var/lib/bpm/hooks", entry.Name()))
+			if err != nil {
+				log.Printf("Error while reading hook (%s): %s", entry.Name(), err)
+			}
+
+			err = hook.Execute(operation.Changes, verbose, operation.RootDir)
+			if err != nil {
+				log.Printf("Warning: could not execute hook (%s): %s\n", entry.Name(), err)
+				continue
+			}
+		}
+	}
+
+	return nil
 }
 
 func (operation *BPMOperation) Execute(verbose, force bool) error {
