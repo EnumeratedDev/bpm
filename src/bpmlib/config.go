@@ -1,4 +1,4 @@
-package utils
+package bpmlib
 
 import (
 	"gopkg.in/yaml.v3"

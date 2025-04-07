@@ -4,7 +4,7 @@ import (
 	"bufio"
 	"flag"
 	"fmt"
-	"gitlab.com/bubble-package-manager/bpm/utils"
+	"git.enumerated.dev/bubble-package-manager/bpm/src/bpmlib"
 	"log"
 	"os"
 	"path/filepath"
@@ -42,7 +42,7 @@ var doCleanup = false
 var showRepoInfo = false
 
 func main() {
-	utils.ReadConfig()
+	bpmlib.ReadConfig()
 	resolveFlags()
 	resolveCommand()
 }
@@ -102,30 +102,30 @@ func resolveCommand() {
 			return
 		}
 		for n, pkg := range packages {
-			var info *utils.PackageInfo
+			var info *bpmlib.PackageInfo
 			isFile := false
 			if showRepoInfo {
 				var err error
-				var entry *utils.RepositoryEntry
-				entry, _, err = utils.GetRepositoryEntry(pkg)
+				var entry *bpmlib.RepositoryEntry
+				entry, _, err = bpmlib.GetRepositoryEntry(pkg)
 				if err != nil {
-					if entry = utils.ResolveVirtualPackage(pkg); entry == nil {
+					if entry = bpmlib.ResolveVirtualPackage(pkg); entry == nil {
 						log.Fatalf("Error: could not find package (%s) in any repository\n", pkg)
 					}
 				}
 				info = entry.Info
 			} else if stat, err := os.Stat(pkg); err == nil && !stat.IsDir() {
-				bpmpkg, err := utils.ReadPackage(pkg)
+				bpmpkg, err := bpmlib.ReadPackage(pkg)
 				if err != nil {
 					log.Fatalf("Error: could not read package: %s\n", err)
 				}
 				info = bpmpkg.PkgInfo
 				isFile = true
 			} else {
-				if isVirtual, p := utils.IsVirtualPackage(pkg, rootDir); isVirtual {
-					info = utils.GetPackageInfo(p, rootDir)
+				if isVirtual, p := bpmlib.IsVirtualPackage(pkg, rootDir); isVirtual {
+					info = bpmlib.GetPackageInfo(p, rootDir)
 				} else {
-					info = utils.GetPackageInfo(pkg, rootDir)
+					info = bpmlib.GetPackageInfo(pkg, rootDir)
 				}
 			}
 			if info == nil {
@@ -141,10 +141,10 @@ func resolveCommand() {
 				}
 				fmt.Println("File: " + abs)
 			}
-			fmt.Println(utils.CreateReadableInfo(true, true, true, info, rootDir))
+			fmt.Println(bpmlib.CreateReadableInfo(true, true, true, info, rootDir))
 		}
 	case list:
-		packages, err := utils.GetInstalledPackages(rootDir)
+		packages, err := bpmlib.GetInstalledPackages(rootDir)
 		if err != nil {
 			log.Fatalf("Error: could not get installed packages: %s", err.Error())
 			return
@@ -161,7 +161,7 @@ func resolveCommand() {
 				return
 			}
 			for n, pkg := range packages {
-				info := utils.GetPackageInfo(pkg, rootDir)
+				info := bpmlib.GetPackageInfo(pkg, rootDir)
 				if info == nil {
 					fmt.Printf("Package (%s) could not be found\n", pkg)
 					continue
@@ -169,7 +169,7 @@ func resolveCommand() {
 				if n != 0 {
 					fmt.Println()
 				}
-				fmt.Println(utils.CreateReadableInfo(true, true, true, info, rootDir))
+				fmt.Println(bpmlib.CreateReadableInfo(true, true, true, info, rootDir))
 			}
 		}
 	case search:
@@ -178,9 +178,9 @@ func resolveCommand() {
 			log.Fatalf("Error: no search terms given")
 		}
 		for i, term := range searchTerms {
-			nameResults := make([]*utils.PackageInfo, 0)
-			descResults := make([]*utils.PackageInfo, 0)
-			for _, repo := range utils.BPMConfig.Repositories {
+			nameResults := make([]*bpmlib.PackageInfo, 0)
+			descResults := make([]*bpmlib.PackageInfo, 0)
+			for _, repo := range bpmlib.BPMConfig.Repositories {
 				for _, entry := range repo.Entries {
 					if strings.Contains(entry.Info.Name, term) {
 						nameResults = append(nameResults, entry.Info)
@@ -212,17 +212,17 @@ func resolveCommand() {
 		}
 
 		// Check if installationReason argument is valid
-		ir := utils.Unknown
+		ir := bpmlib.Unknown
 		if installationReason == "manual" {
-			ir = utils.Manual
+			ir = bpmlib.Manual
 		} else if installationReason == "dependency" {
-			ir = utils.Dependency
+			ir = bpmlib.Dependency
 		} else if installationReason != "" {
 			log.Fatalf("Error: %s is not a valid installation reason", installationReason)
 		}
 
-		operation := utils.BPMOperation{
-			Actions:                 make([]utils.OperationAction, 0),
+		operation := bpmlib.BPMOperation{
+			Actions:                 make([]bpmlib.OperationAction, 0),
 			UnresolvedDepends:       make([]string, 0),
 			Changes:                 make(map[string]string),
 			RootDir:                 rootDir,
@@ -232,37 +232,37 @@ func resolveCommand() {
 		// Search for packages
 		for _, pkg := range pkgs {
 			if stat, err := os.Stat(pkg); err == nil && !stat.IsDir() {
-				bpmpkg, err := utils.ReadPackage(pkg)
+				bpmpkg, err := bpmlib.ReadPackage(pkg)
 				if err != nil {
 					log.Fatalf("Error: could not read package: %s\n", err)
 				}
-				if !reinstall && utils.IsPackageInstalled(bpmpkg.PkgInfo.Name, rootDir) && utils.GetPackageInfo(bpmpkg.PkgInfo.Name, rootDir).GetFullVersion() == bpmpkg.PkgInfo.GetFullVersion() {
+				if !reinstall && bpmlib.IsPackageInstalled(bpmpkg.PkgInfo.Name, rootDir) && bpmlib.GetPackageInfo(bpmpkg.PkgInfo.Name, rootDir).GetFullVersion() == bpmpkg.PkgInfo.GetFullVersion() {
 					continue
 				}
-				operation.AppendAction(&utils.InstallPackageAction{
+				operation.AppendAction(&bpmlib.InstallPackageAction{
 					File:         pkg,
 					IsDependency: false,
 					BpmPackage:   bpmpkg,
 				})
 			} else {
-				var entry *utils.RepositoryEntry
+				var entry *bpmlib.RepositoryEntry
 
-				if e, _, err := utils.GetRepositoryEntry(pkg); err == nil {
+				if e, _, err := bpmlib.GetRepositoryEntry(pkg); err == nil {
 					entry = e
-				} else if isVirtual, p := utils.IsVirtualPackage(pkg, rootDir); isVirtual {
-					entry, _, err = utils.GetRepositoryEntry(p)
+				} else if isVirtual, p := bpmlib.IsVirtualPackage(pkg, rootDir); isVirtual {
+					entry, _, err = bpmlib.GetRepositoryEntry(p)
 					if err != nil {
 						log.Fatalf("Error: could not find package (%s) in any repository\n", p)
 					}
-				} else if e := utils.ResolveVirtualPackage(pkg); e != nil {
+				} else if e := bpmlib.ResolveVirtualPackage(pkg); e != nil {
 					entry = e
 				} else {
 					log.Fatalf("Error: could not find package (%s) in any repository\n", pkg)
 				}
-				if !reinstall && utils.IsPackageInstalled(entry.Info.Name, rootDir) && utils.GetPackageInfo(entry.Info.Name, rootDir).GetFullVersion() == entry.Info.GetFullVersion() {
+				if !reinstall && bpmlib.IsPackageInstalled(entry.Info.Name, rootDir) && bpmlib.GetPackageInfo(entry.Info.Name, rootDir).GetFullVersion() == entry.Info.GetFullVersion() {
 					continue
 				}
-				operation.AppendAction(&utils.FetchPackageAction{
+				operation.AppendAction(&bpmlib.FetchPackageAction{
 					IsDependency:    false,
 					RepositoryEntry: entry,
 				})
@@ -342,7 +342,7 @@ func resolveCommand() {
 
 		// Sync repositories
 		if !nosync {
-			for _, repo := range utils.BPMConfig.Repositories {
+			for _, repo := range bpmlib.BPMConfig.Repositories {
 				fmt.Printf("Fetching package database for repository (%s)...\n", repo.Name)
 				err := repo.SyncLocalDatabase()
 				if err != nil {
@@ -352,42 +352,42 @@ func resolveCommand() {
 			fmt.Println("All package databases synced successfully!")
 		}
 
-		utils.ReadConfig()
+		bpmlib.ReadConfig()
 
 		// Get installed packages and check for updates
-		pkgs, err := utils.GetInstalledPackages(rootDir)
+		pkgs, err := bpmlib.GetInstalledPackages(rootDir)
 		if err != nil {
 			log.Fatalf("Error: could not get installed packages: %s\n", err)
 		}
 
-		operation := utils.BPMOperation{
-			Actions:                 make([]utils.OperationAction, 0),
+		operation := bpmlib.BPMOperation{
+			Actions:                 make([]bpmlib.OperationAction, 0),
 			UnresolvedDepends:       make([]string, 0),
 			Changes:                 make(map[string]string),
 			RootDir:                 rootDir,
-			ForceInstallationReason: utils.Unknown,
+			ForceInstallationReason: bpmlib.Unknown,
 		}
 
 		// Search for packages
 		for _, pkg := range pkgs {
-			if slices.Contains(utils.BPMConfig.IgnorePackages, pkg) {
+			if slices.Contains(bpmlib.BPMConfig.IgnorePackages, pkg) {
 				continue
 			}
-			var entry *utils.RepositoryEntry
+			var entry *bpmlib.RepositoryEntry
 			// Check if installed package can be replaced and install that instead
-			if e := utils.FindReplacement(pkg); e != nil {
+			if e := bpmlib.FindReplacement(pkg); e != nil {
 				entry = e
-			} else if entry, _, err = utils.GetRepositoryEntry(pkg); err != nil {
+			} else if entry, _, err = bpmlib.GetRepositoryEntry(pkg); err != nil {
 				continue
 			}
 
-			installedInfo := utils.GetPackageInfo(pkg, rootDir)
+			installedInfo := bpmlib.GetPackageInfo(pkg, rootDir)
 			if installedInfo == nil {
 				log.Fatalf("Error: could not get package info for (%s)\n", pkg)
 			} else {
-				comparison := utils.ComparePackageVersions(*entry.Info, *installedInfo)
+				comparison := bpmlib.ComparePackageVersions(*entry.Info, *installedInfo)
 				if comparison > 0 || reinstall {
-					operation.AppendAction(&utils.FetchPackageAction{
+					operation.AppendAction(&bpmlib.FetchPackageAction{
 						IsDependency:    false,
 						RepositoryEntry: entry,
 					})
@@ -450,7 +450,7 @@ func resolveCommand() {
 				os.Exit(1)
 			}
 		}
-		for _, repo := range utils.BPMConfig.Repositories {
+		for _, repo := range bpmlib.BPMConfig.Repositories {
 			fmt.Printf("Fetching package database for repository (%s)...\n", repo.Name)
 			err := repo.SyncLocalDatabase()
 			if err != nil {
@@ -468,8 +468,8 @@ func resolveCommand() {
 			return
 		}
 
-		operation := &utils.BPMOperation{
-			Actions:           make([]utils.OperationAction, 0),
+		operation := &bpmlib.BPMOperation{
+			Actions:           make([]bpmlib.OperationAction, 0),
 			UnresolvedDepends: make([]string, 0),
 			Changes:           make(map[string]string),
 			RootDir:           rootDir,
@@ -477,11 +477,11 @@ func resolveCommand() {
 
 		// Search for packages
 		for _, pkg := range packages {
-			bpmpkg := utils.GetPackage(pkg, rootDir)
+			bpmpkg := bpmlib.GetPackage(pkg, rootDir)
 			if bpmpkg == nil {
 				continue
 			}
-			operation.AppendAction(&utils.RemovePackageAction{BpmPackage: bpmpkg})
+			operation.AppendAction(&bpmlib.RemovePackageAction{BpmPackage: bpmpkg})
 		}
 
 		// Skip needed packages if the --unused flag is on
@@ -531,8 +531,8 @@ func resolveCommand() {
 			log.Fatalf("Error: this subcommand needs to be run with superuser permissions")
 		}
 
-		operation := &utils.BPMOperation{
-			Actions:           make([]utils.OperationAction, 0),
+		operation := &bpmlib.BPMOperation{
+			Actions:           make([]bpmlib.OperationAction, 0),
 			UnresolvedDepends: make([]string, 0),
 			Changes:           make(map[string]string),
 			RootDir:           rootDir,
@@ -585,7 +585,7 @@ func resolveCommand() {
 			if os.IsNotExist(err) {
 				log.Fatalf("Error: file (%s) does not exist!\n", absFile)
 			}
-			pkgs, err := utils.GetInstalledPackages(rootDir)
+			pkgs, err := bpmlib.GetInstalledPackages(rootDir)
 			if err != nil {
 				log.Fatalf("Error: could not get installed packages: %s\n", err.Error())
 			}
@@ -604,7 +604,7 @@ func resolveCommand() {
 
 			var pkgList []string
 			for _, pkg := range pkgs {
-				if slices.ContainsFunc(utils.GetPackageFiles(pkg, rootDir), func(entry *utils.PackageFileEntry) bool {
+				if slices.ContainsFunc(bpmlib.GetPackageFiles(pkg, rootDir), func(entry *bpmlib.PackageFileEntry) bool {
 					return entry.Path == absFile
 				}) {
 					pkgList = append(pkgList, pkg)
@@ -694,8 +694,8 @@ func resolveFlags() {
 	installFlagSet.StringVar(&rootDir, "R", "/", "Set the destination root")
 	installFlagSet.BoolVar(&verbose, "v", false, "Show additional information about what BPM is doing")
 	installFlagSet.BoolVar(&yesAll, "y", false, "Skip confirmation prompts")
-	installFlagSet.StringVar(&utils.BPMConfig.BinaryOutputDir, "o", utils.BPMConfig.BinaryOutputDir, "Set the binary output directory")
-	installFlagSet.StringVar(&utils.BPMConfig.CompilationDir, "c", utils.BPMConfig.CompilationDir, "Set the compilation directory")
+	installFlagSet.StringVar(&bpmlib.BPMConfig.BinaryOutputDir, "o", bpmlib.BPMConfig.BinaryOutputDir, "Set the binary output directory")
+	installFlagSet.StringVar(&bpmlib.BPMConfig.CompilationDir, "c", bpmlib.BPMConfig.CompilationDir, "Set the compilation directory")
 	installFlagSet.BoolVar(&buildSource, "b", false, "Build binary package from source package")
 	installFlagSet.BoolVar(&skipCheck, "s", false, "Skip check function during source compilation")
 	installFlagSet.BoolVar(&keepTempDir, "k", false, "Keep temporary directory after source compilation")
