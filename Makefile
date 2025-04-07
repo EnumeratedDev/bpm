@@ -15,7 +15,7 @@ endif
 
 build:
 	mkdir -p build
-	cd src/bpm; $(GO) build -ldflags "-w" -o ../../build/bpm gitlab.com/bubble-package-manager/bpm
+	cd src/bpm; $(GO) build -ldflags "-w" -o ../../build/bpm git.enumerated.dev/bubble-package-manager/bpm/src/bpm
 
 install: build/bpm config/
 	mkdir -p $(DESTDIR)$(BINDIR)

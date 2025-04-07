@@ -1,4 +1,4 @@
-module gitlab.com/bubble-package-manager/bpm
+module git.enumerated.dev/bubble-package-manager/bpm/src/bpm
 
 go 1.23
 
