@@ -1308,8 +1308,21 @@ func (pkgInfo *PackageInfo) GetDependants(rootDir string) ([]string, error) {
 		if bpmpkg == nil {
 			return nil, errors.New("package not found: " + pkg)
 		}
-		if bpmpkg.PkgInfo.Name != pkgInfo.Name && slices.Contains(bpmpkg.PkgInfo.GetAllDependencies(false, true), pkgInfo.Name) {
+		if bpmpkg.PkgInfo.Name == pkgInfo.Name {
+			continue
+		}
+
+		dependencies := bpmpkg.PkgInfo.GetAllDependencies(false, true)
+
+		if slices.Contains(dependencies, pkgInfo.Name) {
 			ret = append(ret, pkg)
+			continue
+		}
+		for _, vpkg := range pkgInfo.Provides {
+			if slices.Contains(dependencies, vpkg) {
+				ret = append(ret, pkg)
+				break
+			}
 		}
 	}
 
