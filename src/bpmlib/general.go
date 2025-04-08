@@ -185,7 +185,7 @@ func UpdatePackages(rootDir string, syncDatabase bool, installOptionalDependenci
 		UnresolvedDepends:       make([]string, 0),
 		Changes:                 make(map[string]string),
 		RootDir:                 rootDir,
-		ForceInstallationReason: Unknown,
+		ForceInstallationReason: InstallationReasonUnknown,
 	}
 
 	// Search for packages

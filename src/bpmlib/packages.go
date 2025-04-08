@@ -74,9 +74,9 @@ func (pkgInfo *PackageInfo) GetFullVersion() string {
 type InstallationReason string
 
 const (
-	Manual     InstallationReason = "manual"
-	Dependency InstallationReason = "dependency"
-	Unknown    InstallationReason = "unknown"
+	InstallationReasonManual     InstallationReason = "manual"
+	InstallationReasonDependency InstallationReason = "dependency"
+	InstallationReasonUnknown    InstallationReason = "unknown"
 )
 
 func ComparePackageVersions(info1, info2 PackageInfo) int {
@@ -90,19 +90,19 @@ func GetInstallationReason(pkg, rootDir string) InstallationReason {
 	installedDir := path.Join(rootDir, "var/lib/bpm/installed/")
 	pkgDir := path.Join(installedDir, pkg)
 	if stat, err := os.Stat(path.Join(pkgDir, "installation_reason")); err != nil || stat.IsDir() {
-		return Manual
+		return InstallationReasonManual
 	}
 	b, err := os.ReadFile(path.Join(pkgDir, "installation_reason"))
 	if err != nil {
-		return Unknown
+		return InstallationReasonUnknown
 	}
 	reason := strings.TrimSpace(string(b))
 	if reason == "manual" {
-		return Manual
+		return InstallationReasonManual
 	} else if reason == "dependency" {
-		return Dependency
+		return InstallationReasonDependency
 	}
-	return Unknown
+	return InstallationReasonUnknown
 }
 
 func SetInstallationReason(pkg string, reason InstallationReason, rootDir string) error {
@@ -280,15 +280,15 @@ func ReadPackageScripts(filename string) (map[string]string, error) {
 	return ret, nil
 }
 
-type Operation uint8
+type packageOperation uint8
 
 const (
-	Install Operation = 0
-	Update            = 1
-	Remove            = 2
+	packageOperationInstall packageOperation = 0
+	packageOperationUpdate                   = 1
+	packageOperationRemove                   = 2
 )
 
-func executePackageScripts(filename, rootDir string, operation Operation, postOperation bool) error {
+func executePackageScripts(filename, rootDir string, operation packageOperation, postOperation bool) error {
 	pkgInfo, err := ReadPackage(filename)
 	if err != nil {
 		return err
@@ -320,11 +320,11 @@ func executePackageScripts(filename, rootDir string, operation Operation, postOp
 		cmd.Env = append(cmd.Env, fmt.Sprintf("BPM_PKG_NAME=%s", pkgInfo.PkgInfo.Name))
 		cmd.Env = append(cmd.Env, fmt.Sprintf("BPM_PKG_DESC=%s", pkgInfo.PkgInfo.Description))
 		cmd.Env = append(cmd.Env, fmt.Sprintf("BPM_PKG_VERSION=%s", pkgInfo.PkgInfo.Version))
-		if operation != Install {
+		if operation != packageOperationInstall {
 			cmd.Env = append(cmd.Env, fmt.Sprintf("BPM_PKG_OLD_VERSION=%s", GetPackageInfo(pkgInfo.PkgInfo.Name, rootDir).Version))
 		}
 		cmd.Env = append(cmd.Env, fmt.Sprintf("BPM_PKG_REVISION=%d", pkgInfo.PkgInfo.Revision))
-		if operation != Install {
+		if operation != packageOperationInstall {
 			cmd.Env = append(cmd.Env, fmt.Sprintf("BPM_PKG_OLD_REVISION=%d", GetPackageInfo(pkgInfo.PkgInfo.Name, rootDir).Revision))
 		}
 		cmd.Env = append(cmd.Env, fmt.Sprintf("BPM_PKG_URL=%s", pkgInfo.PkgInfo.Url))
@@ -349,7 +349,7 @@ func executePackageScripts(filename, rootDir string, operation Operation, postOp
 		return nil
 	}
 
-	if operation == Install {
+	if operation == packageOperationInstall {
 		if val, ok := scripts["pre_install.sh"]; !postOperation && ok {
 			err := run("pre_install.sh", val)
 			if err != nil {
@@ -362,7 +362,7 @@ func executePackageScripts(filename, rootDir string, operation Operation, postOp
 				return err
 			}
 		}
-	} else if operation == Update {
+	} else if operation == packageOperationUpdate {
 		if val, ok := scripts["pre_update.sh"]; !postOperation && ok {
 			err := run("pre_update.sh", val)
 			if err != nil {
@@ -375,7 +375,7 @@ func executePackageScripts(filename, rootDir string, operation Operation, postOp
 				return err
 			}
 		}
-	} else if operation == Remove {
+	} else if operation == packageOperationRemove {
 		if val, ok := scripts["pre_remove.sh"]; !postOperation && ok {
 			err := run("pre_remove.sh", val)
 			if err != nil {
@@ -478,12 +478,12 @@ func CreateReadableInfo(showArchitecture, showType, showPackageRelations bool, p
 
 func extractPackage(bpmpkg *BPMPackage, verbose bool, filename, rootDir string) error {
 	if !IsPackageInstalled(bpmpkg.PkgInfo.Name, rootDir) {
-		err := executePackageScripts(filename, rootDir, Install, false)
+		err := executePackageScripts(filename, rootDir, packageOperationInstall, false)
 		if err != nil {
 			return err
 		}
 	} else {
-		err := executePackageScripts(filename, rootDir, Update, false)
+		err := executePackageScripts(filename, rootDir, packageOperationUpdate, false)
 		if err != nil {
 			return err
 		}
@@ -629,12 +629,12 @@ func isSplitPackage(filename string) bool {
 func compilePackage(bpmpkg *BPMPackage, filename, rootDir string, verbose, binaryPkgFromSrc, skipCheck, keepTempDir bool) (error, []string) {
 	var files []string
 	if !IsPackageInstalled(bpmpkg.PkgInfo.Name, rootDir) {
-		err := executePackageScripts(filename, rootDir, Install, false)
+		err := executePackageScripts(filename, rootDir, packageOperationInstall, false)
 		if err != nil {
 			return err, nil
 		}
 	} else {
-		err := executePackageScripts(filename, rootDir, Update, false)
+		err := executePackageScripts(filename, rootDir, packageOperationUpdate, false)
 		if err != nil {
 			return err, nil
 		}
@@ -747,12 +747,12 @@ func compilePackage(bpmpkg *BPMPackage, filename, rootDir string, verbose, binar
 	}
 	fmt.Println("Running source.sh file...")
 	if !IsPackageInstalled(bpmpkg.PkgInfo.Name, rootDir) {
-		err = executePackageScripts(filename, rootDir, Install, false)
+		err = executePackageScripts(filename, rootDir, packageOperationInstall, false)
 		if err != nil {
 			return err, nil
 		}
 	} else {
-		err = executePackageScripts(filename, rootDir, Update, false)
+		err = executePackageScripts(filename, rootDir, packageOperationUpdate, false)
 		if err != nil {
 			return err, nil
 		}
@@ -1246,12 +1246,12 @@ func installPackage(filename, rootDir string, verbose, force, binaryPkgFromSrc, 
 	}
 
 	if !packageInstalled {
-		err = executePackageScripts(filename, rootDir, Install, true)
+		err = executePackageScripts(filename, rootDir, packageOperationInstall, true)
 		if err != nil {
 			return err
 		}
 	} else {
-		err = executePackageScripts(filename, rootDir, Update, true)
+		err = executePackageScripts(filename, rootDir, packageOperationUpdate, true)
 		if err != nil {
 			return err
 		}

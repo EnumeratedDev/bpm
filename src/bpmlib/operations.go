@@ -217,7 +217,7 @@ func (operation *BPMOperation) Cleanup(verbose bool) error {
 	// Get manually installed packages, resolve all their dependencies and add them to the keepPackages slice
 	keepPackages := make([]string, 0)
 	for _, pkg := range slices.Clone(installedPackages) {
-		if GetInstallationReason(pkg.Name, operation.RootDir) != Manual {
+		if GetInstallationReason(pkg.Name, operation.RootDir) != InstallationReasonManual {
 			continue
 		}
 
@@ -475,13 +475,13 @@ func (operation *BPMOperation) Execute(verbose, force bool) error {
 			if err != nil {
 				return errors.New(fmt.Sprintf("could not install package (%s): %s\n", bpmpkg.PkgInfo.Name, err))
 			}
-			if operation.ForceInstallationReason != Unknown && !value.IsDependency {
+			if operation.ForceInstallationReason != InstallationReasonUnknown && !value.IsDependency {
 				err := SetInstallationReason(bpmpkg.PkgInfo.Name, operation.ForceInstallationReason, operation.RootDir)
 				if err != nil {
 					return errors.New(fmt.Sprintf("could not set installation reason for package (%s): %s\n", value.BpmPackage.PkgInfo.Name, err))
 				}
 			} else if value.IsDependency && !isReinstall {
-				err := SetInstallationReason(bpmpkg.PkgInfo.Name, Dependency, operation.RootDir)
+				err := SetInstallationReason(bpmpkg.PkgInfo.Name, InstallationReasonDependency, operation.RootDir)
 				if err != nil {
 					return errors.New(fmt.Sprintf("could not set installation reason for package (%s): %s\n", value.BpmPackage.PkgInfo.Name, err))
 				}

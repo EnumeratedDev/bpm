@@ -214,12 +214,12 @@ func resolveCommand() {
 		}
 
 		// Check if installationReason argument is valid
-		ir := bpmlib.Unknown
+		ir := bpmlib.InstallationReasonUnknown
 		switch installationReason {
 		case "manual":
-			ir = bpmlib.Manual
+			ir = bpmlib.InstallationReasonManual
 		case "dependency":
-			ir = bpmlib.Dependency
+			ir = bpmlib.InstallationReasonDependency
 		case "":
 		default:
 			log.Fatalf("Error: %s is not a valid installation reason", installationReason)
