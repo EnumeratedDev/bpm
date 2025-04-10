@@ -1,11 +1,11 @@
 package bpmlib
 
 import (
+	"errors"
 	"fmt"
 	"log"
 	"os"
 	"slices"
-	"strings"
 )
 
 type ReinstallMethod uint8
@@ -28,6 +28,7 @@ func InstallPackages(rootDir string, installationReason InstallationReason, rein
 	}
 
 	// Resolve packages
+	pkgsNotFound := make([]string, 0)
 	for _, pkg := range packages {
 		if stat, err := os.Stat(pkg); err == nil && !stat.IsDir() {
 			bpmpkg, err := ReadPackage(pkg)
@@ -50,12 +51,14 @@ func InstallPackages(rootDir string, installationReason InstallationReason, rein
 			} else if isVirtual, p := IsVirtualPackage(pkg, rootDir); isVirtual {
 				entry, _, err = GetRepositoryEntry(p)
 				if err != nil {
-					return nil, fmt.Errorf("could not find package (%s) in any repositor", p)
+					pkgsNotFound = append(pkgsNotFound, pkg)
+					continue
 				}
 			} else if e := ResolveVirtualPackage(pkg); e != nil {
 				entry = e
 			} else {
-				return nil, fmt.Errorf("could not find package (%s) in any repository", pkg)
+				pkgsNotFound = append(pkgsNotFound, pkg)
+				continue
 			}
 			if reinstallMethod == ReinstallMethodNone && IsPackageInstalled(entry.Info.Name, rootDir) && GetPackageInfo(entry.Info.Name, rootDir).GetFullVersion() == entry.Info.GetFullVersion() {
 				continue
@@ -67,6 +70,11 @@ func InstallPackages(rootDir string, installationReason InstallationReason, rein
 		}
 	}
 
+	// Return error if not all packages are found
+	if len(pkgsNotFound) != 0 {
+		return nil, PackageNotFoundErr{pkgsNotFound}
+	}
+
 	// Resolve dependencies
 	err = operation.ResolveDependencies(reinstallMethod == ReinstallMethodAll, installOptionalDependencies, verbose)
 	if err != nil {
@@ -74,9 +82,9 @@ func InstallPackages(rootDir string, installationReason InstallationReason, rein
 	}
 	if len(operation.UnresolvedDepends) != 0 {
 		if !forceInstallation {
-			return nil, fmt.Errorf("dependencies (%s) could not be found in any repositories", strings.Join(operation.UnresolvedDepends, ", "))
+			return nil, DependencyNotFoundErr{operation.UnresolvedDepends}
 		} else if verbose {
-			log.Println("Warning: The following dependencies could not be found in any repositories: " + strings.Join(operation.UnresolvedDepends, ", "))
+			log.Printf("Warning: %s", DependencyNotFoundErr{operation.UnresolvedDepends})
 		}
 	}
 
@@ -89,15 +97,14 @@ func InstallPackages(rootDir string, installationReason InstallationReason, rein
 		return nil, fmt.Errorf("could not complete package conflict check: %s", err)
 	}
 	if len(conflicts) > 0 {
-		if verbose {
-			for pkg, conflict := range conflicts {
-				fmt.Printf("%s is in conflict with packages (%s)\n", pkg, strings.Join(conflict, ", "))
-			}
+		err = nil
+		for pkg, conflict := range conflicts {
+			err = errors.Join(err, PackageConflictErr{pkg, conflict})
 		}
 		if !forceInstallation {
-			return nil, fmt.Errorf("conflicting packages found")
+			return nil, err
 		} else {
-			log.Println("Warning: conflicting packages found")
+			log.Printf("Warning: %s", err)
 		}
 	}
 
@@ -222,9 +229,9 @@ func UpdatePackages(rootDir string, syncDatabase bool, installOptionalDependenci
 	}
 	if len(operation.UnresolvedDepends) != 0 {
 		if !forceInstallation {
-			return nil, fmt.Errorf("dependencies (%s) could not be found in any repositories", strings.Join(operation.UnresolvedDepends, ", "))
+			return nil, DependencyNotFoundErr{operation.UnresolvedDepends}
 		} else if verbose {
-			log.Printf("Warning: dependencies (%s) could not be found in any repositories\n", strings.Join(operation.UnresolvedDepends, ", "))
+			log.Printf("Warning: %s", DependencyNotFoundErr{operation.UnresolvedDepends})
 		}
 	}
 

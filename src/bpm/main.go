@@ -2,6 +2,7 @@ package main
 
 import (
 	"bufio"
+	"errors"
 	"flag"
 	"fmt"
 	"git.enumerated.dev/bubble-package-manager/bpm/src/bpmlib"
@@ -237,7 +238,9 @@ func resolveCommand() {
 
 		// Create installation operation
 		operation, err := bpmlib.InstallPackages(rootDir, ir, reinstallMethod, !noOptional, force, verbose, subcommandArgs...)
-		if err != nil {
+		if errors.As(err, &bpmlib.PackageNotFoundErr{}) || errors.As(err, &bpmlib.DependencyNotFoundErr{}) || errors.As(err, &bpmlib.PackageConflictErr{}) {
+			log.Fatalf("Error: %s", err)
+		} else if err != nil {
 			log.Fatalf("Error: could not setup operation: %s\n", err)
 		}
 
@@ -280,8 +283,10 @@ func resolveCommand() {
 
 		// Create update operation
 		operation, err := bpmlib.UpdatePackages(rootDir, !nosync, !noOptional, force, verbose)
-		if err != nil {
-			log.Fatalf("Error: could not setuo operation: %s\n", err)
+		if errors.As(err, &bpmlib.PackageNotFoundErr{}) || errors.As(err, &bpmlib.DependencyNotFoundErr{}) || errors.As(err, &bpmlib.PackageConflictErr{}) {
+			log.Fatalf("Error: %s", err)
+		} else if err != nil {
+			log.Fatalf("Error: could not setup operation: %s\n", err)
 		}
 
 		// Show operation summary
@@ -347,7 +352,9 @@ func resolveCommand() {
 
 		// Create remove operation
 		operation, err := bpmlib.RemovePackages(rootDir, removeUnused, doCleanup, verbose, subcommandArgs...)
-		if err != nil {
+		if errors.As(err, &bpmlib.PackageNotFoundErr{}) || errors.As(err, &bpmlib.DependencyNotFoundErr{}) || errors.As(err, &bpmlib.PackageConflictErr{}) {
+			log.Fatalf("Error: %s", err)
+		} else if err != nil {
 			log.Fatalf("Error: could not setup operation: %s\n", err)
 		}
 
@@ -385,7 +392,9 @@ func resolveCommand() {
 
 		// Create cleanup operation
 		operation, err := bpmlib.CleanupPackages(rootDir, verbose)
-		if err != nil {
+		if errors.As(err, &bpmlib.PackageNotFoundErr{}) || errors.As(err, &bpmlib.DependencyNotFoundErr{}) || errors.As(err, &bpmlib.PackageConflictErr{}) {
+			log.Fatalf("Error: %s", err)
+		} else if err != nil {
 			log.Fatalf("Error: could not setup operation: %s\n", err)
 		}
 
