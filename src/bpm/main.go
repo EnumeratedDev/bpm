@@ -43,7 +43,10 @@ var doCleanup = false
 var showRepoInfo = false
 
 func main() {
-	bpmlib.ReadConfig()
+	err := bpmlib.ReadConfig()
+	if err != nil {
+		log.Fatalf("Error: could not read BPM config: %s", err)
+	}
 	resolveFlags()
 	resolveCommand()
 }
@@ -244,6 +247,12 @@ func resolveCommand() {
 			log.Fatalf("Error: could not setup operation: %s\n", err)
 		}
 
+		// Exit if operation contains no actions
+		if len(operation.Actions) == 0 {
+			fmt.Println("No action needs to be taken")
+			return
+		}
+
 		// Show operation summary
 		operation.ShowOperationSummary()
 
@@ -287,6 +296,12 @@ func resolveCommand() {
 			log.Fatalf("Error: %s", err)
 		} else if err != nil {
 			log.Fatalf("Error: could not setup operation: %s\n", err)
+		}
+
+		// Exit if operation contains no actions
+		if len(operation.Actions) == 0 {
+			fmt.Println("No action needs to be taken")
+			return
 		}
 
 		// Show operation summary
@@ -358,6 +373,12 @@ func resolveCommand() {
 			log.Fatalf("Error: could not setup operation: %s\n", err)
 		}
 
+		// Exit if operation contains no actions
+		if len(operation.Actions) == 0 {
+			fmt.Println("No action needs to be taken")
+			return
+		}
+
 		// Show operation summary
 		operation.ShowOperationSummary()
 
@@ -396,6 +417,12 @@ func resolveCommand() {
 			log.Fatalf("Error: %s", err)
 		} else if err != nil {
 			log.Fatalf("Error: could not setup operation: %s\n", err)
+		}
+
+		// Exit if operation contains no actions
+		if len(operation.Actions) == 0 {
+			fmt.Println("No action needs to be taken")
+			return
 		}
 
 		// Show operation summary

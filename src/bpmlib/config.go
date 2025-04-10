@@ -2,7 +2,6 @@ package bpmlib
 
 import (
 	"gopkg.in/yaml.v3"
-	"log"
 	"os"
 )
 
@@ -17,14 +16,16 @@ type BPMConfigStruct struct {
 
 var BPMConfig BPMConfigStruct
 
-func ReadConfig() {
-	if _, err := os.Stat("/etc/bpm.conf"); os.IsNotExist(err) {
-		log.Fatal(err)
+func ReadConfig() (err error) {
+	if _, err = os.Stat("/etc/bpm.conf"); os.IsNotExist(err) {
+		return err
 	}
+
 	bytes, err := os.ReadFile("/etc/bpm.conf")
 	if err != nil {
-		log.Fatal(err)
+		return err
 	}
+
 	BPMConfig = BPMConfigStruct{
 		CompilationEnv:    make([]string, 0),
 		SilentCompilation: false,
@@ -33,19 +34,23 @@ func ReadConfig() {
 	}
 	err = yaml.Unmarshal(bytes, &BPMConfig)
 	if err != nil {
-		log.Fatal(err)
+		return err
 	}
+
 	for i := len(BPMConfig.Repositories) - 1; i >= 0; i-- {
 		if BPMConfig.Repositories[i].Disabled != nil && *BPMConfig.Repositories[i].Disabled {
 			BPMConfig.Repositories = append(BPMConfig.Repositories[:i], BPMConfig.Repositories[i+1:]...)
 		}
 	}
+
 	for _, repo := range BPMConfig.Repositories {
 		repo.Entries = make(map[string]*RepositoryEntry)
 		repo.VirtualPackages = make(map[string][]string)
 		err := repo.ReadLocalDatabase()
 		if err != nil {
-			log.Fatal(err)
+			return err
 		}
 	}
+
+	return nil
 }

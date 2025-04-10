@@ -179,7 +179,10 @@ func UpdatePackages(rootDir string, syncDatabase bool, installOptionalDependenci
 	}
 
 	// Reload config and local databases
-	ReadConfig()
+	err = ReadConfig()
+	if err != nil {
+		return nil, fmt.Errorf("could not read BPM config: %s", err)
+	}
 
 	// Get installed packages and check for updates
 	pkgs, err := GetInstalledPackages(rootDir)

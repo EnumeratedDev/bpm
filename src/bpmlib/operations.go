@@ -195,7 +195,7 @@ func (operation *BPMOperation) Cleanup(verbose bool) error {
 	// Get all installed packages
 	installedPackageNames, err := GetInstalledPackages(operation.RootDir)
 	if err != nil {
-		log.Fatalf("Error: could not get installed packages: %s\n", err)
+		return fmt.Errorf("could not get installed packages: %s", err)
 	}
 	installedPackages := make([]*PackageInfo, len(installedPackageNames))
 	for i, value := range installedPackageNames {
@@ -329,8 +329,8 @@ func (operation *BPMOperation) CheckForConflicts() (map[string][]string, error) 
 
 func (operation *BPMOperation) ShowOperationSummary() {
 	if len(operation.Actions) == 0 {
-		fmt.Println("All packages are up to date!")
-		os.Exit(0)
+		fmt.Println("No action needs to be taken")
+		return
 	}
 
 	for _, value := range operation.Actions {
@@ -348,9 +348,6 @@ func (operation *BPMOperation) ShowOperationSummary() {
 		installedInfo := GetPackageInfo(pkgInfo.Name, operation.RootDir)
 		sourceInfo := ""
 		if pkgInfo.Type == "source" {
-			if operation.RootDir != "/" {
-				log.Fatalf("cannot compile and install source packages to a different root directory")
-			}
 			sourceInfo = "(From Source)"
 		}
 
