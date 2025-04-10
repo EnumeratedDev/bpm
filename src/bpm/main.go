@@ -235,8 +235,11 @@ func resolveCommand() {
 			reinstallMethod = bpmlib.ReinstallMethodNone
 		}
 
-		// Create Installation Operation
+		// Create installation operation
 		operation, err := bpmlib.InstallPackages(rootDir, ir, reinstallMethod, !noOptional, force, verbose, subcommandArgs...)
+		if err != nil {
+			log.Fatalf("Error: could not setup operation: %s\n", err)
+		}
 
 		// Show operation summary
 		operation.ShowOperationSummary()
@@ -275,10 +278,10 @@ func resolveCommand() {
 			log.Fatalf("Error: this subcommand needs to be run with superuser permissions")
 		}
 
-		// Create Update Operation
+		// Create update operation
 		operation, err := bpmlib.UpdatePackages(rootDir, !nosync, !noOptional, force, verbose)
 		if err != nil {
-			log.Fatalf("Error: could not update packages: %s\n", err)
+			log.Fatalf("Error: could not setuo operation: %s\n", err)
 		}
 
 		// Show operation summary
@@ -324,6 +327,7 @@ func resolveCommand() {
 			}
 		}
 
+		// Sync databases
 		err := bpmlib.SyncDatabase(verbose)
 		if err != nil {
 			log.Fatalf("Error: could not sync local database: %s\n", err)
@@ -341,10 +345,10 @@ func resolveCommand() {
 			return
 		}
 
-		// Remove packages
+		// Create remove operation
 		operation, err := bpmlib.RemovePackages(rootDir, removeUnused, doCleanup, verbose, subcommandArgs...)
 		if err != nil {
-			log.Fatalf("Error: could not remove packages: %s\n", err)
+			log.Fatalf("Error: could not setup operation: %s\n", err)
 		}
 
 		// Show operation summary
@@ -379,10 +383,10 @@ func resolveCommand() {
 			log.Fatalf("Error: this subcommand needs to be run with superuser permissions")
 		}
 
-		// Do cleanup
+		// Create cleanup operation
 		operation, err := bpmlib.CleanupPackages(rootDir, verbose)
 		if err != nil {
-			log.Fatalf("Error: could not cleanup packages: %s\n", err)
+			log.Fatalf("Error: could not setup operation: %s\n", err)
 		}
 
 		// Show operation summary
