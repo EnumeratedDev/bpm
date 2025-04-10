@@ -465,9 +465,9 @@ func (operation *BPMOperation) Execute(verbose, force bool) error {
 			isReinstall := IsPackageInstalled(bpmpkg.PkgInfo.Name, operation.RootDir)
 			var err error
 			if value.IsDependency {
-				err = installPackage(value.File, operation.RootDir, verbose, true, false, false, false)
+				err = installPackage(value.File, operation.RootDir, verbose, true)
 			} else {
-				err = installPackage(value.File, operation.RootDir, verbose, force, false, false, false)
+				err = installPackage(value.File, operation.RootDir, verbose, force)
 			}
 			if err != nil {
 				return errors.New(fmt.Sprintf("could not install package (%s): %s\n", bpmpkg.PkgInfo.Name, err))

@@ -27,9 +27,6 @@ var subcommandArgs []string
 var rootDir = "/"
 var verbose = false
 var yesAll = false
-var buildSource = false
-var skipCheck = false
-var keepTempDir = false
 var force = false
 var pkgListNumbers = false
 var pkgListNames = false
@@ -524,9 +521,6 @@ func printHelp() {
 	fmt.Println("       -v Show additional information about what BPM is doing")
 	fmt.Println("       -y skips the confirmation prompt")
 	fmt.Println("       -f skips dependency, conflict and architecture checking")
-	fmt.Println("       -o=<path> set the binary package output directory (defaults to /var/lib/bpm/compiled)")
-	fmt.Println("       -c=<path> set the compilation directory (defaults to /var/tmp)")
-	fmt.Println("       -b creates a binary package from a source package after compilation and saves it in the binary package output directory")
 	fmt.Println("       -k keeps the compilation directory created by BPM after source package installation")
 	fmt.Println("       --reinstall Reinstalls packages even if they do not have a newer version available")
 	fmt.Println("       --reinstall-all Same as --reinstall but also reinstalls dependencies")
@@ -575,11 +569,6 @@ func resolveFlags() {
 	installFlagSet.StringVar(&rootDir, "R", "/", "Set the destination root")
 	installFlagSet.BoolVar(&verbose, "v", false, "Show additional information about what BPM is doing")
 	installFlagSet.BoolVar(&yesAll, "y", false, "Skip confirmation prompts")
-	installFlagSet.StringVar(&bpmlib.BPMConfig.BinaryOutputDir, "o", bpmlib.BPMConfig.BinaryOutputDir, "Set the binary output directory")
-	installFlagSet.StringVar(&bpmlib.BPMConfig.CompilationDir, "c", bpmlib.BPMConfig.CompilationDir, "Set the compilation directory")
-	installFlagSet.BoolVar(&buildSource, "b", false, "Build binary package from source package")
-	installFlagSet.BoolVar(&skipCheck, "s", false, "Skip check function during source compilation")
-	installFlagSet.BoolVar(&keepTempDir, "k", false, "Keep temporary directory after source compilation")
 	installFlagSet.BoolVar(&force, "f", false, "Force installation by skipping architecture and dependency resolution")
 	installFlagSet.BoolVar(&reinstall, "reinstall", false, "Reinstalls packages even if they do not have a newer version available")
 	installFlagSet.BoolVar(&reinstallAll, "reinstall-all", false, "Same as --reinstall but also reinstalls dependencies")
