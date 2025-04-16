@@ -446,7 +446,9 @@ func CreateReadableInfo(showArchitecture, showType, showPackageRelations bool, p
 	}
 	if showPackageRelations {
 		appendArray("Dependencies", pkgInfo.Depends)
-		appendArray("Make Dependencies", pkgInfo.MakeDepends)
+		if pkgInfo.Type == "source" {
+			appendArray("Make Dependencies", pkgInfo.MakeDepends)
+		}
 		appendArray("Optional dependencies", pkgInfo.OptionalDepends)
 		dependants, err := pkgInfo.GetDependants(rootDir)
 		if err == nil {
