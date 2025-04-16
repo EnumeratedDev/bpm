@@ -2,6 +2,7 @@ package bpmlib
 
 import (
 	"errors"
+	"fmt"
 	"gopkg.in/yaml.v3"
 	"io"
 	"net/http"
@@ -83,29 +84,59 @@ func (repo *Repository) ReadLocalDatabase() error {
 
 func (repo *Repository) SyncLocalDatabase() error {
 	repoFile := "/var/lib/bpm/repositories/" + repo.Name + ".bpmdb"
-	err := os.MkdirAll(path.Dir(repoFile), 0755)
-	if err != nil {
-		return err
-	}
 
+	// Get URL to database
 	u, err := url.JoinPath(repo.Source, "database.bpmdb")
 	if err != nil {
 		return err
 	}
 
+	// Retrieve data from URL
 	resp, err := http.Get(u)
 	if err != nil {
 		return err
 	}
 	defer resp.Body.Close()
 
+	// Load data into byte buffer
+	buffer, err := io.ReadAll(resp.Body)
+
+	// Unmarshal data to ensure it is a valid BPM repository
+	err = yaml.Unmarshal(buffer, &Repository{})
+	if err != nil {
+		return fmt.Errorf("could not decode repository: %s", err)
+	}
+
+	// Create parent directories to repository file
+	err = os.MkdirAll(path.Dir(repoFile), 0755)
+	if err != nil {
+		return err
+	}
+
+	// Create file and save repository data
 	out, err := os.Create(repoFile)
 	if err != nil {
 		return err
 	}
 	defer out.Close()
 
-	_, err = io.Copy(out, resp.Body)
+	_, err = out.Write(buffer)
+
+	return nil
+}
+
+func ReadLocalDatabases() (err error) {
+	for _, repo := range BPMConfig.Repositories {
+		// Initialize struct values
+		repo.Entries = make(map[string]*RepositoryEntry)
+		repo.VirtualPackages = make(map[string][]string)
+
+		// Read database
+		err = repo.ReadLocalDatabase()
+		if err != nil {
+			return err
+		}
+	}
 
 	return nil
 }

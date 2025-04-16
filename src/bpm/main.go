@@ -102,6 +102,13 @@ func resolveCommand() {
 			fmt.Println("No packages were given")
 			return
 		}
+
+		// Read local databases
+		err := bpmlib.ReadLocalDatabases()
+		if err != nil {
+			log.Fatalf("Error: could not read local databases: %s", err)
+		}
+
 		for n, pkg := range packages {
 			var info *bpmlib.PackageInfo
 			isFile := false
@@ -145,6 +152,12 @@ func resolveCommand() {
 			fmt.Println(bpmlib.CreateReadableInfo(true, true, true, info, rootDir))
 		}
 	case list:
+		// Read local databases
+		err := bpmlib.ReadLocalDatabases()
+		if err != nil {
+			log.Fatalf("Error: could not read local databases: %s", err)
+		}
+
 		packages, err := bpmlib.GetInstalledPackages(rootDir)
 		if err != nil {
 			log.Fatalf("Error: could not get installed packages: %s", err.Error())
@@ -178,6 +191,13 @@ func resolveCommand() {
 		if len(searchTerms) == 0 {
 			log.Fatalf("Error: no search terms given")
 		}
+
+		// Read local databases
+		err := bpmlib.ReadLocalDatabases()
+		if err != nil {
+			log.Fatalf("Error: could not read local databases: %s", err)
+		}
+
 		for i, term := range searchTerms {
 			nameResults := make([]*bpmlib.PackageInfo, 0)
 			descResults := make([]*bpmlib.PackageInfo, 0)
@@ -236,6 +256,12 @@ func resolveCommand() {
 			reinstallMethod = bpmlib.ReinstallMethodNone
 		}
 
+		// Read local databases
+		err := bpmlib.ReadLocalDatabases()
+		if err != nil {
+			log.Fatalf("Error: could not read local databases: %s", err)
+		}
+
 		// Create installation operation
 		operation, err := bpmlib.InstallPackages(rootDir, ir, reinstallMethod, !noOptional, force, verbose, subcommandArgs...)
 		if errors.As(err, &bpmlib.PackageNotFoundErr{}) || errors.As(err, &bpmlib.DependencyNotFoundErr{}) || errors.As(err, &bpmlib.PackageConflictErr{}) {
@@ -285,6 +311,14 @@ func resolveCommand() {
 		// Check for required permissions
 		if os.Getuid() != 0 {
 			log.Fatalf("Error: this subcommand needs to be run with superuser permissions")
+		}
+
+		// Read local databases if no sync
+		if nosync {
+			err := bpmlib.ReadLocalDatabases()
+			if err != nil {
+				log.Fatalf("Error: could not read local databases: %s", err)
+			}
 		}
 
 		// Create update operation
@@ -362,6 +396,12 @@ func resolveCommand() {
 			return
 		}
 
+		// Read local databases
+		err := bpmlib.ReadLocalDatabases()
+		if err != nil {
+			log.Fatalf("Error: could not read local databases: %s", err)
+		}
+
 		// Create remove operation
 		operation, err := bpmlib.RemovePackages(rootDir, removeUnused, doCleanup, verbose, subcommandArgs...)
 		if errors.As(err, &bpmlib.PackageNotFoundErr{}) || errors.As(err, &bpmlib.DependencyNotFoundErr{}) || errors.As(err, &bpmlib.PackageConflictErr{}) {
@@ -406,6 +446,12 @@ func resolveCommand() {
 		// Check for required permissions
 		if os.Getuid() != 0 {
 			log.Fatalf("Error: this subcommand needs to be run with superuser permissions")
+		}
+
+		// Read local databases
+		err := bpmlib.ReadLocalDatabases()
+		if err != nil {
+			log.Fatalf("Error: could not read local databases: %s", err)
 		}
 
 		// Create cleanup operation
