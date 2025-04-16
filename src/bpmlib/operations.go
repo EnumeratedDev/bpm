@@ -379,6 +379,11 @@ func (operation *BPMOperation) ShowOperationSummary() {
 }
 
 func (operation *BPMOperation) RunHooks(verbose bool) error {
+	// Return if hooks directory does not exist
+	if stat, err := os.Stat(path.Join(operation.RootDir, "var/lib/bpm/hooks")); err != nil || !stat.IsDir() {
+		return nil
+	}
+
 	// Get directory entries in hooks directory
 	dirEntries, err := os.ReadDir(path.Join(operation.RootDir, "var/lib/bpm/hooks"))
 	if err != nil {
