@@ -1,17 +1,10 @@
-SHELL = /bin/bash
+# Installation paths
+PREFIX ?= /usr/local
+BINDIR ?= $(PREFIX)/bin
+SYSCONFDIR := $(PREFIX)/etc
 
-ifeq ($(PREFIX),)
-    PREFIX := /usr/local
-endif
-ifeq ($(BINDIR),)
-    BINDIR := $(PREFIX)/bin
-endif
-ifeq ($(SYSCONFDIR),)
-    SYSCONFDIR := $(PREFIX)/etc
-endif
-ifeq ($(GO),)
-    GO := $(shell type -a -P go | head -n 1)
-endif
+# Compilers and tools
+GO ?= $(shell which go)
 
 build:
 	mkdir -p build
