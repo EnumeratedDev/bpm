@@ -18,21 +18,16 @@ build:
 	cd src/bpm; $(GO) build -ldflags "-w" -o ../../build/bpm git.enumerated.dev/bubble-package-manager/bpm/src/bpm
 
 install: build/bpm config/
-	mkdir -p $(DESTDIR)$(BINDIR)
-	mkdir -p $(DESTDIR)$(SYSCONFDIR)
-	cp build/bpm $(DESTDIR)$(BINDIR)/bpm
-	cp config/bpm.conf $(DESTDIR)$(SYSCONFDIR)/bpm.conf
+	# Create directories
+	install -dm755 $(DESTDIR)$(BINDIR)
+	install -dm755 $(DESTDIR)$(SYSCONFDIR)
+	# Install files
+	install -Dm755 build/bpm $(DESTDIR)$(BINDIR)/bpm
+	install -Dm644 config/bpm.conf $(DESTDIR)$(SYSCONFDIR)/bpm.conf
 
-compress: build/bpm config/
-	mkdir -p bpm/$(BINDIR)
-	mkdir -p bpm/$(SYSCONFDIR)
-	cp build/bpm bpm/$(BINDIR)/bpm
-	cp config/bpm.conf bpm/$(SYSCONFDIR)/bpm.conf
-	tar --owner=root --group=root -czf bpm.tar.gz bpm
-	rm -r bpm
-
-run: build/bpm
-	build/bpm
+uninstall:
+	rm $(DESTDIR)$(BINDIR)/bpm
+	rm $(DESTDIR)$(SYSCONFDIR)/bpm.conf
 
 clean:
 	rm -r build/
