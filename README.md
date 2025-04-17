@@ -14,12 +14,13 @@ BPM is still in very early development. Do not install it without knowing what y
 
 - Download `go` from your package manager or from the go website
 - Download `make` from your package manager
-- Run the following command to compile the project
-```
+- Download `which` from your package manager
+- Run the following command to compile the project. You may need to set the `GO` environment variable if your Go installation is not in your PATH
+```sh
 make
 ```
 - Run the following command to install BPM into your system. You may also append a DESTDIR variable at the end of this line if you wish to install in a different location
-```
+```sh
 make install PREFIX=/usr SYSCONFDIR=/etc
 ```
 
@@ -55,7 +56,7 @@ bpm update
 ```
 
 For information on the rest of the commands simply use the help command or pass in no arguments at all
-```
+```sh
 bpm help
 ```
 
