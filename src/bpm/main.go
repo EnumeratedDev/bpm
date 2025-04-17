@@ -2,9 +2,10 @@ package main
 
 import (
 	"bufio"
+	"errors"
 	"flag"
 	"fmt"
-	"gitlab.com/bubble-package-manager/bpm/utils"
+	"git.enumerated.dev/bubble-package-manager/bpm/src/bpmlib"
 	"log"
 	"os"
 	"path/filepath"
@@ -26,9 +27,6 @@ var subcommandArgs []string
 var rootDir = "/"
 var verbose = false
 var yesAll = false
-var buildSource = false
-var skipCheck = false
-var keepTempDir = false
 var force = false
 var pkgListNumbers = false
 var pkgListNames = false
@@ -42,7 +40,10 @@ var doCleanup = false
 var showRepoInfo = false
 
 func main() {
-	utils.ReadConfig()
+	err := bpmlib.ReadConfig()
+	if err != nil {
+		log.Fatalf("Error: could not read BPM config: %s", err)
+	}
 	resolveFlags()
 	resolveCommand()
 }
@@ -101,31 +102,38 @@ func resolveCommand() {
 			fmt.Println("No packages were given")
 			return
 		}
+
+		// Read local databases
+		err := bpmlib.ReadLocalDatabases()
+		if err != nil {
+			log.Fatalf("Error: could not read local databases: %s", err)
+		}
+
 		for n, pkg := range packages {
-			var info *utils.PackageInfo
+			var info *bpmlib.PackageInfo
 			isFile := false
 			if showRepoInfo {
 				var err error
-				var entry *utils.RepositoryEntry
-				entry, _, err = utils.GetRepositoryEntry(pkg)
+				var entry *bpmlib.RepositoryEntry
+				entry, _, err = bpmlib.GetRepositoryEntry(pkg)
 				if err != nil {
-					if entry = utils.ResolveVirtualPackage(pkg); entry == nil {
+					if entry = bpmlib.ResolveVirtualPackage(pkg); entry == nil {
 						log.Fatalf("Error: could not find package (%s) in any repository\n", pkg)
 					}
 				}
 				info = entry.Info
 			} else if stat, err := os.Stat(pkg); err == nil && !stat.IsDir() {
-				bpmpkg, err := utils.ReadPackage(pkg)
+				bpmpkg, err := bpmlib.ReadPackage(pkg)
 				if err != nil {
 					log.Fatalf("Error: could not read package: %s\n", err)
 				}
 				info = bpmpkg.PkgInfo
 				isFile = true
 			} else {
-				if isVirtual, p := utils.IsVirtualPackage(pkg, rootDir); isVirtual {
-					info = utils.GetPackageInfo(p, rootDir)
+				if isVirtual, p := bpmlib.IsVirtualPackage(pkg, rootDir); isVirtual {
+					info = bpmlib.GetPackageInfo(p, rootDir)
 				} else {
-					info = utils.GetPackageInfo(pkg, rootDir)
+					info = bpmlib.GetPackageInfo(pkg, rootDir)
 				}
 			}
 			if info == nil {
@@ -141,10 +149,16 @@ func resolveCommand() {
 				}
 				fmt.Println("File: " + abs)
 			}
-			fmt.Println(utils.CreateReadableInfo(true, true, true, info, rootDir))
+			fmt.Println(bpmlib.CreateReadableInfo(true, true, true, info, rootDir))
 		}
 	case list:
-		packages, err := utils.GetInstalledPackages(rootDir)
+		// Read local databases
+		err := bpmlib.ReadLocalDatabases()
+		if err != nil {
+			log.Fatalf("Error: could not read local databases: %s", err)
+		}
+
+		packages, err := bpmlib.GetInstalledPackages(rootDir)
 		if err != nil {
 			log.Fatalf("Error: could not get installed packages: %s", err.Error())
 			return
@@ -161,7 +175,7 @@ func resolveCommand() {
 				return
 			}
 			for n, pkg := range packages {
-				info := utils.GetPackageInfo(pkg, rootDir)
+				info := bpmlib.GetPackageInfo(pkg, rootDir)
 				if info == nil {
 					fmt.Printf("Package (%s) could not be found\n", pkg)
 					continue
@@ -169,7 +183,7 @@ func resolveCommand() {
 				if n != 0 {
 					fmt.Println()
 				}
-				fmt.Println(utils.CreateReadableInfo(true, true, true, info, rootDir))
+				fmt.Println(bpmlib.CreateReadableInfo(true, true, true, info, rootDir))
 			}
 		}
 	case search:
@@ -177,10 +191,17 @@ func resolveCommand() {
 		if len(searchTerms) == 0 {
 			log.Fatalf("Error: no search terms given")
 		}
+
+		// Read local databases
+		err := bpmlib.ReadLocalDatabases()
+		if err != nil {
+			log.Fatalf("Error: could not read local databases: %s", err)
+		}
+
 		for i, term := range searchTerms {
-			nameResults := make([]*utils.PackageInfo, 0)
-			descResults := make([]*utils.PackageInfo, 0)
-			for _, repo := range utils.BPMConfig.Repositories {
+			nameResults := make([]*bpmlib.PackageInfo, 0)
+			descResults := make([]*bpmlib.PackageInfo, 0)
+			for _, repo := range bpmlib.BPMConfig.Repositories {
 				for _, entry := range repo.Entries {
 					if strings.Contains(entry.Info.Name, term) {
 						nameResults = append(nameResults, entry.Info)
@@ -202,106 +223,57 @@ func resolveCommand() {
 			}
 		}
 	case install:
+		// Check for required permissions
 		if os.Getuid() != 0 {
 			log.Fatalf("Error: this subcommand needs to be run with superuser permissions")
 		}
-		pkgs := subcommandArgs
-		if len(pkgs) == 0 {
+
+		// Return if no packages are specified
+		if len(subcommandArgs) == 0 {
 			fmt.Println("No packages or files were given to install")
 			return
 		}
 
 		// Check if installationReason argument is valid
-		ir := utils.Unknown
-		if installationReason == "manual" {
-			ir = utils.Manual
-		} else if installationReason == "dependency" {
-			ir = utils.Dependency
-		} else if installationReason != "" {
+		ir := bpmlib.InstallationReasonUnknown
+		switch installationReason {
+		case "manual":
+			ir = bpmlib.InstallationReasonManual
+		case "dependency":
+			ir = bpmlib.InstallationReasonDependency
+		case "":
+		default:
 			log.Fatalf("Error: %s is not a valid installation reason", installationReason)
 		}
 
-		operation := utils.BPMOperation{
-			Actions:                 make([]utils.OperationAction, 0),
-			UnresolvedDepends:       make([]string, 0),
-			Changes:                 make(map[string]string),
-			RootDir:                 rootDir,
-			ForceInstallationReason: ir,
+		// Get reinstall method
+		var reinstallMethod bpmlib.ReinstallMethod
+		if reinstallAll {
+			reinstallMethod = bpmlib.ReinstallMethodAll
+		} else if reinstall {
+			reinstallMethod = bpmlib.ReinstallMethodSpecified
+		} else {
+			reinstallMethod = bpmlib.ReinstallMethodNone
 		}
 
-		// Search for packages
-		for _, pkg := range pkgs {
-			if stat, err := os.Stat(pkg); err == nil && !stat.IsDir() {
-				bpmpkg, err := utils.ReadPackage(pkg)
-				if err != nil {
-					log.Fatalf("Error: could not read package: %s\n", err)
-				}
-				if !reinstall && utils.IsPackageInstalled(bpmpkg.PkgInfo.Name, rootDir) && utils.GetPackageInfo(bpmpkg.PkgInfo.Name, rootDir).GetFullVersion() == bpmpkg.PkgInfo.GetFullVersion() {
-					continue
-				}
-				operation.AppendAction(&utils.InstallPackageAction{
-					File:         pkg,
-					IsDependency: false,
-					BpmPackage:   bpmpkg,
-				})
-			} else {
-				var entry *utils.RepositoryEntry
-
-				if e, _, err := utils.GetRepositoryEntry(pkg); err == nil {
-					entry = e
-				} else if isVirtual, p := utils.IsVirtualPackage(pkg, rootDir); isVirtual {
-					entry, _, err = utils.GetRepositoryEntry(p)
-					if err != nil {
-						log.Fatalf("Error: could not find package (%s) in any repository\n", p)
-					}
-				} else if e := utils.ResolveVirtualPackage(pkg); e != nil {
-					entry = e
-				} else {
-					log.Fatalf("Error: could not find package (%s) in any repository\n", pkg)
-				}
-				if !reinstall && utils.IsPackageInstalled(entry.Info.Name, rootDir) && utils.GetPackageInfo(entry.Info.Name, rootDir).GetFullVersion() == entry.Info.GetFullVersion() {
-					continue
-				}
-				operation.AppendAction(&utils.FetchPackageAction{
-					IsDependency:    false,
-					RepositoryEntry: entry,
-				})
-			}
-		}
-
-		// Resolve dependencies
-		err := operation.ResolveDependencies(reinstallAll, !noOptional, verbose)
+		// Read local databases
+		err := bpmlib.ReadLocalDatabases()
 		if err != nil {
-			log.Fatalf("Error: could not resolve dependencies: %s\n", err)
-		}
-		if len(operation.UnresolvedDepends) != 0 {
-			if !force {
-				log.Fatalf("Error: the following dependencies could not be found in any repositories: %s\n", strings.Join(operation.UnresolvedDepends, ", "))
-			} else {
-				log.Println("Warning: The following dependencies could not be found in any repositories: " + strings.Join(operation.UnresolvedDepends, ", "))
-			}
+			log.Fatalf("Error: could not read local databases: %s", err)
 		}
 
-		// Replace obsolete packages
-		operation.ReplaceObsoletePackages()
-
-		// Check for conflicts
-		conflicts, err := operation.CheckForConflicts()
-		if err != nil {
-			log.Fatalf("Error: could not complete package conflict check: %s\n", err)
+		// Create installation operation
+		operation, err := bpmlib.InstallPackages(rootDir, ir, reinstallMethod, !noOptional, force, verbose, subcommandArgs...)
+		if errors.As(err, &bpmlib.PackageNotFoundErr{}) || errors.As(err, &bpmlib.DependencyNotFoundErr{}) || errors.As(err, &bpmlib.PackageConflictErr{}) {
+			log.Fatalf("Error: %s", err)
+		} else if err != nil {
+			log.Fatalf("Error: could not setup operation: %s\n", err)
 		}
-		if len(conflicts) > 0 {
-			if !force {
-				log.Println("Error: conflicting packages found")
-			} else {
-				log.Fatalf("Warning: conflicting packages found")
-			}
-			for pkg, conflict := range conflicts {
-				fmt.Printf("%s is in conflict with the following packages: %s\n", pkg, strings.Join(conflict, ", "))
-			}
-			if !force {
-				os.Exit(0)
-			}
+
+		// Exit if operation contains no actions
+		if len(operation.Actions) == 0 {
+			fmt.Println("No action needs to be taken")
+			return
 		}
 
 		// Show operation summary
@@ -336,80 +308,32 @@ func resolveCommand() {
 			log.Fatalf("Error: could not run hooks: %s\n", err)
 		}
 	case update:
+		// Check for required permissions
 		if os.Getuid() != 0 {
 			log.Fatalf("Error: this subcommand needs to be run with superuser permissions")
 		}
 
-		// Sync repositories
-		if !nosync {
-			for _, repo := range utils.BPMConfig.Repositories {
-				fmt.Printf("Fetching package database for repository (%s)...\n", repo.Name)
-				err := repo.SyncLocalDatabase()
-				if err != nil {
-					log.Fatalf("Error: could not sync local database for repository (%s): %s\n", repo.Name, err)
-				}
-			}
-			fmt.Println("All package databases synced successfully!")
-		}
-
-		utils.ReadConfig()
-
-		// Get installed packages and check for updates
-		pkgs, err := utils.GetInstalledPackages(rootDir)
-		if err != nil {
-			log.Fatalf("Error: could not get installed packages: %s\n", err)
-		}
-
-		operation := utils.BPMOperation{
-			Actions:                 make([]utils.OperationAction, 0),
-			UnresolvedDepends:       make([]string, 0),
-			Changes:                 make(map[string]string),
-			RootDir:                 rootDir,
-			ForceInstallationReason: utils.Unknown,
-		}
-
-		// Search for packages
-		for _, pkg := range pkgs {
-			if slices.Contains(utils.BPMConfig.IgnorePackages, pkg) {
-				continue
-			}
-			var entry *utils.RepositoryEntry
-			// Check if installed package can be replaced and install that instead
-			if e := utils.FindReplacement(pkg); e != nil {
-				entry = e
-			} else if entry, _, err = utils.GetRepositoryEntry(pkg); err != nil {
-				continue
-			}
-
-			installedInfo := utils.GetPackageInfo(pkg, rootDir)
-			if installedInfo == nil {
-				log.Fatalf("Error: could not get package info for (%s)\n", pkg)
-			} else {
-				comparison := utils.ComparePackageVersions(*entry.Info, *installedInfo)
-				if comparison > 0 || reinstall {
-					operation.AppendAction(&utils.FetchPackageAction{
-						IsDependency:    false,
-						RepositoryEntry: entry,
-					})
-				}
+		// Read local databases if no sync
+		if nosync {
+			err := bpmlib.ReadLocalDatabases()
+			if err != nil {
+				log.Fatalf("Error: could not read local databases: %s", err)
 			}
 		}
 
-		// Check for new dependencies in updated packages
-		err = operation.ResolveDependencies(reinstallAll, !noOptional, verbose)
-		if err != nil {
-			log.Fatalf("Error: could not resolve dependencies: %s\n", err)
-		}
-		if len(operation.UnresolvedDepends) != 0 {
-			if !force {
-				log.Fatalf("Error: the following dependencies could not be found in any repositories: %s\n", strings.Join(operation.UnresolvedDepends, ", "))
-			} else {
-				log.Println("Warning: The following dependencies could not be found in any repositories: " + strings.Join(operation.UnresolvedDepends, ", "))
-			}
+		// Create update operation
+		operation, err := bpmlib.UpdatePackages(rootDir, !nosync, !noOptional, force, verbose)
+		if errors.As(err, &bpmlib.PackageNotFoundErr{}) || errors.As(err, &bpmlib.DependencyNotFoundErr{}) || errors.As(err, &bpmlib.PackageConflictErr{}) {
+			log.Fatalf("Error: %s", err)
+		} else if err != nil {
+			log.Fatalf("Error: could not setup operation: %s\n", err)
 		}
 
-		// Replace obsolete packages
-		operation.ReplaceObsoletePackages()
+		// Exit if operation contains no actions
+		if len(operation.Actions) == 0 {
+			fmt.Println("No action needs to be taken")
+			return
+		}
 
 		// Show operation summary
 		operation.ShowOperationSummary()
@@ -438,9 +362,12 @@ func resolveCommand() {
 			log.Fatalf("Error: could not run hooks: %s\n", err)
 		}
 	case sync:
+		// Check for required permissions
 		if os.Getuid() != 0 {
 			log.Fatalf("Error: this subcommand needs to be run with superuser permissions")
 		}
+
+		// Confirmation Prompt
 		if !yesAll {
 			fmt.Printf("Are you sure you wish to sync all databases? [y\\N] ")
 			reader := bufio.NewReader(os.Stdin)
@@ -450,54 +377,43 @@ func resolveCommand() {
 				os.Exit(1)
 			}
 		}
-		for _, repo := range utils.BPMConfig.Repositories {
-			fmt.Printf("Fetching package database for repository (%s)...\n", repo.Name)
-			err := repo.SyncLocalDatabase()
-			if err != nil {
-				log.Fatalf("Error: could not sync local database for repository (%s): %s\n", repo.Name, err)
-			}
+
+		// Sync databases
+		err := bpmlib.SyncDatabase(verbose)
+		if err != nil {
+			log.Fatalf("Error: could not sync local database: %s\n", err)
 		}
+
 		fmt.Println("All package databases synced successfully!")
 	case remove:
+		// Check for required permissions
 		if os.Getuid() != 0 {
 			log.Fatalf("Error: this subcommand needs to be run with superuser permissions")
 		}
-		packages := subcommandArgs
-		if len(packages) == 0 {
+
+		if len(subcommandArgs) == 0 {
 			fmt.Println("No packages were given")
 			return
 		}
 
-		operation := &utils.BPMOperation{
-			Actions:           make([]utils.OperationAction, 0),
-			UnresolvedDepends: make([]string, 0),
-			Changes:           make(map[string]string),
-			RootDir:           rootDir,
+		// Read local databases
+		err := bpmlib.ReadLocalDatabases()
+		if err != nil {
+			log.Fatalf("Error: could not read local databases: %s", err)
 		}
 
-		// Search for packages
-		for _, pkg := range packages {
-			bpmpkg := utils.GetPackage(pkg, rootDir)
-			if bpmpkg == nil {
-				continue
-			}
-			operation.AppendAction(&utils.RemovePackageAction{BpmPackage: bpmpkg})
+		// Create remove operation
+		operation, err := bpmlib.RemovePackages(rootDir, removeUnused, doCleanup, verbose, subcommandArgs...)
+		if errors.As(err, &bpmlib.PackageNotFoundErr{}) || errors.As(err, &bpmlib.DependencyNotFoundErr{}) || errors.As(err, &bpmlib.PackageConflictErr{}) {
+			log.Fatalf("Error: %s", err)
+		} else if err != nil {
+			log.Fatalf("Error: could not setup operation: %s\n", err)
 		}
 
-		// Skip needed packages if the --unused flag is on
-		if removeUnused {
-			err := operation.RemoveNeededPackages()
-			if err != nil {
-				log.Fatalf("Error: could not skip needed packages: %s\n", err)
-			}
-		}
-
-		// Do package cleanup
-		if doCleanup {
-			err := operation.Cleanup(verbose)
-			if err != nil {
-				log.Fatalf("Error: could not perform cleanup for operation: %s\n", err)
-			}
+		// Exit if operation contains no actions
+		if len(operation.Actions) == 0 {
+			fmt.Println("No action needs to be taken")
+			return
 		}
 
 		// Show operation summary
@@ -515,7 +431,7 @@ func resolveCommand() {
 		}
 
 		// Execute operation
-		err := operation.Execute(verbose, force)
+		err = operation.Execute(verbose, force)
 		if err != nil {
 			log.Fatalf("Error: could not complete operation: %s\n", err)
 		}
@@ -527,21 +443,29 @@ func resolveCommand() {
 			log.Fatalf("Error: could not run hooks: %s\n", err)
 		}
 	case cleanup:
+		// Check for required permissions
 		if os.Getuid() != 0 {
 			log.Fatalf("Error: this subcommand needs to be run with superuser permissions")
 		}
 
-		operation := &utils.BPMOperation{
-			Actions:           make([]utils.OperationAction, 0),
-			UnresolvedDepends: make([]string, 0),
-			Changes:           make(map[string]string),
-			RootDir:           rootDir,
+		// Read local databases
+		err := bpmlib.ReadLocalDatabases()
+		if err != nil {
+			log.Fatalf("Error: could not read local databases: %s", err)
 		}
 
-		// Do package cleanup
-		err := operation.Cleanup(verbose)
-		if err != nil {
-			log.Fatalf("Error: could not perform cleanup for operation: %s\n", err)
+		// Create cleanup operation
+		operation, err := bpmlib.CleanupPackages(rootDir, verbose)
+		if errors.As(err, &bpmlib.PackageNotFoundErr{}) || errors.As(err, &bpmlib.DependencyNotFoundErr{}) || errors.As(err, &bpmlib.PackageConflictErr{}) {
+			log.Fatalf("Error: %s", err)
+		} else if err != nil {
+			log.Fatalf("Error: could not setup operation: %s\n", err)
+		}
+
+		// Exit if operation contains no actions
+		if len(operation.Actions) == 0 {
+			fmt.Println("No action needs to be taken")
+			return
 		}
 
 		// Show operation summary
@@ -585,7 +509,7 @@ func resolveCommand() {
 			if os.IsNotExist(err) {
 				log.Fatalf("Error: file (%s) does not exist!\n", absFile)
 			}
-			pkgs, err := utils.GetInstalledPackages(rootDir)
+			pkgs, err := bpmlib.GetInstalledPackages(rootDir)
 			if err != nil {
 				log.Fatalf("Error: could not get installed packages: %s\n", err.Error())
 			}
@@ -604,7 +528,7 @@ func resolveCommand() {
 
 			var pkgList []string
 			for _, pkg := range pkgs {
-				if slices.ContainsFunc(utils.GetPackageFiles(pkg, rootDir), func(entry *utils.PackageFileEntry) bool {
+				if slices.ContainsFunc(bpmlib.GetPackageFiles(pkg, rootDir), func(entry *bpmlib.PackageFileEntry) bool {
 					return entry.Path == absFile
 				}) {
 					pkgList = append(pkgList, pkg)
@@ -643,9 +567,6 @@ func printHelp() {
 	fmt.Println("       -v Show additional information about what BPM is doing")
 	fmt.Println("       -y skips the confirmation prompt")
 	fmt.Println("       -f skips dependency, conflict and architecture checking")
-	fmt.Println("       -o=<path> set the binary package output directory (defaults to /var/lib/bpm/compiled)")
-	fmt.Println("       -c=<path> set the compilation directory (defaults to /var/tmp)")
-	fmt.Println("       -b creates a binary package from a source package after compilation and saves it in the binary package output directory")
 	fmt.Println("       -k keeps the compilation directory created by BPM after source package installation")
 	fmt.Println("       --reinstall Reinstalls packages even if they do not have a newer version available")
 	fmt.Println("       --reinstall-all Same as --reinstall but also reinstalls dependencies")
@@ -666,8 +587,8 @@ func printHelp() {
 	fmt.Println("       -v Show additional information about what BPM is doing")
 	fmt.Println("       -R=<path> lets you define the root path which will be used")
 	fmt.Println("       -y skips the confirmation prompt")
-	fmt.Println("       -unused removes only packages that aren't required as dependencies by other packages")
-	fmt.Println("       -cleanup performs a dependency cleanup")
+	fmt.Println("       --unused removes only packages that aren't required as dependencies by other packages")
+	fmt.Println("       --cleanup performs a dependency cleanup")
 	fmt.Println("-> bpm cleanup [-R, -v, -y] | remove all unused dependency packages")
 	fmt.Println("       -v Show additional information about what BPM is doing")
 	fmt.Println("       -R=<path> lets you define the root path which will be used")
@@ -694,11 +615,6 @@ func resolveFlags() {
 	installFlagSet.StringVar(&rootDir, "R", "/", "Set the destination root")
 	installFlagSet.BoolVar(&verbose, "v", false, "Show additional information about what BPM is doing")
 	installFlagSet.BoolVar(&yesAll, "y", false, "Skip confirmation prompts")
-	installFlagSet.StringVar(&utils.BPMConfig.BinaryOutputDir, "o", utils.BPMConfig.BinaryOutputDir, "Set the binary output directory")
-	installFlagSet.StringVar(&utils.BPMConfig.CompilationDir, "c", utils.BPMConfig.CompilationDir, "Set the compilation directory")
-	installFlagSet.BoolVar(&buildSource, "b", false, "Build binary package from source package")
-	installFlagSet.BoolVar(&skipCheck, "s", false, "Skip check function during source compilation")
-	installFlagSet.BoolVar(&keepTempDir, "k", false, "Keep temporary directory after source compilation")
 	installFlagSet.BoolVar(&force, "f", false, "Force installation by skipping architecture and dependency resolution")
 	installFlagSet.BoolVar(&reinstall, "reinstall", false, "Reinstalls packages even if they do not have a newer version available")
 	installFlagSet.BoolVar(&reinstallAll, "reinstall-all", false, "Same as --reinstall but also reinstalls dependencies")
@@ -711,7 +627,6 @@ func resolveFlags() {
 	updateFlagSet.BoolVar(&verbose, "v", false, "Show additional information about what BPM is doing")
 	updateFlagSet.BoolVar(&yesAll, "y", false, "Skip confirmation prompts")
 	updateFlagSet.BoolVar(&force, "f", false, "Force update by skipping architecture and dependency resolution")
-	updateFlagSet.BoolVar(&reinstall, "reinstall", false, "Fetches and reinstalls all packages even if they do not have a newer version available")
 	updateFlagSet.BoolVar(&nosync, "no-sync", false, "Skips package database syncing")
 	updateFlagSet.Usage = printHelp
 	// Sync flags

@@ -1,4 +1,4 @@
-package utils
+package bpmlib
 
 import (
 	"fmt"
@@ -55,7 +55,7 @@ func stringSliceRemove(s []string, r string) []string {
 	return s
 }
 
-func UnsignedBytesToHumanReadable(b uint64) string {
+func unsignedBytesToHumanReadable(b uint64) string {
 	bf := float64(b)
 	for _, unit := range []string{"", "Ki", "Mi", "Gi", "Ti", "Pi", "Ei", "Zi"} {
 		if math.Abs(bf) < 1024.0 {
@@ -66,7 +66,7 @@ func UnsignedBytesToHumanReadable(b uint64) string {
 	return fmt.Sprintf("%.1fYiB", bf)
 }
 
-func BytesToHumanReadable(b int64) string {
+func bytesToHumanReadable(b int64) string {
 	bf := float64(b)
 	for _, unit := range []string{"", "Ki", "Mi", "Gi", "Ti", "Pi", "Ei", "Zi"} {
 		if math.Abs(bf) < 1024.0 {

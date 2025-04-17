@@ -1,0 +1,14 @@
+module git.enumerated.dev/bubble-package-manager/bpm/src/bpm
+
+go 1.23
+
+toolchain go1.23.7
+
+require git.enumerated.dev/bubble-package-manager/bpm/src/bpmlib v0.5.0
+
+replace git.enumerated.dev/bubble-package-manager/bpm/src/bpmlib => ../bpmlib
+
+require (
+	github.com/knqyf263/go-rpm-version v0.0.0-20240918084003-2afd7dc6a38f // indirect
+	gopkg.in/yaml.v3 v3.0.1 // indirect
+)

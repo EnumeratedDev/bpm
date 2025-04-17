@@ -1,4 +1,4 @@
-package utils
+package bpmlib
 
 import (
 	"errors"
@@ -195,7 +195,7 @@ func (operation *BPMOperation) Cleanup(verbose bool) error {
 	// Get all installed packages
 	installedPackageNames, err := GetInstalledPackages(operation.RootDir)
 	if err != nil {
-		log.Fatalf("Error: could not get installed packages: %s\n", err)
+		return fmt.Errorf("could not get installed packages: %s", err)
 	}
 	installedPackages := make([]*PackageInfo, len(installedPackageNames))
 	for i, value := range installedPackageNames {
@@ -217,7 +217,7 @@ func (operation *BPMOperation) Cleanup(verbose bool) error {
 	// Get manually installed packages, resolve all their dependencies and add them to the keepPackages slice
 	keepPackages := make([]string, 0)
 	for _, pkg := range slices.Clone(installedPackages) {
-		if GetInstallationReason(pkg.Name, operation.RootDir) != Manual {
+		if GetInstallationReason(pkg.Name, operation.RootDir) != InstallationReasonManual {
 			continue
 		}
 
@@ -329,8 +329,8 @@ func (operation *BPMOperation) CheckForConflicts() (map[string][]string, error) 
 
 func (operation *BPMOperation) ShowOperationSummary() {
 	if len(operation.Actions) == 0 {
-		fmt.Println("All packages are up to date!")
-		os.Exit(0)
+		fmt.Println("No action needs to be taken")
+		return
 	}
 
 	for _, value := range operation.Actions {
@@ -348,9 +348,6 @@ func (operation *BPMOperation) ShowOperationSummary() {
 		installedInfo := GetPackageInfo(pkgInfo.Name, operation.RootDir)
 		sourceInfo := ""
 		if pkgInfo.Type == "source" {
-			if operation.RootDir != "/" {
-				log.Fatalf("cannot compile and install source packages to a different root directory")
-			}
 			sourceInfo = "(From Source)"
 		}
 
@@ -372,16 +369,21 @@ func (operation *BPMOperation) ShowOperationSummary() {
 		fmt.Println("Warning: Operating in " + operation.RootDir)
 	}
 	if operation.GetTotalDownloadSize() > 0 {
-		fmt.Printf("%s will be downloaded to complete this operation\n", UnsignedBytesToHumanReadable(operation.GetTotalDownloadSize()))
+		fmt.Printf("%s will be downloaded to complete this operation\n", unsignedBytesToHumanReadable(operation.GetTotalDownloadSize()))
 	}
 	if operation.GetFinalActionSize(operation.RootDir) > 0 {
-		fmt.Printf("A total of %s will be installed after the operation finishes\n", BytesToHumanReadable(operation.GetFinalActionSize(operation.RootDir)))
+		fmt.Printf("A total of %s will be installed after the operation finishes\n", bytesToHumanReadable(operation.GetFinalActionSize(operation.RootDir)))
 	} else if operation.GetFinalActionSize(operation.RootDir) < 0 {
-		fmt.Printf("A total of %s will be freed after the operation finishes\n", strings.TrimPrefix(BytesToHumanReadable(operation.GetFinalActionSize(operation.RootDir)), "-"))
+		fmt.Printf("A total of %s will be freed after the operation finishes\n", strings.TrimPrefix(bytesToHumanReadable(operation.GetFinalActionSize(operation.RootDir)), "-"))
 	}
 }
 
 func (operation *BPMOperation) RunHooks(verbose bool) error {
+	// Return if hooks directory does not exist
+	if stat, err := os.Stat(path.Join(operation.RootDir, "var/lib/bpm/hooks")); err != nil || !stat.IsDir() {
+		return nil
+	}
+
 	// Get directory entries in hooks directory
 	dirEntries, err := os.ReadDir(path.Join(operation.RootDir, "var/lib/bpm/hooks"))
 	if err != nil {
@@ -391,7 +393,7 @@ func (operation *BPMOperation) RunHooks(verbose bool) error {
 	// Find all hooks, validate and execute them
 	for _, entry := range dirEntries {
 		if entry.Type().IsRegular() && strings.HasSuffix(entry.Name(), ".bpmhook") {
-			hook, err := CreateHook(path.Join(operation.RootDir, "var/lib/bpm/hooks", entry.Name()))
+			hook, err := createHook(path.Join(operation.RootDir, "var/lib/bpm/hooks", entry.Name()))
 			if err != nil {
 				log.Printf("Error while reading hook (%s): %s", entry.Name(), err)
 			}
@@ -458,7 +460,7 @@ func (operation *BPMOperation) Execute(verbose, force bool) error {
 	for _, action := range operation.Actions {
 		if action.GetActionType() == "remove" {
 			pkgInfo := action.(*RemovePackageAction).BpmPackage.PkgInfo
-			err := RemovePackage(pkgInfo.Name, verbose, operation.RootDir)
+			err := removePackage(pkgInfo.Name, verbose, operation.RootDir)
 			if err != nil {
 				return errors.New(fmt.Sprintf("could not remove package (%s): %s\n", pkgInfo.Name, err))
 			}
@@ -468,20 +470,20 @@ func (operation *BPMOperation) Execute(verbose, force bool) error {
 			isReinstall := IsPackageInstalled(bpmpkg.PkgInfo.Name, operation.RootDir)
 			var err error
 			if value.IsDependency {
-				err = InstallPackage(value.File, operation.RootDir, verbose, true, false, false, false)
+				err = installPackage(value.File, operation.RootDir, verbose, true)
 			} else {
-				err = InstallPackage(value.File, operation.RootDir, verbose, force, false, false, false)
+				err = installPackage(value.File, operation.RootDir, verbose, force)
 			}
 			if err != nil {
 				return errors.New(fmt.Sprintf("could not install package (%s): %s\n", bpmpkg.PkgInfo.Name, err))
 			}
-			if operation.ForceInstallationReason != Unknown && !value.IsDependency {
+			if operation.ForceInstallationReason != InstallationReasonUnknown && !value.IsDependency {
 				err := SetInstallationReason(bpmpkg.PkgInfo.Name, operation.ForceInstallationReason, operation.RootDir)
 				if err != nil {
 					return errors.New(fmt.Sprintf("could not set installation reason for package (%s): %s\n", value.BpmPackage.PkgInfo.Name, err))
 				}
 			} else if value.IsDependency && !isReinstall {
-				err := SetInstallationReason(bpmpkg.PkgInfo.Name, Dependency, operation.RootDir)
+				err := SetInstallationReason(bpmpkg.PkgInfo.Name, InstallationReasonDependency, operation.RootDir)
 				if err != nil {
 					return errors.New(fmt.Sprintf("could not set installation reason for package (%s): %s\n", value.BpmPackage.PkgInfo.Name, err))
 				}
