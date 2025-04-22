@@ -8,6 +8,7 @@ import (
 	"git.enumerated.dev/bubble-package-manager/bpm/src/bpmlib"
 	"log"
 	"os"
+	"path"
 	"path/filepath"
 	"slices"
 	"strings"
@@ -62,6 +63,7 @@ const (
 	remove
 	cleanup
 	file
+	compile
 )
 
 func getCommandType() commandType {
@@ -86,6 +88,8 @@ func getCommandType() commandType {
 		return cleanup
 	case "file":
 		return file
+	case "compile":
+		return compile
 	default:
 		return help
 	}
@@ -543,6 +547,51 @@ func resolveCommand() {
 				}
 			}
 		}
+	case compile:
+		if len(subcommandArgs) == 0 {
+			fmt.Println("No source packages were given")
+			return
+		}
+
+		// Read local databases
+		err := bpmlib.ReadLocalDatabases()
+		if err != nil {
+			log.Fatalf("Error: could not read local databases: %s", err)
+		}
+
+		// Compile packages
+		for _, sourcePackage := range subcommandArgs {
+			if _, err := os.Stat(sourcePackage); os.IsNotExist(err) {
+				log.Fatalf("Error: file (%s) does not exist!", sourcePackage)
+			}
+
+			// Read archive
+			bpmpkg, err := bpmlib.ReadPackage(sourcePackage)
+			if err != nil {
+				log.Fatalf("Could not read package (%s): %s", sourcePackage, err)
+			}
+
+			// Ensure archive is source BPM package
+			if bpmpkg.PkgInfo.Type != "source" {
+				log.Fatalf("Error: cannot compile a non-source package!")
+			}
+
+			// Get current working directory
+			workdir, err := os.Getwd()
+			if err != nil {
+				log.Fatalf("Error: could not get working directory: %s", err)
+			}
+
+			outputFilename := fmt.Sprintf(path.Join(workdir, "%s-%s-%d.bpm"), bpmpkg.PkgInfo.Name, bpmpkg.PkgInfo.Version, bpmpkg.PkgInfo.Revision)
+
+			err = bpmlib.CompileSourcePackage(sourcePackage, outputFilename)
+			if err != nil {
+				log.Fatalf("Error: could not compile source package (%s): %s", sourcePackage, err)
+			}
+
+			fmt.Printf("Package (%s) was successfully compiled! Binary package generated at: %s\n", sourcePackage, outputFilename)
+		}
+
 	default:
 		printHelp()
 	}
