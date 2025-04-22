@@ -8,6 +8,7 @@ import (
 	version "github.com/knqyf263/go-rpm-version"
 	"gopkg.in/yaml.v3"
 	"io"
+	"log"
 	"os"
 	"os/exec"
 	"path"
@@ -262,31 +263,7 @@ func ReadPackageScripts(filename string) (map[string]string, error) {
 		if err != nil {
 			return nil, err
 		}
-		if header.Name == "pre_install.sh" {
-			bs, err := io.ReadAll(tr)
-			if err != nil {
-				return nil, err
-			}
-			ret[header.Name] = string(bs)
-		} else if header.Name == "post_install.sh" {
-			bs, err := io.ReadAll(tr)
-			if err != nil {
-				return nil, err
-			}
-			ret[header.Name] = string(bs)
-		} else if header.Name == "pre_update.sh" {
-			bs, err := io.ReadAll(tr)
-			if err != nil {
-				return nil, err
-			}
-			ret[header.Name] = string(bs)
-		} else if header.Name == "post_update.sh" {
-			bs, err := io.ReadAll(tr)
-			if err != nil {
-				return nil, err
-			}
-			ret[header.Name] = string(bs)
-		} else if header.Name == "post_remove.sh" {
+		if header.Name == "pre_install.sh" || header.Name == "post_install.sh" || header.Name == "pre_update.sh" || header.Name == "post_update.sh" || header.Name == "pre_remove.sh" || header.Name == "post_remove.sh" {
 			bs, err := io.ReadAll(tr)
 			if err != nil {
 				return nil, err
@@ -791,23 +768,30 @@ func installPackage(filename, rootDir string, verbose, force bool) error {
 		return err
 	}
 
-	scripts, err := ReadPackageScripts(filename)
+	// Save remove package scripts
+	packageScripts, err := ReadPackageScripts(filename)
 	if err != nil {
 		return err
 	}
-	if val, ok := scripts["post_remove.sh"]; ok {
-		f, err = os.Create(path.Join(pkgDir, "post_remove.sh"))
+	for script, content := range packageScripts {
+		if !strings.HasSuffix(script, "_remove.sh") {
+			continue
+		}
+
+		// Create file
+		f, err = os.Create(path.Join(pkgDir, script))
 		if err != nil {
 			return err
 		}
-		_, err = f.WriteString(val)
+
+		// Write script contents to file
+		_, err = f.WriteString(content)
 		if err != nil {
 			return err
 		}
-		err = f.Close()
-		if err != nil {
-			return err
-		}
+
+		// Close file
+		f.Close()
 	}
 
 	if !packageInstalled {
@@ -1138,6 +1122,24 @@ func removePackage(pkg string, verbose bool, rootDir string) error {
 		return errors.New("could not get package info")
 	}
 
+	// Executing pre_remove script
+	if _, err := os.Stat(path.Join(pkgDir, "pre_remove.sh")); err == nil {
+		cmd := exec.Command("/bin/bash", path.Join(pkgDir, "pre_remove.sh"))
+		cmd.Dir = rootDir
+		cmd.Env = os.Environ()
+		cmd.Env = append(cmd.Env, fmt.Sprintf("BPM_ROOT=%s", rootDir))
+		cmd.Env = append(cmd.Env, fmt.Sprintf("BPM_PKG_NAME=%s", pkgInfo.Name))
+		cmd.Env = append(cmd.Env, fmt.Sprintf("BPM_PKG_VERSION=%s", pkgInfo.Version))
+		cmd.Env = append(cmd.Env, fmt.Sprintf("BPM_PKG_REVISION=%d", pkgInfo.Revision))
+		cmd.Env = append(cmd.Env, fmt.Sprintf("BPM_PKG_URL=%s", pkgInfo.Url))
+		cmd.Env = append(cmd.Env, fmt.Sprintf("BPM_PKG_ARCH=%s", pkgInfo.Arch))
+
+		err = cmd.Run()
+		if err != nil {
+			log.Printf("Warning: could not run pre_remove.sh package script: %s", err)
+		}
+	}
+
 	// Fetching and reversing package file entry list
 	fileEntries := GetPackageFiles(pkg, rootDir)
 	sort.Slice(fileEntries, func(i, j int) bool {
@@ -1218,27 +1220,14 @@ func removePackage(pkg string, verbose bool, rootDir string) error {
 		cmd.Env = os.Environ()
 		cmd.Env = append(cmd.Env, fmt.Sprintf("BPM_ROOT=%s", rootDir))
 		cmd.Env = append(cmd.Env, fmt.Sprintf("BPM_PKG_NAME=%s", pkgInfo.Name))
-		cmd.Env = append(cmd.Env, fmt.Sprintf("BPM_PKG_DESC=%s", pkgInfo.Description))
 		cmd.Env = append(cmd.Env, fmt.Sprintf("BPM_PKG_VERSION=%s", pkgInfo.Version))
 		cmd.Env = append(cmd.Env, fmt.Sprintf("BPM_PKG_REVISION=%d", pkgInfo.Revision))
 		cmd.Env = append(cmd.Env, fmt.Sprintf("BPM_PKG_URL=%s", pkgInfo.Url))
 		cmd.Env = append(cmd.Env, fmt.Sprintf("BPM_PKG_ARCH=%s", pkgInfo.Arch))
-		depends := make([]string, len(pkgInfo.Depends))
-		copy(depends, pkgInfo.Depends)
-		for i := 0; i < len(depends); i++ {
-			depends[i] = fmt.Sprintf("\"%s\"", depends[i])
-		}
-		makeDepends := make([]string, len(pkgInfo.MakeDepends))
-		copy(makeDepends, pkgInfo.MakeDepends)
-		for i := 0; i < len(makeDepends); i++ {
-			makeDepends[i] = fmt.Sprintf("\"%s\"", makeDepends[i])
-		}
-		cmd.Env = append(cmd.Env, fmt.Sprintf("BPM_PKG_DEPENDS=(%s)", strings.Join(depends, " ")))
-		cmd.Env = append(cmd.Env, fmt.Sprintf("BPM_PKG_MAKE_DEPENDS=(%s)", strings.Join(makeDepends, " ")))
-		cmd.Env = append(cmd.Env, "BPM_PKG_TYPE=source")
+
 		err = cmd.Run()
 		if err != nil {
-			return err
+			log.Printf("Warning: could not run pre_remove.sh package script: %s", err)
 		}
 	}
 
