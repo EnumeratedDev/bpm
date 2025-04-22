@@ -89,6 +89,7 @@ func CompileSourcePackage(archiveFilename, outputFilename string) (err error) {
 	env = append(env, "BPM_PKG_VERSION="+bpmpkg.PkgInfo.Version)
 	env = append(env, "BPM_PKG_REVISION="+strconv.Itoa(bpmpkg.PkgInfo.Revision))
 	env = append(env, "BPM_PKG_ARCH="+GetArch())
+	env = append(env, BPMConfig.CompilationEnvironment...)
 
 	// Execute prepare and build functions in source.sh script
 	cmd := exec.Command("bash", "-c",

@@ -6,8 +6,9 @@ import (
 )
 
 type BPMConfigStruct struct {
-	IgnorePackages []string      `yaml:"ignore_packages"`
-	Repositories   []*Repository `yaml:"repositories"`
+	IgnorePackages         []string      `yaml:"ignore_packages"`
+	CompilationEnvironment []string      `yaml:"compilation_env"`
+	Repositories           []*Repository `yaml:"repositories"`
 }
 
 var BPMConfig BPMConfigStruct
