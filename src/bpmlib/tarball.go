@@ -14,7 +14,35 @@ type tarballFileReader struct {
 	file      *os.File
 }
 
-func readTarballContent(tarballPath, fileToExtract string) (*tarballFileReader, error) {
+func listTarballContent(tarballPath string) (content []string, err error) {
+	file, err := os.Open(tarballPath)
+	if err != nil {
+		return nil, err
+	}
+	defer file.Close()
+
+	tr := tar.NewReader(file)
+	for {
+		header, err := tr.Next()
+		if err == io.EOF {
+			break
+		}
+		if err != nil {
+			return nil, err
+		}
+
+		switch header.Typeflag {
+		case tar.TypeDir:
+			continue
+		default:
+			content = append(content, header.Name)
+		}
+	}
+
+	return content, nil
+}
+
+func readTarballFile(tarballPath, fileToExtract string) (*tarballFileReader, error) {
 	file, err := os.Open(tarballPath)
 	if err != nil {
 		return nil, err
@@ -42,6 +70,60 @@ func readTarballContent(tarballPath, fileToExtract string) (*tarballFileReader, 
 	}
 
 	return nil, errors.New("could not file in tarball")
+}
+
+func extractTarballFile(tarballPath, fileToExtract string, workingDirectory string) (err error) {
+	file, err := os.Open(tarballPath)
+	if err != nil {
+		return err
+	}
+	defer file.Close()
+
+	tr := tar.NewReader(file)
+	for {
+		header, err := tr.Next()
+		if err == io.EOF {
+			break
+		}
+		if err != nil {
+			return err
+		}
+
+		// Skip if filename does not match
+		if header.Name != fileToExtract {
+			continue
+		}
+
+		// Trim directory name from header name
+		header.Name = strings.Split(header.Name, "/")[len(strings.Split(header.Name, "/"))-1]
+		outputPath := path.Join(workingDirectory, header.Name)
+
+		switch header.Typeflag {
+		case tar.TypeReg:
+			// Create file and set permissions
+			file, err = os.Create(outputPath)
+			if err != nil {
+				return err
+			}
+			err := file.Chmod(header.FileInfo().Mode())
+			if err != nil {
+				return err
+			}
+
+			// Copy data to file
+			_, err = io.Copy(file, tr)
+			if err != nil {
+				return err
+			}
+
+			// Close file
+			file.Close()
+		default:
+			continue
+		}
+	}
+
+	return nil
 }
 
 func extractTarballDirectory(tarballPath, directoryToExtract, workingDirectory string) (err error) {

@@ -218,6 +218,31 @@ func ReadPackage(filename string) (*BPMPackage, error) {
 	}, nil
 }
 
+func getPackageScripts(filename string) (packageScripts []string) {
+	content, err := listTarballContent(filename)
+	if err != nil {
+		return
+	}
+
+	for _, file := range content {
+		if file == "pre_install.sh" {
+			packageScripts = append(packageScripts, "pre_install.sh")
+		} else if file == "post_install.sh" {
+			packageScripts = append(packageScripts, "post_install.sh")
+		} else if file == "pre_update.sh" {
+			packageScripts = append(packageScripts, "pre_update.sh")
+		} else if file == "post_update.sh" {
+			packageScripts = append(packageScripts, "post_update.sh")
+		} else if file == "pre_remove.sh" {
+			packageScripts = append(packageScripts, "pre_remove.sh")
+		} else if file == "post_remove.sh" {
+			packageScripts = append(packageScripts, "post_remove.sh")
+		}
+	}
+
+	return packageScripts
+}
+
 func ReadPackageScripts(filename string) (map[string]string, error) {
 	if _, err := os.Stat(filename); os.IsNotExist(err) {
 		return nil, err
@@ -480,7 +505,7 @@ func extractPackage(bpmpkg *BPMPackage, verbose bool, filename, rootDir string) 
 		return err
 	}
 
-	tarballFile, err := readTarballContent(filename, "files.tar.gz")
+	tarballFile, err := readTarballFile(filename, "files.tar.gz")
 	if err != nil {
 		return err
 	}
@@ -738,7 +763,7 @@ func installPackage(filename, rootDir string, verbose, force bool) error {
 		return err
 	}
 
-	tarballFile, err := readTarballContent(filename, "pkg.files")
+	tarballFile, err := readTarballFile(filename, "pkg.files")
 	if err != nil {
 		return err
 	}

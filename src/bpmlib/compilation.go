@@ -4,11 +4,11 @@ import (
 	"errors"
 	"fmt"
 	"gopkg.in/yaml.v3"
-	"io"
 	"os"
 	"os/exec"
 	"path"
 	"strconv"
+	"strings"
 )
 
 func CompileSourcePackage(archiveFilename, outputFilename string) (err error) {
@@ -46,25 +46,18 @@ func CompileSourcePackage(archiveFilename, outputFilename string) (err error) {
 	}
 
 	// Extract source.sh file
-	content, err := readTarballContent(archiveFilename, "source.sh")
+	err = extractTarballFile(archiveFilename, "source.sh", tempDirectory)
 	if err != nil {
 		return err
 	}
-	sourceFile, err := os.Create(path.Join(tempDirectory, "source.sh"))
-	if err != nil {
-		return err
-	}
-	_, err = io.Copy(sourceFile, content.tarReader)
-	if err != nil {
-		return err
-	}
-	err = sourceFile.Close()
-	if err != nil {
-		return err
-	}
-	err = content.file.Close()
-	if err != nil {
-		return err
+
+	// Get package scripts and extract them
+	packageScripts := getPackageScripts(archiveFilename)
+	for _, script := range packageScripts {
+		err = extractTarballFile(archiveFilename, script, tempDirectory)
+		if err != nil {
+			return err
+		}
 	}
 
 	// Extract source files
@@ -167,8 +160,13 @@ func CompileSourcePackage(archiveFilename, outputFilename string) (err error) {
 		return err
 	}
 
+	// Get files to include in BPM archive
+	bpmArchiveFiles := make([]string, 0)
+	bpmArchiveFiles = append(bpmArchiveFiles, "pkg.info", "pkg.files", "files.tar.gz") // Base files
+	bpmArchiveFiles = append(bpmArchiveFiles, packageScripts...)                       // Package scripts
+
 	// Create final BPM archive
-	cmd = exec.Command("bash", "-c", "tar -cf "+outputFilename+" --owner=0 --group=0 -C \"$BPM_WORKDIR\" pkg.info pkg.files ${PACKAGE_SCRIPTS[@]} files.tar.gz")
+	cmd = exec.Command("bash", "-c", "tar -cf "+outputFilename+" --owner=0 --group=0 -C \"$BPM_WORKDIR\" "+strings.Join(bpmArchiveFiles, " "))
 	cmd.Dir = tempDirectory
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr
