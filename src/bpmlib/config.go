@@ -7,6 +7,7 @@ import (
 
 type BPMConfigStruct struct {
 	IgnorePackages         []string      `yaml:"ignore_packages"`
+	PrivilegeEscalatorCmd  string        `yaml:"privilege_escalator_cmd"`
 	CompilationEnvironment []string      `yaml:"compilation_env"`
 	Repositories           []*Repository `yaml:"repositories"`
 }

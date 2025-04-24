@@ -11,7 +11,7 @@ import (
 	"strings"
 )
 
-func CompileSourcePackage(archiveFilename, outputFilename string) (err error) {
+func CompileSourcePackage(archiveFilename, outputFilename string, skipChecks bool) (err error) {
 	// Read BPM archive
 	bpmpkg, err := ReadPackage(archiveFilename)
 	if err != nil {
@@ -91,7 +91,6 @@ func CompileSourcePackage(archiveFilename, outputFilename string) (err error) {
 			"set +a\n"+
 			"[[ $(type -t prepare) == \"function\" ]] && (echo \"Running prepare() function\" && cd \"$BPM_SOURCE\" && set -e && prepare)\n"+ // Run prepare() function if it exists
 			"[[ $(type -t build) == \"function\" ]] && (echo \"Running build() function\" && cd \"$BPM_SOURCE\" && set -e && build)\n"+ // Run build() function if it exists
-			"[[ $(type -t check) == \"function\" ]] && (echo \"Running check() function\" && cd \"$BPM_SOURCE\" && set -e && check)\n"+ // Run check() function if it exists
 			"exit 0")
 	cmd.Dir = tempDirectory
 	cmd.Stdout = os.Stdout
@@ -100,6 +99,24 @@ func CompileSourcePackage(archiveFilename, outputFilename string) (err error) {
 	err = cmd.Run()
 	if err != nil {
 		return err
+	}
+
+	// Execute check function in source.sh script if not skipping checks
+	if !skipChecks {
+		cmd = exec.Command("bash", "-c",
+			"set -a\n"+ // Source and export functions and variables in source.sh script
+				". \"${BPM_WORKDIR}\"/source.sh\n"+
+				"set +a\n"+
+				"[[ $(type -t check) == \"function\" ]] && (echo \"Running check() function\" && cd \"$BPM_SOURCE\" && set -e && check)\n"+ // Run check() function if it exists
+				"exit 0")
+		cmd.Dir = tempDirectory
+		cmd.Stdout = os.Stdout
+		cmd.Stderr = os.Stderr
+		cmd.Env = env
+		err = cmd.Run()
+		if err != nil {
+			return err
+		}
 	}
 
 	// Remove 'output' directory if it already exists

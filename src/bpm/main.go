@@ -8,6 +8,7 @@ import (
 	"git.enumerated.dev/bubble-package-manager/bpm/src/bpmlib"
 	"log"
 	"os"
+	"os/exec"
 	"path"
 	"path/filepath"
 	"slices"
@@ -39,6 +40,9 @@ var nosync = true
 var removeUnused = false
 var doCleanup = false
 var showRepoInfo = false
+var installSrcPkgDepends = false
+var skipChecks = false
+var outputFilename = ""
 
 func main() {
 	err := bpmlib.ReadConfig()
@@ -576,20 +580,128 @@ func resolveCommand() {
 				log.Fatalf("Error: cannot compile a non-source package!")
 			}
 
+			// Get direct runtime and make dependencies
+			totalDepends := make([]string, 0)
+			for _, depend := range bpmpkg.PkgInfo.GetAllDependencies(true, false) {
+				if !slices.Contains(totalDepends, depend) {
+					totalDepends = append(totalDepends, depend)
+				}
+			}
+
+			// Get unmet dependencies
+			unmetDepends := slices.Clone(totalDepends)
+			installedPackages, err := bpmlib.GetInstalledPackages("/")
+			if err != nil {
+				log.Fatalf("Error: could not get installed packages: %s\n", err)
+			}
+			for i := len(unmetDepends) - 1; i >= 0; i-- {
+				if slices.Contains(installedPackages, unmetDepends[i]) {
+					unmetDepends = append(unmetDepends[:i], unmetDepends[i+1:]...)
+				}
+			}
+
+			// Install missing source package dependencies
+			if installSrcPkgDepends && len(unmetDepends) > 0 {
+				// Get path to current executable
+				executable, err := os.Executable()
+				if err != nil {
+					log.Fatalf("Error: could not get path to executable: %s\n", err)
+				}
+
+				// Run 'bpm install' using the set privilege escalator command
+				cmd := exec.Command(bpmlib.BPMConfig.PrivilegeEscalatorCmd, executable, "install", "--installation-reason=dependency", strings.Join(unmetDepends, " "))
+				if yesAll {
+					cmd.Args = slices.Insert(cmd.Args, 3, "-y")
+				}
+				cmd.Stdout = os.Stdout
+				cmd.Stderr = os.Stderr
+				cmd.Stdin = os.Stdin
+				if verbose {
+					fmt.Println("Running command: " + cmd.String())
+				}
+				err = cmd.Run()
+				if err != nil {
+					log.Fatalf("Error: dependency installation command failed: %s\n", err)
+				}
+			} else {
+				// Ensure the required dependencies are installed
+				if len(unmetDepends) != 0 {
+					log.Fatalf("Error: could not resolve dependencies: the following dependencies were not found in any repositories: " + strings.Join(unmetDepends, ", "))
+				}
+			}
+
 			// Get current working directory
 			workdir, err := os.Getwd()
 			if err != nil {
 				log.Fatalf("Error: could not get working directory: %s", err)
 			}
 
-			outputFilename := fmt.Sprintf(path.Join(workdir, "%s-%s-%d.bpm"), bpmpkg.PkgInfo.Name, bpmpkg.PkgInfo.Version, bpmpkg.PkgInfo.Revision)
+			// Get user home directory
+			homedir, err := os.UserHomeDir()
+			if err != nil {
+				log.Fatalf("Error: could not get user home directory: %s", err)
+			}
 
-			err = bpmlib.CompileSourcePackage(sourcePackage, outputFilename)
+			// Trim output filename
+			outputFilename = strings.TrimSpace(outputFilename)
+			if outputFilename != "/" {
+				outputFilename = strings.TrimSuffix(outputFilename, "/")
+			}
+
+			// Set output filename if empty
+			if outputFilename == "" {
+				outputFilename = path.Join(workdir, fmt.Sprintf("%s-%s-%d.bpm", bpmpkg.PkgInfo.Name, bpmpkg.PkgInfo.Version, bpmpkg.PkgInfo.Revision))
+			}
+
+			// Replace first tilde with user home directory
+			if strings.Split(outputFilename, "/")[0] == "~" {
+				outputFilename = strings.Replace(outputFilename, "~", homedir, 1)
+			}
+
+			// Prepend current working directory to output filename if not an absolute path
+			if outputFilename != "" && !strings.HasPrefix(outputFilename, "/") {
+				outputFilename = filepath.Join(workdir, outputFilename)
+			}
+
+			// Clean path
+			path.Clean(outputFilename)
+
+			// Append archive filename if path is set to a directory
+			if stat, err := os.Stat(outputFilename); err == nil && stat.IsDir() {
+				outputFilename = path.Join(outputFilename, fmt.Sprintf("%s-%s-%d.bpm", bpmpkg.PkgInfo.Name, bpmpkg.PkgInfo.Version, bpmpkg.PkgInfo.Revision))
+			}
+
+			err = bpmlib.CompileSourcePackage(sourcePackage, outputFilename, skipChecks)
 			if err != nil {
 				log.Fatalf("Error: could not compile source package (%s): %s", sourcePackage, err)
 			}
 
 			fmt.Printf("Package (%s) was successfully compiled! Binary package generated at: %s\n", sourcePackage, outputFilename)
+
+			// Remove unused packages
+			if installSrcPkgDepends && len(unmetDepends) > 0 {
+				// Get path to current executable
+				executable, err := os.Executable()
+				if err != nil {
+					log.Fatalf("Error: could not get path to executable: %s\n", err)
+				}
+
+				// Run 'bpm cleanup' using the set privilege escalator command
+				cmd := exec.Command(bpmlib.BPMConfig.PrivilegeEscalatorCmd, executable, "cleanup")
+				if yesAll {
+					cmd.Args = slices.Insert(cmd.Args, 3, "-y")
+				}
+				cmd.Stdout = os.Stdout
+				cmd.Stderr = os.Stderr
+				cmd.Stdin = os.Stdin
+				if verbose {
+					fmt.Println("Running command: " + cmd.String())
+				}
+				err = cmd.Run()
+				if err != nil {
+					log.Fatalf("Error: dependency cleanup command failed: %s\n", err)
+				}
+			}
 		}
 
 	default:
@@ -644,6 +756,13 @@ func printHelp() {
 	fmt.Println("       -y skips the confirmation prompt")
 	fmt.Println("-> bpm file [-R] <files...> | shows what packages the following packages are managed by")
 	fmt.Println("       -R=<root_path> lets you define the root path which will be used")
+	fmt.Println("-> bpm compile [-d, -s, -o] <source packages...> | Compile source BPM package")
+	fmt.Println("       -v Show additional information about what BPM is doing")
+	fmt.Println("       -d installs required dependencies for package compilation")
+	fmt.Println("       -s skips the check function in source.sh scripts")
+	fmt.Println("       -o sets output filename")
+	fmt.Println("       -y skips the confirmation prompt")
+
 	fmt.Println("\033[1m----------------\033[0m")
 }
 
@@ -702,6 +821,15 @@ func resolveFlags() {
 	fileFlagSet := flag.NewFlagSet("Remove flags", flag.ExitOnError)
 	fileFlagSet.StringVar(&rootDir, "R", "/", "Set the destination root")
 	fileFlagSet.Usage = printHelp
+	// Compile flags
+	compileFlagSet := flag.NewFlagSet("Compile flags", flag.ExitOnError)
+	compileFlagSet.BoolVar(&installSrcPkgDepends, "d", false, "Install required dependencies for package compilation")
+	compileFlagSet.BoolVar(&skipChecks, "s", false, "Skip the check function in source.sh scripts")
+	compileFlagSet.StringVar(&outputFilename, "o", "", "Set output filename")
+	compileFlagSet.BoolVar(&verbose, "v", false, "Show additional information about what BPM is doing")
+	compileFlagSet.BoolVar(&yesAll, "y", false, "Skip confirmation prompts")
+
+	compileFlagSet.Usage = printHelp
 	if len(os.Args[1:]) <= 0 {
 		subcommand = "help"
 	} else {
@@ -749,6 +877,12 @@ func resolveFlags() {
 				return
 			}
 			subcommandArgs = fileFlagSet.Args()
+		} else if getCommandType() == compile {
+			err := compileFlagSet.Parse(subcommandArgs)
+			if err != nil {
+				return
+			}
+			subcommandArgs = compileFlagSet.Args()
 		}
 		if reinstallAll {
 			reinstall = true
