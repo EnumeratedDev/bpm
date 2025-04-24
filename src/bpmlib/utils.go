@@ -12,7 +12,7 @@ func GetArch() string {
 	uname := syscall.Utsname{}
 	err := syscall.Uname(&uname)
 	if err != nil {
-		return ""
+		return "unknown"
 	}
 
 	var byteString [65]byte
