@@ -172,9 +172,18 @@ func CompileSourcePackage(archiveFilename, outputFilename string, skipChecks boo
 		return fmt.Errorf("files.tar.gz archive could not be created: %s", err)
 	}
 
-	// Copy pkgInfo struct and set package type to binary
+	// Copy pkgInfo struct
 	pkgInfo := bpmpkg.PkgInfo
+
+	// Set package type to binary
 	pkgInfo.Type = "binary"
+
+	// Set package architecture
+	if val, ok := compilationOptions["ARCH"]; ok {
+		pkgInfo.Arch = val
+	} else {
+		pkgInfo.Arch = GetArch()
+	}
 
 	// Marshal package info
 	pkgInfoBytes, err := yaml.Marshal(pkgInfo)
