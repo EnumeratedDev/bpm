@@ -89,8 +89,8 @@ func CompileSourcePackage(archiveFilename, outputFilename string, skipChecks boo
 		"set -a\n"+ // Source and export functions and variables in source.sh script
 			". \"${BPM_WORKDIR}\"/source.sh\n"+
 			"set +a\n"+
-			"[[ $(type -t prepare) == \"function\" ]] && (echo \"Running prepare() function\" && cd \"$BPM_SOURCE\" && set -e && prepare)\n"+ // Run prepare() function if it exists
-			"[[ $(type -t build) == \"function\" ]] && (echo \"Running build() function\" && cd \"$BPM_SOURCE\" && set -e && build)\n"+ // Run build() function if it exists
+			"[[ $(type -t prepare) == \"function\" ]] && { echo \"Running prepare() function\"; bash -e -c 'cd \"$BPM_SOURCE\" && prepare' || exit 1; }\n"+ // Run prepare() function if it exists
+			"[[ $(type -t build) == \"function\" ]] && { echo \"Running build() function\"; bash -e -c 'cd \"$BPM_SOURCE\" && build'  || exit 1; }\n"+ // Run build() function if it exists
 			"exit 0")
 	cmd.Dir = tempDirectory
 	cmd.Stdout = os.Stdout
@@ -107,7 +107,7 @@ func CompileSourcePackage(archiveFilename, outputFilename string, skipChecks boo
 			"set -a\n"+ // Source and export functions and variables in source.sh script
 				". \"${BPM_WORKDIR}\"/source.sh\n"+
 				"set +a\n"+
-				"[[ $(type -t check) == \"function\" ]] && (echo \"Running check() function\" && cd \"$BPM_SOURCE\" && set -e && check)\n"+ // Run check() function if it exists
+				"[[ $(type -t check) == \"function\" ]] && { echo \"Running check() function\"; bash -e -c 'cd \"$BPM_SOURCE\" && check' || exit 1; }\n"+ // Run check() function if it exists
 				"exit 0")
 		cmd.Dir = tempDirectory
 		cmd.Stdout = os.Stdout
@@ -133,12 +133,13 @@ func CompileSourcePackage(archiveFilename, outputFilename string, skipChecks boo
 		return err
 	}
 
-	// Run bash command
-	cmd = exec.Command("bash", "-e", "-c",
+	// Execute package function in source.sh script and generate package file list
+	cmd = exec.Command("bash", "-c",
 		"set -a\n"+ // Source and export functions and variables in source.sh script
 			". \"${BPM_WORKDIR}\"/source.sh\n"+
 			"set +a\n"+
-			"(echo \"Running package() function\" && cd \"$BPM_SOURCE\" && fakeroot -s \"$BPM_WORKDIR\"/fakeroot_file package)\n"+ // Run package() function
+			"echo \"Running package() function\"\n"+
+			"( cd \"$BPM_SOURCE\" && fakeroot -s \"$BPM_WORKDIR\"/fakeroot_file bash -e -c 'package' ) || exit 1\n"+ // Run package() function
 			"fakeroot -i \"$BPM_WORKDIR\"/fakeroot_file find \"$BPM_OUTPUT\" -mindepth 1 -printf \"%P %#m %U %G %s\\n\" > \"$BPM_WORKDIR\"/pkg.files") // Create package file list
 	cmd.Dir = tempDirectory
 	cmd.Stdout = os.Stdout
