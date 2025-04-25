@@ -72,7 +72,7 @@ func readTarballFile(tarballPath, fileToExtract string) (*tarballFileReader, err
 	return nil, errors.New("could not file in tarball")
 }
 
-func extractTarballFile(tarballPath, fileToExtract string, workingDirectory string) (err error) {
+func extractTarballFile(tarballPath, fileToExtract string, workingDirectory string, uid, gid int) (err error) {
 	file, err := os.Open(tarballPath)
 	if err != nil {
 		return err
@@ -109,6 +109,12 @@ func extractTarballFile(tarballPath, fileToExtract string, workingDirectory stri
 			if err != nil {
 				return err
 			}
+			if uid >= 0 && gid >= 0 {
+				err = file.Chown(uid, gid)
+				if err != nil {
+					return err
+				}
+			}
 
 			// Copy data to file
 			_, err = io.Copy(file, tr)
@@ -126,7 +132,7 @@ func extractTarballFile(tarballPath, fileToExtract string, workingDirectory stri
 	return nil
 }
 
-func extractTarballDirectory(tarballPath, directoryToExtract, workingDirectory string) (err error) {
+func extractTarballDirectory(tarballPath, directoryToExtract, workingDirectory string, uid, gid int) (err error) {
 	file, err := os.Open(tarballPath)
 	if err != nil {
 		return err
@@ -160,6 +166,14 @@ func extractTarballDirectory(tarballPath, directoryToExtract, workingDirectory s
 				if err != nil {
 					return err
 				}
+
+				// Set directory owner
+				if uid >= 0 && gid >= 0 {
+					err = os.Chown(outputPath, uid, gid)
+					if err != nil {
+						return err
+					}
+				}
 			case tar.TypeReg:
 				// Create file and set permissions
 				file, err = os.Create(outputPath)
@@ -169,6 +183,12 @@ func extractTarballDirectory(tarballPath, directoryToExtract, workingDirectory s
 				err := file.Chmod(header.FileInfo().Mode())
 				if err != nil {
 					return err
+				}
+				if uid >= 0 && gid >= 0 {
+					err = file.Chown(uid, gid)
+					if err != nil {
+						return err
+					}
 				}
 
 				// Copy data to file

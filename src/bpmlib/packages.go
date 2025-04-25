@@ -607,6 +607,12 @@ func installPackage(filename, rootDir string, verbose, force bool) error {
 	if err != nil {
 		return err
 	}
+
+	// Ensure package type is 'binary'
+	if bpmpkg.PkgInfo.Type != "binary" {
+		return fmt.Errorf("can only extract binary packages")
+	}
+
 	packageInstalled := IsPackageInstalled(bpmpkg.PkgInfo.Name, rootDir)
 	// Check if package is installed and remove current files
 	if packageInstalled {
@@ -712,15 +718,10 @@ func installPackage(filename, rootDir string, verbose, force bool) error {
 		fmt.Printf("Extracting files for package (%s)...\n", bpmpkg.PkgInfo.Name)
 	}
 
-	if bpmpkg.PkgInfo.Type == "binary" {
-		err := extractPackage(bpmpkg, verbose, filename, rootDir)
-		if err != nil {
-			return err
-		}
-	} else if bpmpkg.PkgInfo.Type == "source" {
-		return errors.New("direct source package compilation in BPM has been temporarily removed and is being reworked on")
-	} else {
-		return errors.New("unknown package type: " + bpmpkg.PkgInfo.Type)
+	// Extract package files into rootDir
+	err = extractPackage(bpmpkg, verbose, filename, rootDir)
+	if err != nil {
+		return err
 	}
 
 	installedDir := path.Join(rootDir, "var/lib/bpm/installed/")

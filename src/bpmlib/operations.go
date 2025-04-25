@@ -466,13 +466,43 @@ func (operation *BPMOperation) Execute(verbose, force bool) error {
 			}
 		} else if action.GetActionType() == "install" {
 			value := action.(*InstallPackageAction)
+			fileToInstall := value.File
 			bpmpkg := value.BpmPackage
 			isReinstall := IsPackageInstalled(bpmpkg.PkgInfo.Name, operation.RootDir)
 			var err error
+
+			// Compile package if type is 'source'
+			if bpmpkg.PkgInfo.Type == "source" {
+				// Get path to compiled package directory and output filename
+				compiledDir := path.Join(operation.RootDir, "/var/lib/bpm/compiled/")
+				outputFilename := path.Join(compiledDir, fmt.Sprintf("%s-%s-%d.bpm", bpmpkg.PkgInfo.Name, bpmpkg.PkgInfo.Version, bpmpkg.PkgInfo.Revision))
+
+				// Create compiled package directory if not exists
+				if _, err := os.Stat(compiledDir); err != nil {
+					err := os.MkdirAll(compiledDir, 0755)
+					if err != nil {
+						return err
+					}
+				}
+
+				// Compile source package
+				err = CompileSourcePackage(value.File, outputFilename, false)
+				if err != nil {
+					return fmt.Errorf("could not compile source package (%s): %s\n", value.File, err)
+				}
+
+				// Set values
+				fileToInstall = outputFilename
+				bpmpkg, err = ReadPackage(outputFilename)
+				if err != nil {
+					return fmt.Errorf("could not read package (%s): %s\n", fileToInstall, err)
+				}
+			}
+
 			if value.IsDependency {
-				err = installPackage(value.File, operation.RootDir, verbose, true)
+				err = installPackage(fileToInstall, operation.RootDir, verbose, true)
 			} else {
-				err = installPackage(value.File, operation.RootDir, verbose, force)
+				err = installPackage(fileToInstall, operation.RootDir, verbose, force)
 			}
 			if err != nil {
 				return errors.New(fmt.Sprintf("could not install package (%s): %s\n", bpmpkg.PkgInfo.Name, err))

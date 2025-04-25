@@ -9,7 +9,11 @@ import (
 	"path"
 	"strconv"
 	"strings"
+	"syscall"
 )
+
+var rootCompilationUID = "65534"
+var rootCompilationGID = "65534"
 
 func CompileSourcePackage(archiveFilename, outputFilename string, skipChecks bool) (err error) {
 	// Read BPM archive
@@ -35,6 +39,24 @@ func CompileSourcePackage(archiveFilename, outputFilename string, skipChecks boo
 		return err
 	}
 
+	// Get UID and GID to use for compilation
+	var uid, gid int
+	if os.Getuid() == 0 {
+		_uid, err := strconv.ParseInt(rootCompilationUID, 10, 32)
+		if err != nil {
+			return fmt.Errorf("could not convert UID '%s' to int", rootCompilationUID)
+		}
+		_gid, err := strconv.ParseInt(rootCompilationGID, 10, 32)
+		if err != nil {
+			return fmt.Errorf("could not convert GID '%s' to int", rootCompilationGID)
+		}
+		uid = int(_uid)
+		gid = int(_gid)
+	} else {
+		uid = os.Getuid()
+		gid = os.Getgid()
+	}
+
 	tempDirectory := path.Join(homeDir, ".cache/bpm/compilation/", bpmpkg.PkgInfo.Name)
 
 	// Ensure temporary directory does not exist
@@ -51,8 +73,14 @@ func CompileSourcePackage(archiveFilename, outputFilename string, skipChecks boo
 		return err
 	}
 
+	// Change temporary directory owner
+	err = os.Chown(tempDirectory, uid, gid)
+	if err != nil {
+		return err
+	}
+
 	// Extract source.sh file
-	err = extractTarballFile(archiveFilename, "source.sh", tempDirectory)
+	err = extractTarballFile(archiveFilename, "source.sh", tempDirectory, uid, gid)
 	if err != nil {
 		return err
 	}
@@ -60,20 +88,26 @@ func CompileSourcePackage(archiveFilename, outputFilename string, skipChecks boo
 	// Get package scripts and extract them
 	packageScripts := getPackageScripts(archiveFilename)
 	for _, script := range packageScripts {
-		err = extractTarballFile(archiveFilename, script, tempDirectory)
+		err = extractTarballFile(archiveFilename, script, tempDirectory, uid, gid)
 		if err != nil {
 			return err
 		}
 	}
 
 	// Extract source files
-	err = extractTarballDirectory(archiveFilename, "source-files", tempDirectory)
+	err = extractTarballDirectory(archiveFilename, "source-files", tempDirectory, uid, gid)
 	if err != nil {
 		return err
 	}
 
 	// Create source directory
 	err = os.Mkdir(path.Join(tempDirectory, "source"), 0755)
+	if err != nil {
+		return err
+	}
+
+	// Change source directory owner
+	err = os.Chown(path.Join(tempDirectory, "source"), uid, gid)
 	if err != nil {
 		return err
 	}
@@ -107,6 +141,8 @@ func CompileSourcePackage(archiveFilename, outputFilename string, skipChecks boo
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr
 	cmd.Env = env
+	cmd.SysProcAttr = &syscall.SysProcAttr{}
+	cmd.SysProcAttr.Credential = &syscall.Credential{Uid: uint32(uid), Gid: uint32(gid)}
 	err = cmd.Run()
 	if err != nil {
 		return err
@@ -124,13 +160,15 @@ func CompileSourcePackage(archiveFilename, outputFilename string, skipChecks boo
 		cmd.Stdout = os.Stdout
 		cmd.Stderr = os.Stderr
 		cmd.Env = env
+		cmd.SysProcAttr = &syscall.SysProcAttr{}
+		cmd.SysProcAttr.Credential = &syscall.Credential{Uid: uint32(uid), Gid: uint32(gid)}
 		err = cmd.Run()
 		if err != nil {
 			return err
 		}
 	}
 
-	// Remove 'output' directory if it already exists
+	// Remove output directory if it already exists
 	if _, err := os.Stat(path.Join(tempDirectory, "output")); err == nil {
 		err := os.RemoveAll(path.Join(tempDirectory, "output"))
 		if err != nil {
@@ -138,8 +176,14 @@ func CompileSourcePackage(archiveFilename, outputFilename string, skipChecks boo
 		}
 	}
 
-	// Create new 'output' directory
+	// Create new output directory
 	err = os.Mkdir(path.Join(tempDirectory, "output"), 0755)
+	if err != nil {
+		return err
+	}
+
+	// Change output directory owner
+	err = os.Chown(path.Join(tempDirectory, "output"), uid, gid)
 	if err != nil {
 		return err
 	}
@@ -156,6 +200,8 @@ func CompileSourcePackage(archiveFilename, outputFilename string, skipChecks boo
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr
 	cmd.Env = env
+	cmd.SysProcAttr = &syscall.SysProcAttr{}
+	cmd.SysProcAttr.Credential = &syscall.Credential{Uid: uint32(uid), Gid: uint32(gid)}
 	err = cmd.Run()
 	if err != nil {
 		return err
@@ -167,6 +213,8 @@ func CompileSourcePackage(archiveFilename, outputFilename string, skipChecks boo
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr
 	cmd.Env = env
+	cmd.SysProcAttr = &syscall.SysProcAttr{}
+	cmd.SysProcAttr.Credential = &syscall.Credential{Uid: uint32(uid), Gid: uint32(gid)}
 	err = cmd.Run()
 	if err != nil {
 		return fmt.Errorf("files.tar.gz archive could not be created: %s", err)
@@ -198,13 +246,19 @@ func CompileSourcePackage(archiveFilename, outputFilename string, skipChecks boo
 		return err
 	}
 
+	// Change pkg.info file owner
+	err = os.Chown(path.Join(tempDirectory, "pkg.info"), uid, gid)
+	if err != nil {
+		return err
+	}
+
 	// Get files to include in BPM archive
 	bpmArchiveFiles := make([]string, 0)
 	bpmArchiveFiles = append(bpmArchiveFiles, "pkg.info", "pkg.files", "files.tar.gz") // Base files
 	bpmArchiveFiles = append(bpmArchiveFiles, packageScripts...)                       // Package scripts
 
 	// Create final BPM archive
-	cmd = exec.Command("bash", "-c", "tar -cf "+outputFilename+" --owner=0 --group=0 -C \"$BPM_WORKDIR\" "+strings.Join(bpmArchiveFiles, " "))
+	cmd = exec.Command("bash", "-c", "tar -cf final-archive.bpm --owner=0 --group=0 -C \"$BPM_WORKDIR\" "+strings.Join(bpmArchiveFiles, " "))
 	cmd.Dir = tempDirectory
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr
@@ -213,9 +267,23 @@ func CompileSourcePackage(archiveFilename, outputFilename string, skipChecks boo
 		return err
 	}
 	cmd.Env = append(env, "CURRENT_DIR="+currentDir)
+	cmd.SysProcAttr = &syscall.SysProcAttr{}
+	cmd.SysProcAttr.Credential = &syscall.Credential{Uid: uint32(uid), Gid: uint32(gid)}
 	err = cmd.Run()
 	if err != nil {
 		return fmt.Errorf("BPM archive could not be created: %s", err)
+	}
+
+	// Move final BPM archive
+	err = os.Rename(path.Join(tempDirectory, "final-archive.bpm"), outputFilename)
+	if err != nil {
+		return err
+	}
+
+	// Set final BPM archive owner
+	err = os.Chown(outputFilename, os.Getuid(), os.Getgid())
+	if err != nil {
+		return err
 	}
 
 	return nil
