@@ -42,7 +42,7 @@ var doCleanup = false
 var showRepoInfo = false
 var installSrcPkgDepends = false
 var skipChecks = false
-var outputFilename = ""
+var outputDirectory = ""
 
 func main() {
 	err := bpmlib.ReadConfig()
@@ -642,36 +642,40 @@ func resolveCommand() {
 				log.Fatalf("Error: could not get user home directory: %s", err)
 			}
 
-			// Trim output filename
-			outputFilename = strings.TrimSpace(outputFilename)
-			if outputFilename != "/" {
-				outputFilename = strings.TrimSuffix(outputFilename, "/")
+			// Trim output directory
+			outputDirectory = strings.TrimSpace(outputDirectory)
+			if outputDirectory != "/" {
+				outputDirectory = strings.TrimSuffix(outputDirectory, "/")
 			}
 
-			// Set output filename if empty
-			if outputFilename == "" {
-				outputFilename = path.Join(workdir, fmt.Sprintf("%s-%s-%d.bpm", bpmpkg.PkgInfo.Name, bpmpkg.PkgInfo.Version, bpmpkg.PkgInfo.Revision))
+			// Set output directory if empty
+			if outputDirectory == "" {
+				outputDirectory = workdir
 			}
 
 			// Replace first tilde with user home directory
-			if strings.Split(outputFilename, "/")[0] == "~" {
-				outputFilename = strings.Replace(outputFilename, "~", homedir, 1)
+			if strings.Split(outputDirectory, "/")[0] == "~" {
+				outputDirectory = strings.Replace(outputDirectory, "~", homedir, 1)
 			}
 
-			// Prepend current working directory to output filename if not an absolute path
-			if outputFilename != "" && !strings.HasPrefix(outputFilename, "/") {
-				outputFilename = filepath.Join(workdir, outputFilename)
+			// Prepend current working directory to output directory if not an absolute path
+			if outputDirectory != "" && !strings.HasPrefix(outputDirectory, "/") {
+				outputDirectory = filepath.Join(workdir, outputDirectory)
 			}
 
 			// Clean path
-			path.Clean(outputFilename)
+			path.Clean(outputDirectory)
 
-			// Append archive filename if path is set to a directory
-			if stat, err := os.Stat(outputFilename); err == nil && stat.IsDir() {
-				outputFilename = path.Join(outputFilename, fmt.Sprintf("%s-%s-%d.bpm", bpmpkg.PkgInfo.Name, bpmpkg.PkgInfo.Version, bpmpkg.PkgInfo.Revision))
+			// Ensure output directory exists and is a directory
+			stat, err := os.Stat(outputDirectory)
+			if err != nil {
+				log.Fatalf("Error: could not stat output directory (%s): %s", outputDirectory, err)
+			}
+			if !stat.IsDir() {
+				log.Fatalf("Error: output directory (%s) is not a directory", outputDirectory)
 			}
 
-			outputBpmPackages, err := bpmlib.CompileSourcePackage(sourcePackage, outputFilename, skipChecks)
+			outputBpmPackages, err := bpmlib.CompileSourcePackage(sourcePackage, outputDirectory, skipChecks)
 			if err != nil {
 				log.Fatalf("Error: could not compile source package (%s): %s", sourcePackage, err)
 			}
@@ -762,7 +766,7 @@ func printHelp() {
 	fmt.Println("       -v Show additional information about what BPM is doing")
 	fmt.Println("       -d installs required dependencies for package compilation")
 	fmt.Println("       -s skips the check function in source.sh scripts")
-	fmt.Println("       -o sets output filename")
+	fmt.Println("       -o sets output directory")
 	fmt.Println("       -y skips the confirmation prompt")
 
 	fmt.Println("\033[1m----------------\033[0m")
@@ -827,7 +831,7 @@ func resolveFlags() {
 	compileFlagSet := flag.NewFlagSet("Compile flags", flag.ExitOnError)
 	compileFlagSet.BoolVar(&installSrcPkgDepends, "d", false, "Install required dependencies for package compilation")
 	compileFlagSet.BoolVar(&skipChecks, "s", false, "Skip the check function in source.sh scripts")
-	compileFlagSet.StringVar(&outputFilename, "o", "", "Set output filename")
+	compileFlagSet.StringVar(&outputDirectory, "o", "", "Set output directory")
 	compileFlagSet.BoolVar(&verbose, "v", false, "Show additional information about what BPM is doing")
 	compileFlagSet.BoolVar(&yesAll, "y", false, "Skip confirmation prompts")
 

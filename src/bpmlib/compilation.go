@@ -15,7 +15,7 @@ import (
 var rootCompilationUID = "65534"
 var rootCompilationGID = "65534"
 
-func CompileSourcePackage(archiveFilename, outputFilename string, skipChecks bool) (outputBpmPackages map[string]string, err error) {
+func CompileSourcePackage(archiveFilename, outputDirectory string, skipChecks bool) (outputBpmPackages map[string]string, err error) {
 	// Initialize map
 	outputBpmPackages = make(map[string]string)
 
@@ -326,16 +326,8 @@ func CompileSourcePackage(archiveFilename, outputFilename string, skipChecks boo
 			return nil, err
 		}
 
-		// Set output filename if split package
-		if len(bpmpkg.PkgInfo.SplitPackages) != 1 {
-			// Get current working directory
-			workdir, err := os.Getwd()
-			if err != nil {
-				return nil, fmt.Errorf("could not get working directory: %s", err)
-			}
-
-			outputFilename = path.Join(workdir, fmt.Sprintf("%s-%s-%d.bpm", pkgInfo.Name, pkgInfo.Version, pkgInfo.Revision))
-		}
+		// Set output filename
+		outputFilename := path.Join(outputDirectory, fmt.Sprintf("%s-%s-%d.bpm", pkgInfo.Name, pkgInfo.Version, pkgInfo.Revision))
 
 		// Move final BPM archive
 		err = os.Rename(path.Join(tempDirectory, "final-archive.bpm"), outputFilename)

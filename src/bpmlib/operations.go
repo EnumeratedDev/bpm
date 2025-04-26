@@ -473,9 +473,8 @@ func (operation *BPMOperation) Execute(verbose, force bool) error {
 
 			// Compile package if type is 'source'
 			if bpmpkg.PkgInfo.Type == "source" {
-				// Get path to compiled package directory and output filename
+				// Get path to compiled package directory
 				compiledDir := path.Join(operation.RootDir, "/var/lib/bpm/compiled/")
-				outputFilename := path.Join(compiledDir, fmt.Sprintf("%s-%s-%d.bpm", bpmpkg.PkgInfo.Name, bpmpkg.PkgInfo.Version, bpmpkg.PkgInfo.Revision))
 
 				// Create compiled package directory if not exists
 				if _, err := os.Stat(compiledDir); err != nil {
@@ -486,14 +485,14 @@ func (operation *BPMOperation) Execute(verbose, force bool) error {
 				}
 
 				// Compile source package
-				outputBpmPackages, err := CompileSourcePackage(value.File, outputFilename, false)
+				outputBpmPackages, err := CompileSourcePackage(value.File, compiledDir, false)
 				if err != nil {
 					return fmt.Errorf("could not compile source package (%s): %s\n", value.File, err)
 				}
 
 				// Set values
 				fileToInstall = outputBpmPackages[bpmpkg.PkgInfo.Name]
-				bpmpkg, err = ReadPackage(outputFilename)
+				bpmpkg, err = ReadPackage(fileToInstall)
 				if err != nil {
 					return fmt.Errorf("could not read package (%s): %s\n", fileToInstall, err)
 				}
