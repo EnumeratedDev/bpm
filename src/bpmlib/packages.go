@@ -24,21 +24,22 @@ type BPMPackage struct {
 }
 
 type PackageInfo struct {
-	Name            string   `yaml:"name,omitempty"`
-	Description     string   `yaml:"description,omitempty"`
-	Version         string   `yaml:"version,omitempty"`
-	Revision        int      `yaml:"revision,omitempty"`
-	Url             string   `yaml:"url,omitempty"`
-	License         string   `yaml:"license,omitempty"`
-	Arch            string   `yaml:"architecture,omitempty"`
-	Type            string   `yaml:"type,omitempty"`
-	Keep            []string `yaml:"keep,omitempty"`
-	Depends         []string `yaml:"depends,omitempty"`
-	MakeDepends     []string `yaml:"make_depends,omitempty"`
-	OptionalDepends []string `yaml:"optional_depends,omitempty"`
-	Conflicts       []string `yaml:"conflicts,omitempty"`
-	Replaces        []string `yaml:"replaces,omitempty"`
-	Provides        []string `yaml:"provides,omitempty"`
+	Name            string         `yaml:"name,omitempty"`
+	Description     string         `yaml:"description,omitempty"`
+	Version         string         `yaml:"version,omitempty"`
+	Revision        int            `yaml:"revision,omitempty"`
+	Url             string         `yaml:"url,omitempty"`
+	License         string         `yaml:"license,omitempty"`
+	Arch            string         `yaml:"architecture,omitempty"`
+	Type            string         `yaml:"type,omitempty"`
+	Keep            []string       `yaml:"keep,omitempty"`
+	Depends         []string       `yaml:"depends,omitempty"`
+	MakeDepends     []string       `yaml:"make_depends,omitempty"`
+	OptionalDepends []string       `yaml:"optional_depends,omitempty"`
+	Conflicts       []string       `yaml:"conflicts,omitempty"`
+	Replaces        []string       `yaml:"replaces,omitempty"`
+	Provides        []string       `yaml:"provides,omitempty"`
+	SplitPackages   []*PackageInfo `yaml:"split_packages,omitempty"`
 }
 
 type PackageFileEntry struct {
@@ -403,6 +404,7 @@ func ReadPackageInfo(contents string) (*PackageInfo, error) {
 		Conflicts:       make([]string, 0),
 		Replaces:        make([]string, 0),
 		Provides:        make([]string, 0),
+		SplitPackages:   make([]*PackageInfo, 0),
 	}
 	err := yaml.Unmarshal([]byte(contents), &pkgInfo)
 	if err != nil {
@@ -459,6 +461,13 @@ func CreateReadableInfo(showArchitecture, showType, showPackageRelations bool, p
 		appendArray("Conflicting packages", pkgInfo.Conflicts)
 		appendArray("Provided packages", pkgInfo.Provides)
 		appendArray("Replaces packages", pkgInfo.Replaces)
+	}
+	if pkgInfo.Type == "source" && len(pkgInfo.SplitPackages) != 0 {
+		splitPkgs := make([]string, len(pkgInfo.SplitPackages))
+		for i, splitPkgInfo := range pkgInfo.SplitPackages {
+			splitPkgs[i] = splitPkgInfo.Name
+		}
+		appendArray("Split Packages", splitPkgs)
 	}
 	ret = append(ret, "Installation Reason: "+string(GetInstallationReason(pkgInfo.Name, rootDir)))
 	return strings.Join(ret, "\n")

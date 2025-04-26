@@ -486,13 +486,13 @@ func (operation *BPMOperation) Execute(verbose, force bool) error {
 				}
 
 				// Compile source package
-				err = CompileSourcePackage(value.File, outputFilename, false)
+				outputBpmPackages, err := CompileSourcePackage(value.File, outputFilename, false)
 				if err != nil {
 					return fmt.Errorf("could not compile source package (%s): %s\n", value.File, err)
 				}
 
 				// Set values
-				fileToInstall = outputFilename
+				fileToInstall = outputBpmPackages[bpmpkg.PkgInfo.Name]
 				bpmpkg, err = ReadPackage(outputFilename)
 				if err != nil {
 					return fmt.Errorf("could not read package (%s): %s\n", fileToInstall, err)

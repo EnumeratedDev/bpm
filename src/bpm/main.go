@@ -671,12 +671,14 @@ func resolveCommand() {
 				outputFilename = path.Join(outputFilename, fmt.Sprintf("%s-%s-%d.bpm", bpmpkg.PkgInfo.Name, bpmpkg.PkgInfo.Version, bpmpkg.PkgInfo.Revision))
 			}
 
-			err = bpmlib.CompileSourcePackage(sourcePackage, outputFilename, skipChecks)
+			outputBpmPackages, err := bpmlib.CompileSourcePackage(sourcePackage, outputFilename, skipChecks)
 			if err != nil {
 				log.Fatalf("Error: could not compile source package (%s): %s", sourcePackage, err)
 			}
 
-			fmt.Printf("Package (%s) was successfully compiled! Binary package generated at: %s\n", sourcePackage, outputFilename)
+			for k, v := range outputBpmPackages {
+				fmt.Printf("Package (%s) was successfully compiled! Binary package generated at: %s\n", k, v)
+			}
 
 			// Remove unused packages
 			if installSrcPkgDepends && len(unmetDepends) > 0 {

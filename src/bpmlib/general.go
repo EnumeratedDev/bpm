@@ -38,6 +38,11 @@ func InstallPackages(rootDir string, installationReason InstallationReason, rein
 			if reinstallMethod == ReinstallMethodNone && IsPackageInstalled(bpmpkg.PkgInfo.Name, rootDir) && GetPackageInfo(bpmpkg.PkgInfo.Name, rootDir).GetFullVersion() == bpmpkg.PkgInfo.GetFullVersion() {
 				continue
 			}
+
+			if bpmpkg.PkgInfo.Type == "source" && len(bpmpkg.PkgInfo.SplitPackages) != 0 {
+				return nil, fmt.Errorf("direct source package installation has not been implemented")
+			}
+
 			operation.AppendAction(&InstallPackageAction{
 				File:         pkg,
 				IsDependency: false,
@@ -63,6 +68,11 @@ func InstallPackages(rootDir string, installationReason InstallationReason, rein
 			if reinstallMethod == ReinstallMethodNone && IsPackageInstalled(entry.Info.Name, rootDir) && GetPackageInfo(entry.Info.Name, rootDir).GetFullVersion() == entry.Info.GetFullVersion() {
 				continue
 			}
+
+			if entry.Info.Type == "source" && len(entry.Info.SplitPackages) != 0 {
+				return nil, fmt.Errorf("direct source package installation has not been implemented")
+			}
+
 			operation.AppendAction(&FetchPackageAction{
 				IsDependency:    false,
 				RepositoryEntry: entry,
