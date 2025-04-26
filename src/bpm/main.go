@@ -876,6 +876,12 @@ func resolveFlags() {
 				return
 			}
 			subcommandArgs = removeFlagSet.Args()
+		} else if getCommandType() == cleanup {
+			err := cleanupFlagSet.Parse(subcommandArgs)
+			if err != nil {
+				return
+			}
+			subcommandArgs = cleanupFlagSet.Args()
 		} else if getCommandType() == file {
 			err := fileFlagSet.Parse(subcommandArgs)
 			if err != nil {
