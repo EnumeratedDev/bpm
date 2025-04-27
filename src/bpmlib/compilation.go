@@ -144,8 +144,10 @@ func CompileSourcePackage(archiveFilename, outputDirectory string, skipChecks bo
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr
 	cmd.Env = env
-	cmd.SysProcAttr = &syscall.SysProcAttr{}
-	cmd.SysProcAttr.Credential = &syscall.Credential{Uid: uint32(uid), Gid: uint32(gid)}
+	if os.Getuid() == 0 {
+		cmd.SysProcAttr = &syscall.SysProcAttr{}
+		cmd.SysProcAttr.Credential = &syscall.Credential{Uid: uint32(uid), Gid: uint32(gid)}
+	}
 	err = cmd.Run()
 	if err != nil {
 		return nil, err
@@ -163,8 +165,10 @@ func CompileSourcePackage(archiveFilename, outputDirectory string, skipChecks bo
 		cmd.Stdout = os.Stdout
 		cmd.Stderr = os.Stderr
 		cmd.Env = env
-		cmd.SysProcAttr = &syscall.SysProcAttr{}
-		cmd.SysProcAttr.Credential = &syscall.Credential{Uid: uint32(uid), Gid: uint32(gid)}
+		if os.Getuid() == 0 {
+			cmd.SysProcAttr = &syscall.SysProcAttr{}
+			cmd.SysProcAttr.Credential = &syscall.Credential{Uid: uint32(uid), Gid: uint32(gid)}
+		}
 		err = cmd.Run()
 		if err != nil {
 			return nil, err
@@ -221,8 +225,10 @@ func CompileSourcePackage(archiveFilename, outputDirectory string, skipChecks bo
 		cmd.Stdout = os.Stdout
 		cmd.Stderr = os.Stderr
 		cmd.Env = env
-		cmd.SysProcAttr = &syscall.SysProcAttr{}
-		cmd.SysProcAttr.Credential = &syscall.Credential{Uid: uint32(uid), Gid: uint32(gid)}
+		if os.Getuid() == 0 {
+			cmd.SysProcAttr = &syscall.SysProcAttr{}
+			cmd.SysProcAttr.Credential = &syscall.Credential{Uid: uint32(uid), Gid: uint32(gid)}
+		}
 		err = cmd.Run()
 		if err != nil {
 			return nil, err
@@ -234,8 +240,10 @@ func CompileSourcePackage(archiveFilename, outputDirectory string, skipChecks bo
 		cmd.Stdout = os.Stdout
 		cmd.Stderr = os.Stderr
 		cmd.Env = env
-		cmd.SysProcAttr = &syscall.SysProcAttr{}
-		cmd.SysProcAttr.Credential = &syscall.Credential{Uid: uint32(uid), Gid: uint32(gid)}
+		if os.Getuid() == 0 {
+			cmd.SysProcAttr = &syscall.SysProcAttr{}
+			cmd.SysProcAttr.Credential = &syscall.Credential{Uid: uint32(uid), Gid: uint32(gid)}
+		}
 		err = cmd.Run()
 		if err != nil {
 			return nil, fmt.Errorf("files.tar.gz archive could not be created: %s", err)
@@ -313,8 +321,10 @@ func CompileSourcePackage(archiveFilename, outputDirectory string, skipChecks bo
 			return nil, err
 		}
 		cmd.Env = append(env, "CURRENT_DIR="+currentDir)
-		cmd.SysProcAttr = &syscall.SysProcAttr{}
-		cmd.SysProcAttr.Credential = &syscall.Credential{Uid: uint32(uid), Gid: uint32(gid)}
+		if os.Getuid() == 0 {
+			cmd.SysProcAttr = &syscall.SysProcAttr{}
+			cmd.SysProcAttr.Credential = &syscall.Credential{Uid: uint32(uid), Gid: uint32(gid)}
+		}
 		err = cmd.Run()
 		if err != nil {
 			return nil, fmt.Errorf("BPM archive could not be created: %s", err)
