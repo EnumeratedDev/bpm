@@ -70,6 +70,25 @@ func (pkgInfo *PackageInfo) GetFullVersion() string {
 	return pkgInfo.Version + "-" + strconv.Itoa(pkgInfo.Revision)
 }
 
+func (pkgInfo *PackageInfo) IsSplitPackage() bool {
+	// Return false if not a source package
+	if pkgInfo.Type != "source" {
+		return false
+	}
+
+	return len(pkgInfo.SplitPackages) > 0
+}
+
+func (pkgInfo *PackageInfo) GetSplitPackageInfo(splitPkg string) *PackageInfo {
+	for _, splitPkgInfo := range pkgInfo.SplitPackages {
+		if splitPkgInfo.Name == splitPkg {
+			return splitPkgInfo
+		}
+	}
+
+	return nil
+}
+
 type InstallationReason string
 
 const (
@@ -149,7 +168,6 @@ func ReadPackage(filename string) (*BPMPackage, error) {
 	var pkgFiles []*PackageFileEntry
 
 	if _, err := os.Stat(filename); os.IsNotExist(err) {
-		fmt.Println("a")
 		return nil, err
 	}
 
@@ -388,7 +406,7 @@ func executePackageScripts(filename, rootDir string, operation packageOperation,
 }
 
 func ReadPackageInfo(contents string) (*PackageInfo, error) {
-	pkgInfo := PackageInfo{
+	pkgInfo := &PackageInfo{
 		Name:            "",
 		Description:     "",
 		Version:         "",
@@ -410,6 +428,8 @@ func ReadPackageInfo(contents string) (*PackageInfo, error) {
 	if err != nil {
 		return nil, err
 	}
+
+	// Ensure required fields are set properly
 	if pkgInfo.Name == "" {
 		return nil, errors.New("this package contains no name")
 	} else if pkgInfo.Description == "" {
@@ -423,10 +443,46 @@ func ReadPackageInfo(contents string) (*PackageInfo, error) {
 	} else if pkgInfo.Type == "" {
 		return nil, errors.New("this package contains no type")
 	}
-	for i := 0; i < len(pkgInfo.Keep); i++ {
-		pkgInfo.Keep[i] = strings.TrimPrefix(pkgInfo.Keep[i], "/")
+	for _, val := range pkgInfo.Keep {
+		if strings.HasPrefix(val, "/") {
+			return nil, fmt.Errorf("cannot keep file (%s) after update because it starts with a slash", val)
+		}
 	}
-	return &pkgInfo, nil
+
+	// Setup split package information
+	for i, splitPkg := range pkgInfo.SplitPackages {
+		// Ensure split package contains a name and one that is different from the main package name
+		if splitPkg.Name == "" || splitPkg.Name == pkgInfo.Name {
+			return nil, fmt.Errorf("invalid split package name: %s", splitPkg.Name)
+		}
+
+		// Turn split package into json data
+		splitPkgJson, err := yaml.Marshal(splitPkg)
+		if err != nil {
+			return nil, err
+		}
+
+		// Clone all main package fields onto split package
+		pkgInfoClone := *pkgInfo
+		pkgInfo.SplitPackages[i] = &pkgInfoClone
+
+		// Set make depends and split package field of split package to nil
+		pkgInfo.SplitPackages[i].MakeDepends = nil
+		pkgInfo.SplitPackages[i].SplitPackages = nil
+
+		// Unmarshal json data back to struct
+		err = yaml.Unmarshal(splitPkgJson, &pkgInfo.SplitPackages[i])
+		if err != nil {
+			return nil, err
+		}
+
+		// Force set split package version, revision and URL
+		pkgInfo.SplitPackages[i].Version = pkgInfo.Version
+		pkgInfo.SplitPackages[i].Revision = pkgInfo.Revision
+		pkgInfo.SplitPackages[i].Url = pkgInfo.Url
+	}
+
+	return pkgInfo, nil
 }
 
 func CreateReadableInfo(showArchitecture, showType, showPackageRelations bool, pkgInfo *PackageInfo, rootDir string) string {

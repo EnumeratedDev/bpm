@@ -16,6 +16,7 @@ type BPMOperation struct {
 	Changes                 map[string]string
 	RootDir                 string
 	ForceInstallationReason InstallationReason
+	compiledPackages        map[string]string
 }
 
 func (operation *BPMOperation) ActionsContainPackage(pkg string) bool {
@@ -337,6 +338,9 @@ func (operation *BPMOperation) ShowOperationSummary() {
 		var pkgInfo *PackageInfo
 		if value.GetActionType() == "install" {
 			pkgInfo = value.(*InstallPackageAction).BpmPackage.PkgInfo
+			if value.(*InstallPackageAction).SplitPackageToInstall != "" {
+				pkgInfo = pkgInfo.GetSplitPackageInfo(value.(*InstallPackageAction).SplitPackageToInstall)
+			}
 		} else if value.GetActionType() == "fetch" {
 			pkgInfo = value.(*FetchPackageAction).RepositoryEntry.Info
 		} else {
@@ -484,14 +488,27 @@ func (operation *BPMOperation) Execute(verbose, force bool) error {
 					}
 				}
 
-				// Compile source package
-				outputBpmPackages, err := CompileSourcePackage(value.File, compiledDir, false)
-				if err != nil {
-					return fmt.Errorf("could not compile source package (%s): %s\n", value.File, err)
+				// Get package name to install
+				pkgNameToInstall := bpmpkg.PkgInfo.Name
+				if bpmpkg.PkgInfo.IsSplitPackage() {
+					pkgNameToInstall = value.SplitPackageToInstall
+				}
+
+				// Compile source package if not compiled already
+				if _, ok := operation.compiledPackages[pkgNameToInstall]; !ok {
+					outputBpmPackages, err := CompileSourcePackage(value.File, compiledDir, false)
+					if err != nil {
+						return fmt.Errorf("could not compile source package (%s): %s\n", value.File, err)
+					}
+
+					// Add compiled packages to slice
+					for pkgName, pkgFile := range outputBpmPackages {
+						operation.compiledPackages[pkgName] = pkgFile
+					}
 				}
 
 				// Set values
-				fileToInstall = outputBpmPackages[bpmpkg.PkgInfo.Name]
+				fileToInstall = operation.compiledPackages[pkgNameToInstall]
 				bpmpkg, err = ReadPackage(fileToInstall)
 				if err != nil {
 					return fmt.Errorf("could not read package (%s): %s\n", fileToInstall, err)
@@ -530,9 +547,10 @@ type OperationAction interface {
 }
 
 type InstallPackageAction struct {
-	File         string
-	IsDependency bool
-	BpmPackage   *BPMPackage
+	File                  string
+	IsDependency          bool
+	SplitPackageToInstall string
+	BpmPackage            *BPMPackage
 }
 
 func (action *InstallPackageAction) GetActionType() string {

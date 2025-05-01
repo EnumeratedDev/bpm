@@ -175,21 +175,17 @@ func CompileSourcePackage(archiveFilename, outputDirectory string, skipChecks bo
 		}
 	}
 
-	// Variable that will be used later
-	isSplitPkg := true
-
 	// Get all packages to compile
 	packagesToCompile := bpmpkg.PkgInfo.SplitPackages
-	if len(packagesToCompile) == 0 {
+	if !bpmpkg.PkgInfo.IsSplitPackage() {
 		packagesToCompile = append(packagesToCompile, bpmpkg.PkgInfo)
-		isSplitPkg = false
 	}
 
 	// Compile each package
 	for _, pkg := range packagesToCompile {
 		// Get package function name
 		packageFunctionName := "package"
-		if isSplitPkg {
+		if bpmpkg.PkgInfo.IsSplitPackage() {
 			packageFunctionName = "package_" + pkg.Name
 		}
 
@@ -250,28 +246,7 @@ func CompileSourcePackage(archiveFilename, outputDirectory string, skipChecks bo
 		}
 
 		// Clone source package info
-		var pkgInfo PackageInfo
-		if !isSplitPkg {
-			pkgInfo = *bpmpkg.PkgInfo
-		} else {
-			pkgInfo = *pkg
-
-			// Ensure required fields are set
-			if strings.TrimSpace(pkgInfo.Name) == "" {
-				return nil, fmt.Errorf("split package name is empty")
-			}
-
-			// Copy data from main source package
-			if pkgInfo.Description == "" {
-				pkgInfo.Description = bpmpkg.PkgInfo.Description
-			}
-			pkgInfo.Version = bpmpkg.PkgInfo.Version
-			pkgInfo.Revision = bpmpkg.PkgInfo.Revision
-			pkgInfo.Url = bpmpkg.PkgInfo.Url
-			if pkgInfo.License == "" {
-				pkgInfo.License = bpmpkg.PkgInfo.License
-			}
-		}
+		pkgInfo := *pkg
 
 		// Set package type to binary
 		pkgInfo.Type = "binary"

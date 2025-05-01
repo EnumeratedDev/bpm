@@ -25,6 +25,7 @@ func InstallPackages(rootDir string, installationReason InstallationReason, rein
 		Changes:                 make(map[string]string),
 		RootDir:                 rootDir,
 		ForceInstallationReason: installationReason,
+		compiledPackages:        make(map[string]string),
 	}
 
 	// Resolve packages
@@ -35,12 +36,25 @@ func InstallPackages(rootDir string, installationReason InstallationReason, rein
 			if err != nil {
 				return nil, fmt.Errorf("could not read package: %s", err)
 			}
-			if reinstallMethod == ReinstallMethodNone && IsPackageInstalled(bpmpkg.PkgInfo.Name, rootDir) && GetPackageInfo(bpmpkg.PkgInfo.Name, rootDir).GetFullVersion() == bpmpkg.PkgInfo.GetFullVersion() {
+
+			if bpmpkg.PkgInfo.Type == "source" && bpmpkg.PkgInfo.IsSplitPackage() {
+				for _, splitPkg := range bpmpkg.PkgInfo.SplitPackages {
+					if reinstallMethod == ReinstallMethodNone && IsPackageInstalled(splitPkg.Name, rootDir) && GetPackageInfo(splitPkg.Name, rootDir).GetFullVersion() == splitPkg.GetFullVersion() {
+						continue
+					}
+
+					operation.AppendAction(&InstallPackageAction{
+						File:                  pkg,
+						IsDependency:          false,
+						BpmPackage:            bpmpkg,
+						SplitPackageToInstall: splitPkg.Name,
+					})
+				}
 				continue
 			}
 
-			if bpmpkg.PkgInfo.Type == "source" && len(bpmpkg.PkgInfo.SplitPackages) != 0 {
-				return nil, fmt.Errorf("direct source package installation has not been implemented")
+			if reinstallMethod == ReinstallMethodNone && IsPackageInstalled(bpmpkg.PkgInfo.Name, rootDir) && GetPackageInfo(bpmpkg.PkgInfo.Name, rootDir).GetFullVersion() == bpmpkg.PkgInfo.GetFullVersion() {
+				continue
 			}
 
 			operation.AppendAction(&InstallPackageAction{
@@ -69,8 +83,8 @@ func InstallPackages(rootDir string, installationReason InstallationReason, rein
 				continue
 			}
 
-			if entry.Info.Type == "source" && len(entry.Info.SplitPackages) != 0 {
-				return nil, fmt.Errorf("direct source package installation has not been implemented")
+			if entry.Info.IsSplitPackage() {
+				return nil, fmt.Errorf("direct split source package installation has not been implemented")
 			}
 
 			operation.AppendAction(&FetchPackageAction{
@@ -128,6 +142,7 @@ func RemovePackages(rootDir string, removeUnusedPackagesOnly, cleanupDependencie
 		UnresolvedDepends: make([]string, 0),
 		Changes:           make(map[string]string),
 		RootDir:           rootDir,
+		compiledPackages:  make(map[string]string),
 	}
 
 	// Search for packages
@@ -164,6 +179,7 @@ func CleanupPackages(rootDir string, verbose bool) (operation *BPMOperation, err
 		UnresolvedDepends: make([]string, 0),
 		Changes:           make(map[string]string),
 		RootDir:           rootDir,
+		compiledPackages:  make(map[string]string),
 	}
 
 	// Do package cleanup
@@ -206,6 +222,7 @@ func UpdatePackages(rootDir string, syncDatabase bool, installOptionalDependenci
 		Changes:                 make(map[string]string),
 		RootDir:                 rootDir,
 		ForceInstallationReason: InstallationReasonUnknown,
+		compiledPackages:        make(map[string]string),
 	}
 
 	// Search for packages
