@@ -73,10 +73,56 @@ func (repo *Repository) ReadLocalDatabase() error {
 			return err
 		}
 
-		for _, p := range entry.Info.Provides {
-			repo.VirtualPackages[p] = append(repo.VirtualPackages[p], entry.Info.Name)
+		// Create repository entries
+		if entry.Info.IsSplitPackage() {
+			for _, splitPkg := range entry.Info.SplitPackages {
+				// Turn split package into json data
+				splitPkgJson, err := yaml.Marshal(splitPkg)
+				if err != nil {
+					return err
+				}
+
+				// Clone all main package fields onto split package
+				splitPkgClone := *entry.Info
+
+				// Set split package field of split package to nil
+				splitPkgClone.SplitPackages = nil
+
+				// Unmarshal json data back to struct
+				err = yaml.Unmarshal(splitPkgJson, &splitPkgClone)
+				if err != nil {
+					return err
+				}
+
+				// Force set split package version, revision and URL
+				splitPkgClone.Version = entry.Info.Version
+				splitPkgClone.Revision = entry.Info.Revision
+				splitPkgClone.Url = entry.Info.Url
+
+				// Create entry for split package
+				repo.Entries[splitPkg.Name] = &RepositoryEntry{
+					Info:          &splitPkgClone,
+					Download:      entry.Download,
+					DownloadSize:  entry.DownloadSize,
+					InstalledSize: 0,
+					Repository:    repo,
+				}
+
+				// Add virtual packages to repository
+				for _, p := range splitPkg.Provides {
+					repo.VirtualPackages[p] = append(repo.VirtualPackages[p], splitPkg.Name)
+				}
+			}
+		} else {
+			// Create entry for package
+			repo.Entries[entry.Info.Name] = &entry
+
+			// Add virtual packages to repository
+			for _, p := range entry.Info.Provides {
+				repo.VirtualPackages[p] = append(repo.VirtualPackages[p], entry.Info.Name)
+			}
 		}
-		repo.Entries[entry.Info.Name] = &entry
+
 	}
 
 	return nil

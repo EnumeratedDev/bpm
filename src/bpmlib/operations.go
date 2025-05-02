@@ -413,30 +413,68 @@ func (operation *BPMOperation) RunHooks(verbose bool) error {
 	return nil
 }
 
-func (operation *BPMOperation) Execute(verbose, force bool) error {
+func (operation *BPMOperation) Execute(verbose, force bool) (err error) {
 	// Fetch packages from repositories
 	if slices.ContainsFunc(operation.Actions, func(action OperationAction) bool {
 		return action.GetActionType() == "fetch"
 	}) {
 		fmt.Println("Fetching packages from available repositories...")
+
+		// Create map for fetched packages
+		fetchedPackages := make(map[string]string)
+
 		for i, action := range operation.Actions {
 			if action.GetActionType() != "fetch" {
 				continue
 			}
+
+			// Get repository entry
 			entry := action.(*FetchPackageAction).RepositoryEntry
-			fetchedPackage, err := entry.Repository.FetchPackage(entry.Info.Name)
-			if err != nil {
-				return errors.New(fmt.Sprintf("could not fetch package (%s): %s\n", entry.Info.Name, err))
+
+			// Create bpmpkg variable
+			var bpmpkg *BPMPackage
+
+			// Check if package has already been fetched from download link
+			if _, ok := fetchedPackages[entry.Download]; !ok {
+				// Fetch package from repository
+				fetchedPackage, err := entry.Repository.FetchPackage(entry.Info.Name)
+				if err != nil {
+					return errors.New(fmt.Sprintf("could not fetch package (%s): %s\n", entry.Info.Name, err))
+				}
+
+				// Read fetched package
+				bpmpkg, err = ReadPackage(fetchedPackage)
+				if err != nil {
+					return errors.New(fmt.Sprintf("could not fetch package (%s): %s\n", entry.Info.Name, err))
+				}
+
+				// Add fetched package to map
+				fetchedPackages[entry.Download] = fetchedPackage
+
+				fmt.Printf("Package (%s) was successfully fetched!\n", entry.Info.Name)
+			} else {
+				// Read fetched package
+				bpmpkg, err = ReadPackage(fetchedPackages[entry.Download])
+				if err != nil {
+					return errors.New(fmt.Sprintf("could not read package (%s): %s\n", entry.Info.Name, err))
+				}
+
+				fmt.Printf("Package (%s) was successfully fetched!\n", entry.Info.Name)
 			}
-			bpmpkg, err := ReadPackage(fetchedPackage)
-			if err != nil {
-				return errors.New(fmt.Sprintf("could not fetch package (%s): %s\n", entry.Info.Name, err))
-			}
-			fmt.Printf("Package (%s) was successfully fetched!\n", bpmpkg.PkgInfo.Name)
-			operation.Actions[i] = &InstallPackageAction{
-				File:         fetchedPackage,
-				IsDependency: action.(*FetchPackageAction).IsDependency,
-				BpmPackage:   bpmpkg,
+
+			if bpmpkg.PkgInfo.IsSplitPackage() {
+				operation.Actions[i] = &InstallPackageAction{
+					File:                  fetchedPackages[entry.Download],
+					IsDependency:          action.(*FetchPackageAction).IsDependency,
+					BpmPackage:            bpmpkg,
+					SplitPackageToInstall: entry.Info.Name,
+				}
+			} else {
+				operation.Actions[i] = &InstallPackageAction{
+					File:         fetchedPackages[entry.Download],
+					IsDependency: action.(*FetchPackageAction).IsDependency,
+					BpmPackage:   bpmpkg,
+				}
 			}
 		}
 	}

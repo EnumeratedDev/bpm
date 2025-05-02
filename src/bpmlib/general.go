@@ -83,10 +83,6 @@ func InstallPackages(rootDir string, installationReason InstallationReason, rein
 				continue
 			}
 
-			if entry.Info.IsSplitPackage() {
-				return nil, fmt.Errorf("direct split source package installation has not been implemented")
-			}
-
 			operation.AppendAction(&FetchPackageAction{
 				IsDependency:    false,
 				RepositoryEntry: entry,
