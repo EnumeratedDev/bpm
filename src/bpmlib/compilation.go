@@ -312,7 +312,7 @@ func CompileSourcePackage(archiveFilename, outputDirectory string, skipChecks bo
 		}
 
 		// Set output filename
-		outputFilename := path.Join(outputDirectory, fmt.Sprintf("%s-%s-%d.bpm", pkgInfo.Name, pkgInfo.Version, pkgInfo.Revision))
+		outputFilename := path.Join(outputDirectory, fmt.Sprintf("%s-%s-%d-%s.bpm", pkgInfo.Name, pkgInfo.Version, pkgInfo.Revision, pkgInfo.Arch))
 
 		// Move final BPM archive
 		err = os.Rename(path.Join(tempDirectory, "final-archive.bpm"), outputFilename)
