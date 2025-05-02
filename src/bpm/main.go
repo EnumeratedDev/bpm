@@ -609,7 +609,9 @@ func resolveCommand() {
 				}
 
 				// Run 'bpm install' using the set privilege escalator command
-				cmd := exec.Command(bpmlib.BPMConfig.PrivilegeEscalatorCmd, executable, "install", "--installation-reason=dependency", strings.Join(unmetDepends, " "))
+				args := []string{executable, "install", "--installation-reason=dependency"}
+				args = append(args, unmetDepends...)
+				cmd := exec.Command(bpmlib.BPMConfig.PrivilegeEscalatorCmd, args...)
 				if yesAll {
 					cmd.Args = slices.Insert(cmd.Args, 3, "-y")
 				}
