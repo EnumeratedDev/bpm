@@ -43,6 +43,10 @@ var showRepoInfo = false
 var installSrcPkgDepends = false
 var skipChecks = false
 var outputDirectory = ""
+var cleanupDependencies = false
+var cleanupCompilationFiles = false
+var cleanupCompiledPackages = false
+var cleanupFetchedPackages = false
 
 func main() {
 	err := bpmlib.ReadConfig()
@@ -456,51 +460,58 @@ func resolveCommand() {
 			log.Fatalf("Error: this subcommand needs to be run with superuser permissions")
 		}
 
-		// Read local databases
-		err := bpmlib.ReadLocalDatabases()
+		err := bpmlib.CleanupCache(rootDir, cleanupCompilationFiles, cleanupCompiledPackages, cleanupFetchedPackages, verbose)
 		if err != nil {
-			log.Fatalf("Error: could not read local databases: %s", err)
+			log.Fatalf("Error: could not complete cache cleanup: %s", err)
 		}
 
-		// Create cleanup operation
-		operation, err := bpmlib.CleanupPackages(rootDir, verbose)
-		if errors.As(err, &bpmlib.PackageNotFoundErr{}) || errors.As(err, &bpmlib.DependencyNotFoundErr{}) || errors.As(err, &bpmlib.PackageConflictErr{}) {
-			log.Fatalf("Error: %s", err)
-		} else if err != nil {
-			log.Fatalf("Error: could not setup operation: %s\n", err)
-		}
-
-		// Exit if operation contains no actions
-		if len(operation.Actions) == 0 {
-			fmt.Println("No action needs to be taken")
-			return
-		}
-
-		// Show operation summary
-		operation.ShowOperationSummary()
-
-		// Confirmation Prompt
-		if !yesAll {
-			fmt.Printf("Are you sure you wish to remove all %d packages? [y\\N] ", len(operation.Actions))
-			reader := bufio.NewReader(os.Stdin)
-			text, _ := reader.ReadString('\n')
-			if strings.TrimSpace(strings.ToLower(text)) != "y" && strings.TrimSpace(strings.ToLower(text)) != "yes" {
-				fmt.Println("Cancelling package removal...")
-				os.Exit(1)
+		if cleanupDependencies {
+			// Read local databases
+			err := bpmlib.ReadLocalDatabases()
+			if err != nil {
+				log.Fatalf("Error: could not read local databases: %s", err)
 			}
-		}
 
-		// Execute operation
-		err = operation.Execute(verbose, force)
-		if err != nil {
-			log.Fatalf("Error: could not complete operation: %s\n", err)
-		}
+			// Create cleanup operation
+			operation, err := bpmlib.CleanupPackages(rootDir, verbose)
+			if errors.As(err, &bpmlib.PackageNotFoundErr{}) || errors.As(err, &bpmlib.DependencyNotFoundErr{}) || errors.As(err, &bpmlib.PackageConflictErr{}) {
+				log.Fatalf("Error: %s", err)
+			} else if err != nil {
+				log.Fatalf("Error: could not setup operation: %s\n", err)
+			}
 
-		// Executing hooks
-		fmt.Println("Running hooks...")
-		err = operation.RunHooks(verbose)
-		if err != nil {
-			log.Fatalf("Error: could not run hooks: %s\n", err)
+			// Exit if operation contains no actions
+			if len(operation.Actions) == 0 {
+				fmt.Println("No action needs to be taken")
+				return
+			}
+
+			// Show operation summary
+			operation.ShowOperationSummary()
+
+			// Confirmation Prompt
+			if !yesAll {
+				fmt.Printf("Are you sure you wish to remove all %d packages? [y\\N] ", len(operation.Actions))
+				reader := bufio.NewReader(os.Stdin)
+				text, _ := reader.ReadString('\n')
+				if strings.TrimSpace(strings.ToLower(text)) != "y" && strings.TrimSpace(strings.ToLower(text)) != "yes" {
+					fmt.Println("Cancelling package removal...")
+					os.Exit(1)
+				}
+			}
+
+			// Execute operation
+			err = operation.Execute(verbose, force)
+			if err != nil {
+				log.Fatalf("Error: could not complete operation: %s\n", err)
+			}
+
+			// Executing hooks
+			fmt.Println("Running hooks...")
+			err = operation.RunHooks(verbose)
+			if err != nil {
+				log.Fatalf("Error: could not run hooks: %s\n", err)
+			}
 		}
 	case file:
 		files := subcommandArgs
@@ -757,10 +768,14 @@ func printHelp() {
 	fmt.Println("       -y skips the confirmation prompt")
 	fmt.Println("       --unused removes only packages that aren't required as dependencies by other packages")
 	fmt.Println("       --cleanup performs a dependency cleanup")
-	fmt.Println("-> bpm cleanup [-R, -v, -y] | remove all unused dependency packages")
+	fmt.Println("-> bpm cleanup [-R, -v, -y, --depends, --compilation-files, --compiled-pkgs, --fetched-pkgs] | remove all unused dependencies and cache directories")
 	fmt.Println("       -v Show additional information about what BPM is doing")
 	fmt.Println("       -R=<path> lets you define the root path which will be used")
 	fmt.Println("       -y skips the confirmation prompt")
+	fmt.Println("       --depends performs a dependency cleanup")
+	fmt.Println("       --compilation-files performs a cleanup of compilation files")
+	fmt.Println("       --compiled-pkgs performs a cleanup of compilation compiled binary packages")
+	fmt.Println("       --fetched-pkgs performs a cleanup of fetched packages from repositories")
 	fmt.Println("-> bpm file [-R] <files...> | shows what packages the following packages are managed by")
 	fmt.Println("       -R=<root_path> lets you define the root path which will be used")
 	fmt.Println("-> bpm compile [-d, -s, -o] <source packages...> | Compile source BPM package")
@@ -823,6 +838,10 @@ func resolveFlags() {
 	cleanupFlagSet.StringVar(&rootDir, "R", "/", "Set the destination root")
 	cleanupFlagSet.BoolVar(&verbose, "v", false, "Show additional information about what BPM is doing")
 	cleanupFlagSet.BoolVar(&yesAll, "y", false, "Skip confirmation prompts")
+	cleanupFlagSet.BoolVar(&cleanupDependencies, "depends", false, "Perform a dependency cleanup")
+	cleanupFlagSet.BoolVar(&cleanupCompilationFiles, "compilation-files", false, "Perform a cleanup of compilation files")
+	cleanupFlagSet.BoolVar(&cleanupCompiledPackages, "compiled-pkgs", false, "Perform a cleanup of compilation compiled binary packages")
+	cleanupFlagSet.BoolVar(&cleanupFetchedPackages, "fetched-pkgs", false, "Perform a cleanup of fetched packages from repositories")
 	cleanupFlagSet.Usage = printHelp
 	// File flags
 	fileFlagSet := flag.NewFlagSet("Remove flags", flag.ExitOnError)
@@ -882,6 +901,12 @@ func resolveFlags() {
 			err := cleanupFlagSet.Parse(subcommandArgs)
 			if err != nil {
 				return
+			}
+			if !cleanupDependencies && !cleanupCompilationFiles && !cleanupCompiledPackages && !cleanupFetchedPackages {
+				cleanupDependencies = true
+				cleanupCompilationFiles = true
+				cleanupCompiledPackages = true
+				cleanupFetchedPackages = true
 			}
 			subcommandArgs = cleanupFlagSet.Args()
 		} else if getCommandType() == file {

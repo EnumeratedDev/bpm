@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"log"
 	"os"
+	"path"
 	"slices"
 )
 
@@ -185,6 +186,88 @@ func CleanupPackages(rootDir string, verbose bool) (operation *BPMOperation, err
 	}
 
 	return operation, nil
+}
+
+func CleanupCache(rootDir string, cleanupCompilationFiles, cleanupCompiledPackages, cleanupFetchedPackages, verbose bool) error {
+	if cleanupCompilationFiles {
+		globalCompilationCacheDir := path.Join(rootDir, "var/cache/bpm/compilation")
+
+		// Ensure path exists and is a directory
+		if stat, err := os.Stat(globalCompilationCacheDir); err == nil && stat.IsDir() {
+			// Delete directory
+			if verbose {
+				log.Printf("Removing directory (%s)\n", globalCompilationCacheDir)
+			}
+			err = os.RemoveAll(globalCompilationCacheDir)
+			if err != nil {
+				return err
+			}
+		}
+
+		// Get home directories of users in root directory
+		homeDirs, err := os.ReadDir(path.Join(rootDir, "home"))
+		if err != nil {
+			return err
+		}
+
+		// Loop through all home directories
+		for _, homeDir := range homeDirs {
+			// Skip if not a directory
+			if !homeDir.IsDir() {
+				continue
+			}
+
+			localCompilationDir := path.Join(rootDir, "home", homeDir.Name(), ".cache/bpm/compilation")
+
+			// Ensure path exists and is a directory
+			if stat, err := os.Stat(localCompilationDir); err != nil || !stat.IsDir() {
+				continue
+			}
+
+			// Delete directory
+			if verbose {
+				log.Printf("Removing directory (%s)\n", localCompilationDir)
+			}
+			err = os.RemoveAll(localCompilationDir)
+			if err != nil {
+				return err
+			}
+		}
+	}
+
+	if cleanupCompiledPackages {
+		dirToRemove := path.Join(rootDir, "var/cache/bpm/compiled")
+
+		// Ensure path exists and is a directory
+		if stat, err := os.Stat(dirToRemove); err == nil && stat.IsDir() {
+			// Delete directory
+			if verbose {
+				log.Printf("Removing directory (%s)\n", dirToRemove)
+			}
+			err = os.RemoveAll(dirToRemove)
+			if err != nil {
+				return err
+			}
+		}
+	}
+
+	if cleanupFetchedPackages {
+		dirToRemove := path.Join(rootDir, "var/cache/bpm/fetched")
+
+		// Ensure path exists and is a directory
+		if stat, err := os.Stat(dirToRemove); err == nil && stat.IsDir() {
+			// Delete directory
+			if verbose {
+				log.Printf("Removing directory (%s)\n", dirToRemove)
+			}
+			err = os.RemoveAll(dirToRemove)
+			if err != nil {
+				return err
+			}
+		}
+	}
+
+	return nil
 }
 
 // UpdatePackages fetches the newest versions of all installed packages from

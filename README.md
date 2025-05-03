@@ -45,7 +45,7 @@ You can remove an installed package by typing the following
 bpm remove package_name
 ```
 
-To remove all unused dependencies try using the cleanup command
+To remove all unused dependencies and clean cached files try using the cleanup command
 ```sh
 bpm cleanup
 ```
