@@ -516,7 +516,7 @@ func (operation *BPMOperation) Execute(verbose, force bool) (err error) {
 			// Compile package if type is 'source'
 			if bpmpkg.PkgInfo.Type == "source" {
 				// Get path to compiled package directory
-				compiledDir := path.Join(operation.RootDir, "/var/lib/bpm/compiled/")
+				compiledDir := path.Join(operation.RootDir, "/var/cache/bpm/compiled/")
 
 				// Create compiled package directory if not exists
 				if _, err := os.Stat(compiledDir); err != nil {

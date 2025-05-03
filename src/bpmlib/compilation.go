@@ -60,7 +60,13 @@ func CompileSourcePackage(archiveFilename, outputDirectory string, skipChecks bo
 		gid = os.Getgid()
 	}
 
-	tempDirectory := path.Join(homeDir, ".cache/bpm/compilation/", bpmpkg.PkgInfo.Name)
+	// Set temporary directory
+	var tempDirectory string
+	if os.Getuid() == 0 {
+		tempDirectory = path.Join("/var/cache/bpm/compilation/", bpmpkg.PkgInfo.Name)
+	} else {
+		tempDirectory = path.Join(homeDir, ".cache/bpm/compilation/", bpmpkg.PkgInfo.Name)
+	}
 
 	// Ensure temporary directory does not exist
 	if _, err := os.Stat(tempDirectory); err == nil {

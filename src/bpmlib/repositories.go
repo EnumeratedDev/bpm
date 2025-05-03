@@ -266,16 +266,16 @@ func (repo *Repository) FetchPackage(pkg string) (string, error) {
 	}
 	defer resp.Body.Close()
 
-	err = os.MkdirAll("/var/cache/bpm/packages/", 0755)
+	err = os.MkdirAll("/var/cache/bpm/fetched/", 0755)
 	if err != nil {
 		return "", err
 	}
-	out, err := os.Create("/var/cache/bpm/packages/" + path.Base(entry.Download))
+	out, err := os.Create("/var/cache/bpm/fetched/" + path.Base(entry.Download))
 	if err != nil {
 		return "", err
 	}
 	defer out.Close()
 
 	_, err = io.Copy(out, resp.Body)
-	return "/var/cache/bpm/packages/" + path.Base(entry.Download), nil
+	return "/var/cache/bpm/fetched/" + path.Base(entry.Download), nil
 }
