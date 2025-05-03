@@ -608,6 +608,8 @@ func resolveCommand() {
 			for i := len(unmetDepends) - 1; i >= 0; i-- {
 				if slices.Contains(installedPackages, unmetDepends[i]) {
 					unmetDepends = append(unmetDepends[:i], unmetDepends[i+1:]...)
+				} else if ok, _ := bpmlib.IsVirtualPackage(unmetDepends[i], rootDir); ok {
+					unmetDepends = append(unmetDepends[:i], unmetDepends[i+1:]...)
 				}
 			}
 
