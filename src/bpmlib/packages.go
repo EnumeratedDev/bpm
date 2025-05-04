@@ -451,8 +451,8 @@ func ReadPackageInfo(contents string) (*PackageInfo, error) {
 
 	// Setup split package information
 	for i, splitPkg := range pkgInfo.SplitPackages {
-		// Ensure split package contains a name and one that is different from the main package name
-		if splitPkg.Name == "" || splitPkg.Name == pkgInfo.Name {
+		// Ensure split package contains a name
+		if splitPkg.Name == "" {
 			return nil, fmt.Errorf("invalid split package name: %s", splitPkg.Name)
 		}
 
