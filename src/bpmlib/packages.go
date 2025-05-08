@@ -476,10 +476,9 @@ func ReadPackageInfo(contents string) (*PackageInfo, error) {
 			return nil, err
 		}
 
-		// Force set split package version, revision and URL
+		// Force set split package version, revision
 		pkgInfo.SplitPackages[i].Version = pkgInfo.Version
 		pkgInfo.SplitPackages[i].Revision = pkgInfo.Revision
-		pkgInfo.SplitPackages[i].Url = pkgInfo.Url
 	}
 
 	return pkgInfo, nil
