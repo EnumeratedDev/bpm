@@ -143,7 +143,7 @@ func CompileSourcePackage(archiveFilename, outputDirectory string, skipChecks bo
 		"set -a\n"+ // Source and export functions and variables in source.sh script
 			". \"${BPM_WORKDIR}\"/source.sh\n"+
 			"set +a\n"+
-			"[[ $(type -t prepare) == \"function\" ]] && { echo \"Running prepare() function\"; bash -e -c 'cd \"$BPM_SOURCE\" && prepare' || exit 1; }\n"+ // Run prepare() function if it exists
+			"[[ $(type -t prepare) == \"function\" ]] && { echo \"Running prepare() function\"; bash -e -c 'cd \"$BPM_WORKDIR\" && prepare' || exit 1; }\n"+ // Run prepare() function if it exists
 			"[[ $(type -t build) == \"function\" ]] && { echo \"Running build() function\"; bash -e -c 'cd \"$BPM_SOURCE\" && build'  || exit 1; }\n"+ // Run build() function if it exists
 			"exit 0")
 	cmd.Dir = tempDirectory
