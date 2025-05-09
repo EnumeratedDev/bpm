@@ -281,12 +281,16 @@ func UpdatePackages(rootDir string, syncDatabase bool, installOptionalDependenci
 		if verbose {
 			fmt.Println("All package databases synced successfully!")
 		}
-	}
 
-	// Reload config and local databases
-	err = ReadConfig()
-	if err != nil {
-		return nil, fmt.Errorf("could not read BPM config: %s", err)
+		// Reload config and local databases
+		err = ReadConfig()
+		if err != nil {
+			return nil, fmt.Errorf("could not read BPM config: %s", err)
+		}
+		err = ReadLocalDatabases()
+		if err != nil {
+			return nil, fmt.Errorf("could not read local databases: %s", err)
+		}
 	}
 
 	// Get installed packages and check for updates
