@@ -870,6 +870,16 @@ func installPackage(filename, rootDir string, verbose, force bool) error {
 			return err
 		}
 	}
+
+	// Ensure local package information has been initialized for rootDir
+	err = initializeLocalPackageInformation(rootDir)
+	if err != nil {
+		return err
+	}
+
+	// Add or update package information for rootDir
+	localPackageInformation[rootDir][bpmpkg.PkgInfo.Name] = bpmpkg
+
 	return nil
 }
 
@@ -998,6 +1008,15 @@ func removePackage(pkg string, verbose bool, rootDir string) error {
 	if err != nil {
 		return err
 	}
+
+	// Ensure local package information has been initialized for rootDir
+	err = initializeLocalPackageInformation(rootDir)
+	if err != nil {
+		return err
+	}
+
+	// Add or update package information for rootDir
+	delete(localPackageInformation[rootDir], pkgInfo.Name)
 
 	return nil
 }
