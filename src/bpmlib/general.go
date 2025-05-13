@@ -133,7 +133,7 @@ func InstallPackages(rootDir string, installationReason InstallationReason, rein
 }
 
 // RemovePackages removes the specified packages from the given root directory
-func RemovePackages(rootDir string, removeUnusedPackagesOnly, cleanupDependencies, verbose bool, packages ...string) (operation *BPMOperation, err error) {
+func RemovePackages(rootDir string, removeUnusedPackagesOnly, cleanupDependencies bool, packages ...string) (operation *BPMOperation, err error) {
 	operation = &BPMOperation{
 		Actions:           make([]OperationAction, 0),
 		UnresolvedDepends: make([]string, 0),
@@ -170,7 +170,7 @@ func RemovePackages(rootDir string, removeUnusedPackagesOnly, cleanupDependencie
 }
 
 // CleanupPackages finds packages installed as dependencies which are no longer required by the rest of the system in the given root directory
-func CleanupPackages(rootDir string, verbose bool) (operation *BPMOperation, err error) {
+func CleanupPackages(rootDir string) (operation *BPMOperation, err error) {
 	operation = &BPMOperation{
 		Actions:           make([]OperationAction, 0),
 		UnresolvedDepends: make([]string, 0),

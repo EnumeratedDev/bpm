@@ -415,7 +415,7 @@ func resolveCommand() {
 		}
 
 		// Create remove operation
-		operation, err := bpmlib.RemovePackages(rootDir, removeUnused, doCleanup, verbose, subcommandArgs...)
+		operation, err := bpmlib.RemovePackages(rootDir, removeUnused, doCleanup, subcommandArgs...)
 		if errors.As(err, &bpmlib.PackageNotFoundErr{}) || errors.As(err, &bpmlib.DependencyNotFoundErr{}) || errors.As(err, &bpmlib.PackageConflictErr{}) {
 			log.Fatalf("Error: %s", err)
 		} else if err != nil {
@@ -473,7 +473,7 @@ func resolveCommand() {
 			}
 
 			// Create cleanup operation
-			operation, err := bpmlib.CleanupPackages(rootDir, verbose)
+			operation, err := bpmlib.CleanupPackages(rootDir)
 			if errors.As(err, &bpmlib.PackageNotFoundErr{}) || errors.As(err, &bpmlib.DependencyNotFoundErr{}) || errors.As(err, &bpmlib.PackageConflictErr{}) {
 				log.Fatalf("Error: %s", err)
 			} else if err != nil {
