@@ -161,7 +161,7 @@ func RemovePackages(rootDir string, removeUnusedPackagesOnly, cleanupDependencie
 
 	// Do package cleanup
 	if cleanupDependencies {
-		err := operation.Cleanup(verbose)
+		err := operation.Cleanup()
 		if err != nil {
 			return nil, fmt.Errorf("could not perform cleanup for operation: %s", err)
 		}
@@ -180,7 +180,7 @@ func CleanupPackages(rootDir string, verbose bool) (operation *BPMOperation, err
 	}
 
 	// Do package cleanup
-	err = operation.Cleanup(verbose)
+	err = operation.Cleanup()
 	if err != nil {
 		return nil, fmt.Errorf("could not perform cleanup for operation: %s", err)
 	}

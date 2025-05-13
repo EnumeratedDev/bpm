@@ -547,7 +547,7 @@ func resolveCommand() {
 
 			var pkgList []string
 			for _, pkg := range pkgs {
-				if slices.ContainsFunc(bpmlib.GetPackageFiles(pkg, rootDir), func(entry *bpmlib.PackageFileEntry) bool {
+				if slices.ContainsFunc(bpmlib.GetPackage(pkg, rootDir).PkgFiles, func(entry *bpmlib.PackageFileEntry) bool {
 					return entry.Path == absFile
 				}) {
 					pkgList = append(pkgList, pkg)
@@ -593,7 +593,7 @@ func resolveCommand() {
 
 			// Get direct runtime and make dependencies
 			totalDepends := make([]string, 0)
-			for _, depend := range bpmpkg.PkgInfo.GetAllDependencies(true, false) {
+			for _, depend := range bpmpkg.PkgInfo.GetDependencies(true, false) {
 				if !slices.Contains(totalDepends, depend) {
 					totalDepends = append(totalDepends, depend)
 				}

@@ -139,7 +139,7 @@ func (operation *BPMOperation) ResolveDependencies(reinstallDependencies, instal
 			continue
 		}
 
-		resolved, unresolved := pkgInfo.ResolveDependencies(&[]string{}, &[]string{}, pkgInfo.Type == "source", installOptionalDependencies, !reinstallDependencies, verbose, operation.RootDir)
+		resolved, unresolved := ResolvePackageDependenciesFromDatabases(pkgInfo, pkgInfo.Type == "source", installOptionalDependencies, !reinstallDependencies, verbose, operation.RootDir)
 
 		operation.UnresolvedDepends = append(operation.UnresolvedDepends, unresolved...)
 
@@ -174,7 +174,7 @@ func (operation *BPMOperation) RemoveNeededPackages() error {
 	}
 
 	for pkg, action := range removeActions {
-		dependants, err := action.BpmPackage.PkgInfo.GetDependants(operation.RootDir)
+		dependants, err := GetPackageDependants(action.BpmPackage.PkgInfo.Name, operation.RootDir)
 		if err != nil {
 			return errors.New("could not get dependant packages for package (" + pkg + ")")
 		}
@@ -192,7 +192,7 @@ func (operation *BPMOperation) RemoveNeededPackages() error {
 	return nil
 }
 
-func (operation *BPMOperation) Cleanup(verbose bool) error {
+func (operation *BPMOperation) Cleanup() error {
 	// Get all installed packages
 	installedPackageNames, err := GetInstalledPackages(operation.RootDir)
 	if err != nil {
@@ -228,9 +228,9 @@ func (operation *BPMOperation) Cleanup(verbose bool) error {
 		}
 
 		keepPackages = append(keepPackages, pkg.Name)
-		resolved, _ := pkg.ResolveDependencies(&[]string{}, &[]string{}, false, true, false, verbose, operation.RootDir)
+		resolved := pkg.GetAllDependencies(false, true, operation.RootDir)
 		for _, value := range resolved {
-			if !slices.Contains(keepPackages, value) && slices.Contains(installedPackageNames, value) {
+			if !slices.Contains(keepPackages, value) {
 				keepPackages = append(keepPackages, value)
 			}
 		}
