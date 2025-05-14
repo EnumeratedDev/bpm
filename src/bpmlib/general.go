@@ -17,7 +17,7 @@ const (
 	ReinstallMethodAll       ReinstallMethod = iota
 )
 
-// InstallPackages installs the specified packages into the given root directory by fetching them from repositories or directly from local bpm archives
+// InstallPackages installs the specified packages into the given root directory by fetching them from databases or directly from local bpm archives
 func InstallPackages(rootDir string, installationReason InstallationReason, reinstallMethod ReinstallMethod, installOptionalDependencies, forceInstallation, verbose bool, packages ...string) (operation *BPMOperation, err error) {
 	// Setup operation struct
 	operation = &BPMOperation{
@@ -64,12 +64,12 @@ func InstallPackages(rootDir string, installationReason InstallationReason, rein
 				BpmPackage:   bpmpkg,
 			})
 		} else {
-			var entry *RepositoryEntry
+			var entry *BPMDatabaseEntry
 
-			if e, _, err := GetRepositoryEntry(pkg); err == nil {
+			if e, _, err := GetDatabaseEntry(pkg); err == nil {
 				entry = e
 			} else if isVirtual, p := IsVirtualPackage(pkg, rootDir); isVirtual {
-				entry, _, err = GetRepositoryEntry(p)
+				entry, _, err = GetDatabaseEntry(p)
 				if err != nil {
 					pkgsNotFound = append(pkgsNotFound, pkg)
 					continue
@@ -85,8 +85,8 @@ func InstallPackages(rootDir string, installationReason InstallationReason, rein
 			}
 
 			operation.AppendAction(&FetchPackageAction{
-				IsDependency:    false,
-				RepositoryEntry: entry,
+				IsDependency:  false,
+				DatabaseEntry: entry,
 			})
 		}
 	}
@@ -272,7 +272,7 @@ func CleanupCache(rootDir string, cleanupCompilationFiles, cleanupCompiledPackag
 
 // UpdatePackages fetches the newest versions of all installed packages from
 func UpdatePackages(rootDir string, syncDatabase bool, installOptionalDependencies, forceInstallation, verbose bool) (operation *BPMOperation, err error) {
-	// Sync repositories
+	// Sync databases
 	if syncDatabase {
 		err := SyncDatabase(verbose)
 		if err != nil {
@@ -287,7 +287,7 @@ func UpdatePackages(rootDir string, syncDatabase bool, installOptionalDependenci
 		if err != nil {
 			return nil, fmt.Errorf("could not read BPM config: %s", err)
 		}
-		err = ReadLocalDatabases()
+		err = ReadLocalDatabaseFiles()
 		if err != nil {
 			return nil, fmt.Errorf("could not read local databases: %s", err)
 		}
@@ -313,11 +313,11 @@ func UpdatePackages(rootDir string, syncDatabase bool, installOptionalDependenci
 		if slices.Contains(BPMConfig.IgnorePackages, pkg) {
 			continue
 		}
-		var entry *RepositoryEntry
+		var entry *BPMDatabaseEntry
 		// Check if installed package can be replaced and install that instead
 		if e := FindReplacement(pkg); e != nil {
 			entry = e
-		} else if entry, _, err = GetRepositoryEntry(pkg); err != nil {
+		} else if entry, _, err = GetDatabaseEntry(pkg); err != nil {
 			continue
 		}
 
@@ -328,8 +328,8 @@ func UpdatePackages(rootDir string, syncDatabase bool, installOptionalDependenci
 			comparison := ComparePackageVersions(*entry.Info, *installedInfo)
 			if comparison > 0 {
 				operation.AppendAction(&FetchPackageAction{
-					IsDependency:    false,
-					RepositoryEntry: entry,
+					IsDependency:  false,
+					DatabaseEntry: entry,
 				})
 			}
 		}
@@ -355,12 +355,12 @@ func UpdatePackages(rootDir string, syncDatabase bool, installOptionalDependenci
 
 // SyncDatabase syncs all databases declared in /etc/bpm.conf
 func SyncDatabase(verbose bool) (err error) {
-	for _, repo := range BPMConfig.Repositories {
+	for _, db := range BPMConfig.Databases {
 		if verbose {
-			fmt.Printf("Fetching package database for repository (%s)...\n", repo.Name)
+			fmt.Printf("Fetching package database file for database (%s)...\n", db.Name)
 		}
 
-		err := repo.SyncLocalDatabase()
+		err := db.SyncLocalDatabaseFile()
 		if err != nil {
 			return err
 		}

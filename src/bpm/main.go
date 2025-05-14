@@ -39,7 +39,7 @@ var installationReason = ""
 var nosync = true
 var removeUnused = false
 var doCleanup = false
-var showRepoInfo = false
+var showDatabaseInfo = false
 var installSrcPkgDepends = false
 var skipChecks = false
 var outputDirectory = ""
@@ -116,7 +116,7 @@ func resolveCommand() {
 		}
 
 		// Read local databases
-		err := bpmlib.ReadLocalDatabases()
+		err := bpmlib.ReadLocalDatabaseFiles()
 		if err != nil {
 			log.Fatalf("Error: could not read local databases: %s", err)
 		}
@@ -125,13 +125,13 @@ func resolveCommand() {
 			var info *bpmlib.PackageInfo
 			isFile := false
 			showInstallationReason := false
-			if showRepoInfo {
+			if showDatabaseInfo {
 				var err error
-				var entry *bpmlib.RepositoryEntry
-				entry, _, err = bpmlib.GetRepositoryEntry(pkg)
+				var entry *bpmlib.BPMDatabaseEntry
+				entry, _, err = bpmlib.GetDatabaseEntry(pkg)
 				if err != nil {
 					if entry = bpmlib.ResolveVirtualPackage(pkg); entry == nil {
-						log.Fatalf("Error: could not find package (%s) in any repository\n", pkg)
+						log.Fatalf("Error: could not find package (%s) in any database\n", pkg)
 					}
 				}
 				info = entry.Info
@@ -167,7 +167,7 @@ func resolveCommand() {
 		}
 	case list:
 		// Read local databases
-		err := bpmlib.ReadLocalDatabases()
+		err := bpmlib.ReadLocalDatabaseFiles()
 		if err != nil {
 			log.Fatalf("Error: could not read local databases: %s", err)
 		}
@@ -207,7 +207,7 @@ func resolveCommand() {
 		}
 
 		// Read local databases
-		err := bpmlib.ReadLocalDatabases()
+		err := bpmlib.ReadLocalDatabaseFiles()
 		if err != nil {
 			log.Fatalf("Error: could not read local databases: %s", err)
 		}
@@ -215,8 +215,8 @@ func resolveCommand() {
 		for i, term := range searchTerms {
 			nameResults := make([]*bpmlib.PackageInfo, 0)
 			descResults := make([]*bpmlib.PackageInfo, 0)
-			for _, repo := range bpmlib.BPMConfig.Repositories {
-				for _, entry := range repo.Entries {
+			for _, db := range bpmlib.BPMConfig.Databases {
+				for _, entry := range db.Entries {
 					if strings.Contains(entry.Info.Name, term) {
 						nameResults = append(nameResults, entry.Info)
 					} else if strings.Contains(entry.Info.Description, term) {
@@ -271,7 +271,7 @@ func resolveCommand() {
 		}
 
 		// Read local databases
-		err := bpmlib.ReadLocalDatabases()
+		err := bpmlib.ReadLocalDatabaseFiles()
 		if err != nil {
 			log.Fatalf("Error: could not read local databases: %s", err)
 		}
@@ -329,7 +329,7 @@ func resolveCommand() {
 
 		// Read local databases if no sync
 		if nosync {
-			err := bpmlib.ReadLocalDatabases()
+			err := bpmlib.ReadLocalDatabaseFiles()
 			if err != nil {
 				log.Fatalf("Error: could not read local databases: %s", err)
 			}
@@ -411,7 +411,7 @@ func resolveCommand() {
 		}
 
 		// Read local databases
-		err := bpmlib.ReadLocalDatabases()
+		err := bpmlib.ReadLocalDatabaseFiles()
 		if err != nil {
 			log.Fatalf("Error: could not read local databases: %s", err)
 		}
@@ -469,7 +469,7 @@ func resolveCommand() {
 
 		if cleanupDependencies {
 			// Read local databases
-			err := bpmlib.ReadLocalDatabases()
+			err := bpmlib.ReadLocalDatabaseFiles()
 			if err != nil {
 				log.Fatalf("Error: could not read local databases: %s", err)
 			}
@@ -571,7 +571,7 @@ func resolveCommand() {
 		}
 
 		// Read local databases
-		err := bpmlib.ReadLocalDatabases()
+		err := bpmlib.ReadLocalDatabaseFiles()
 		if err != nil {
 			log.Fatalf("Error: could not read local databases: %s", err)
 		}
@@ -643,7 +643,7 @@ func resolveCommand() {
 			} else {
 				// Ensure the required dependencies are installed
 				if len(unmetDepends) != 0 {
-					log.Fatalf("Error: could not resolve dependencies: the following dependencies were not found in any repositories: " + strings.Join(unmetDepends, ", "))
+					log.Fatalf("Error: could not resolve dependencies: the following dependencies were not found in any databases: " + strings.Join(unmetDepends, ", "))
 				}
 			}
 
@@ -738,14 +738,14 @@ func printHelp() {
 	fmt.Println("-> flags will be read if passed right after the subcommand otherwise they will be read as subcommand arguments")
 	fmt.Println("\033[1m---- Command List ----\033[0m")
 	fmt.Println("-> bpm version | shows information on the installed version of bpm")
-	fmt.Println("-> bpm info [-R, --repos] <packages...> | shows information on an installed package")
+	fmt.Println("-> bpm info [-R, --databases] <packages...> | shows information on an installed package")
 	fmt.Println("       -R=<path> lets you define the root path which will be used")
-	fmt.Println("       --repos show information on package in repository")
+	fmt.Println("       --databases show information on package in configured databases")
 	fmt.Println("-> bpm list [-R, -c, -n] | lists all installed packages")
 	fmt.Println("       -R=<path> lets you define the root path which will be used")
 	fmt.Println("       -c lists the amount of installed packages")
 	fmt.Println("       -n lists only the names of installed packages")
-	fmt.Println("-> bpm search <search terms...> | Searches for packages through declared repositories")
+	fmt.Println("-> bpm search <search terms...> | Searches for packages through configured databases")
 	fmt.Println("-> bpm install [-R, -v, -y, -f, --reinstall, --reinstall-all, --no-optional, --installation-reason] <packages...> | installs the following files")
 	fmt.Println("       -R=<path> lets you define the root path which will be used")
 	fmt.Println("       -v Show additional information about what BPM is doing")
@@ -755,7 +755,7 @@ func printHelp() {
 	fmt.Println("       --reinstall-all Same as --reinstall but also reinstalls dependencies")
 	fmt.Println("       --no-optional Prevents installation of optional dependencies")
 	fmt.Println("       --installation-reason=<manual/dependency> sets the installation reason for all newly installed packages")
-	fmt.Println("-> bpm update [-R, -v, -y, -f, --reinstall, --no-sync] | updates all packages that are available in the repositories")
+	fmt.Println("-> bpm update [-R, -v, -y, -f, --reinstall, --no-sync] | updates all packages that are available in the configured databases")
 	fmt.Println("       -R=<path> lets you define the root path which will be used")
 	fmt.Println("       -v Show additional information about what BPM is doing")
 	fmt.Println("       -y skips the confirmation prompt")
@@ -779,7 +779,7 @@ func printHelp() {
 	fmt.Println("       --depends performs a dependency cleanup")
 	fmt.Println("       --compilation-files performs a cleanup of compilation files")
 	fmt.Println("       --compiled-pkgs performs a cleanup of compilation compiled binary packages")
-	fmt.Println("       --fetched-pkgs performs a cleanup of fetched packages from repositories")
+	fmt.Println("       --fetched-pkgs performs a cleanup of fetched packages from databases")
 	fmt.Println("-> bpm file [-R] <files...> | shows what packages the following packages are managed by")
 	fmt.Println("       -R=<root_path> lets you define the root path which will be used")
 	fmt.Println("-> bpm compile [-d, -s, -o] <source packages...> | Compile source BPM package")
@@ -802,7 +802,7 @@ func resolveFlags() {
 	// Info flags
 	infoFlagSet := flag.NewFlagSet("Info flags", flag.ExitOnError)
 	infoFlagSet.StringVar(&rootDir, "R", "/", "Set the destination root")
-	infoFlagSet.BoolVar(&showRepoInfo, "repos", false, "Show information on package in repository")
+	infoFlagSet.BoolVar(&showDatabaseInfo, "databases", false, "Show information on package in configured databases")
 	infoFlagSet.Usage = printHelp
 	// Install flags
 	installFlagSet := flag.NewFlagSet("Install flags", flag.ExitOnError)
@@ -845,7 +845,7 @@ func resolveFlags() {
 	cleanupFlagSet.BoolVar(&cleanupDependencies, "depends", false, "Perform a dependency cleanup")
 	cleanupFlagSet.BoolVar(&cleanupCompilationFiles, "compilation-files", false, "Perform a cleanup of compilation files")
 	cleanupFlagSet.BoolVar(&cleanupCompiledPackages, "compiled-pkgs", false, "Perform a cleanup of compilation compiled binary packages")
-	cleanupFlagSet.BoolVar(&cleanupFetchedPackages, "fetched-pkgs", false, "Perform a cleanup of fetched packages from repositories")
+	cleanupFlagSet.BoolVar(&cleanupFetchedPackages, "fetched-pkgs", false, "Perform a cleanup of fetched packages from databases")
 	cleanupFlagSet.Usage = printHelp
 	// File flags
 	fileFlagSet := flag.NewFlagSet("Remove flags", flag.ExitOnError)

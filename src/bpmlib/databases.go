@@ -12,41 +12,41 @@ import (
 	"strings"
 )
 
-type Repository struct {
+type BPMDatabase struct {
 	Name            string `yaml:"name"`
 	Source          string `yaml:"source"`
 	Disabled        *bool  `yaml:"disabled"`
-	Entries         map[string]*RepositoryEntry
+	Entries         map[string]*BPMDatabaseEntry
 	VirtualPackages map[string][]string
 }
 
-type RepositoryEntry struct {
+type BPMDatabaseEntry struct {
 	Info          *PackageInfo `yaml:"info"`
 	Download      string       `yaml:"download"`
 	DownloadSize  uint64       `yaml:"download_size"`
 	InstalledSize uint64       `yaml:"installed_size"`
-	Repository    *Repository
+	Database      *BPMDatabase
 }
 
-func (repo *Repository) ContainsPackage(pkg string) bool {
-	_, ok := repo.Entries[pkg]
+func (db *BPMDatabase) ContainsPackage(pkg string) bool {
+	_, ok := db.Entries[pkg]
 	return ok
 }
 
-func (repo *Repository) ReadLocalDatabase() error {
-	repoFile := "/var/lib/bpm/repositories/" + repo.Name + ".bpmdb"
-	if _, err := os.Stat(repoFile); err != nil {
+func (db *BPMDatabase) ReadLocalDatabase() error {
+	dbFile := "/var/lib/bpm/databases/" + db.Name + ".bpmdb"
+	if _, err := os.Stat(dbFile); err != nil {
 		return nil
 	}
 
-	bytes, err := os.ReadFile(repoFile)
+	bytes, err := os.ReadFile(dbFile)
 	if err != nil {
 		return err
 	}
 
 	data := string(bytes)
 	for _, b := range strings.Split(data, "---") {
-		entry := RepositoryEntry{
+		entry := BPMDatabaseEntry{
 			Info: &PackageInfo{
 				Name:            "",
 				Description:     "",
@@ -66,14 +66,14 @@ func (repo *Repository) ReadLocalDatabase() error {
 			Download:      "",
 			DownloadSize:  0,
 			InstalledSize: 0,
-			Repository:    repo,
+			Database:      db,
 		}
 		err := yaml.Unmarshal([]byte(b), &entry)
 		if err != nil {
 			return err
 		}
 
-		// Create repository entries
+		// Create database entries
 		if entry.Info.IsSplitPackage() {
 			for _, splitPkg := range entry.Info.SplitPackages {
 				// Turn split package into json data
@@ -100,26 +100,26 @@ func (repo *Repository) ReadLocalDatabase() error {
 				splitPkgClone.Url = entry.Info.Url
 
 				// Create entry for split package
-				repo.Entries[splitPkg.Name] = &RepositoryEntry{
+				db.Entries[splitPkg.Name] = &BPMDatabaseEntry{
 					Info:          &splitPkgClone,
 					Download:      entry.Download,
 					DownloadSize:  entry.DownloadSize,
 					InstalledSize: 0,
-					Repository:    repo,
+					Database:      db,
 				}
 
-				// Add virtual packages to repository
+				// Add virtual packages to database
 				for _, p := range splitPkg.Provides {
-					repo.VirtualPackages[p] = append(repo.VirtualPackages[p], splitPkg.Name)
+					db.VirtualPackages[p] = append(db.VirtualPackages[p], splitPkg.Name)
 				}
 			}
 		} else {
 			// Create entry for package
-			repo.Entries[entry.Info.Name] = &entry
+			db.Entries[entry.Info.Name] = &entry
 
-			// Add virtual packages to repository
+			// Add virtual packages to database
 			for _, p := range entry.Info.Provides {
-				repo.VirtualPackages[p] = append(repo.VirtualPackages[p], entry.Info.Name)
+				db.VirtualPackages[p] = append(db.VirtualPackages[p], entry.Info.Name)
 			}
 		}
 
@@ -128,11 +128,11 @@ func (repo *Repository) ReadLocalDatabase() error {
 	return nil
 }
 
-func (repo *Repository) SyncLocalDatabase() error {
-	repoFile := "/var/lib/bpm/repositories/" + repo.Name + ".bpmdb"
+func (db *BPMDatabase) SyncLocalDatabaseFile() error {
+	dbFile := "/var/lib/bpm/databases/" + db.Name + ".bpmdb"
 
 	// Get URL to database
-	u, err := url.JoinPath(repo.Source, "database.bpmdb")
+	u, err := url.JoinPath(db.Source, "database.bpmdb")
 	if err != nil {
 		return err
 	}
@@ -147,20 +147,20 @@ func (repo *Repository) SyncLocalDatabase() error {
 	// Load data into byte buffer
 	buffer, err := io.ReadAll(resp.Body)
 
-	// Unmarshal data to ensure it is a valid BPM repository
-	err = yaml.Unmarshal(buffer, &Repository{})
+	// Unmarshal data to ensure it is a valid BPM database
+	err = yaml.Unmarshal(buffer, &BPMDatabase{})
 	if err != nil {
-		return fmt.Errorf("could not decode repository: %s", err)
+		return fmt.Errorf("could not decode database: %s", err)
 	}
 
-	// Create parent directories to repository file
-	err = os.MkdirAll(path.Dir(repoFile), 0755)
+	// Create parent directories to database file
+	err = os.MkdirAll(path.Dir(dbFile), 0755)
 	if err != nil {
 		return err
 	}
 
-	// Create file and save repository data
-	out, err := os.Create(repoFile)
+	// Create file and save database data
+	out, err := os.Create(dbFile)
 	if err != nil {
 		return err
 	}
@@ -171,14 +171,14 @@ func (repo *Repository) SyncLocalDatabase() error {
 	return nil
 }
 
-func ReadLocalDatabases() (err error) {
-	for _, repo := range BPMConfig.Repositories {
+func ReadLocalDatabaseFiles() (err error) {
+	for _, db := range BPMConfig.Databases {
 		// Initialize struct values
-		repo.Entries = make(map[string]*RepositoryEntry)
-		repo.VirtualPackages = make(map[string][]string)
+		db.Entries = make(map[string]*BPMDatabaseEntry)
+		db.VirtualPackages = make(map[string][]string)
 
 		// Read database
-		err = repo.ReadLocalDatabase()
+		err = db.ReadLocalDatabase()
 		if err != nil {
 			return err
 		}
@@ -187,47 +187,47 @@ func ReadLocalDatabases() (err error) {
 	return nil
 }
 
-func GetRepository(name string) *Repository {
-	for _, repo := range BPMConfig.Repositories {
-		if repo.Name == name {
-			return repo
+func GetDatabase(name string) *BPMDatabase {
+	for _, db := range BPMConfig.Databases {
+		if db.Name == name {
+			return db
 		}
 	}
 	return nil
 }
 
-func GetRepositoryEntry(str string) (*RepositoryEntry, *Repository, error) {
+func GetDatabaseEntry(str string) (*BPMDatabaseEntry, *BPMDatabase, error) {
 	split := strings.Split(str, "/")
 	if len(split) == 1 {
 		pkgName := strings.TrimSpace(split[0])
 		if pkgName == "" {
-			return nil, nil, errors.New("could not find repository entry for this package")
+			return nil, nil, errors.New("could not find database entry for this package")
 		}
-		for _, repo := range BPMConfig.Repositories {
-			if repo.ContainsPackage(pkgName) {
-				return repo.Entries[pkgName], repo, nil
+		for _, db := range BPMConfig.Databases {
+			if db.ContainsPackage(pkgName) {
+				return db.Entries[pkgName], db, nil
 			}
 		}
-		return nil, nil, errors.New("could not find repository entry for this package")
+		return nil, nil, errors.New("could not find database entry for this package")
 	} else if len(split) == 2 {
-		repoName := strings.TrimSpace(split[0])
+		dbName := strings.TrimSpace(split[0])
 		pkgName := strings.TrimSpace(split[1])
-		if repoName == "" || pkgName == "" {
-			return nil, nil, errors.New("could not find repository entry for this package")
+		if dbName == "" || pkgName == "" {
+			return nil, nil, errors.New("could not find database entry for this package")
 		}
-		repo := GetRepository(repoName)
-		if repo == nil || !repo.ContainsPackage(pkgName) {
-			return nil, nil, errors.New("could not find repository entry for this package")
+		db := GetDatabase(dbName)
+		if db == nil || !db.ContainsPackage(pkgName) {
+			return nil, nil, errors.New("could not find database entry for this package")
 		}
-		return repo.Entries[pkgName], repo, nil
+		return db.Entries[pkgName], db, nil
 	} else {
-		return nil, nil, errors.New("could not find repository entry for this package")
+		return nil, nil, errors.New("could not find database entry for this package")
 	}
 }
 
-func FindReplacement(pkg string) *RepositoryEntry {
-	for _, repo := range BPMConfig.Repositories {
-		for _, entry := range repo.Entries {
+func FindReplacement(pkg string) *BPMDatabaseEntry {
+	for _, db := range BPMConfig.Databases {
+		for _, entry := range db.Entries {
 			for _, replaced := range entry.Info.Replaces {
 				if replaced == pkg {
 					return entry
@@ -239,11 +239,11 @@ func FindReplacement(pkg string) *RepositoryEntry {
 	return nil
 }
 
-func ResolveVirtualPackage(vpkg string) *RepositoryEntry {
-	for _, repo := range BPMConfig.Repositories {
-		if v, ok := repo.VirtualPackages[vpkg]; ok {
+func ResolveVirtualPackage(vpkg string) *BPMDatabaseEntry {
+	for _, db := range BPMConfig.Databases {
+		if v, ok := db.VirtualPackages[vpkg]; ok {
 			for _, pkg := range v {
-				return repo.Entries[pkg]
+				return db.Entries[pkg]
 			}
 		}
 	}
@@ -251,12 +251,12 @@ func ResolveVirtualPackage(vpkg string) *RepositoryEntry {
 	return nil
 }
 
-func (repo *Repository) FetchPackage(pkg string) (string, error) {
-	if !repo.ContainsPackage(pkg) {
+func (db *BPMDatabase) FetchPackage(pkg string) (string, error) {
+	if !db.ContainsPackage(pkg) {
 		return "", errors.New("could not fetch package '" + pkg + "'")
 	}
-	entry := repo.Entries[pkg]
-	URL, err := url.JoinPath(repo.Source, entry.Download)
+	entry := db.Entries[pkg]
+	URL, err := url.JoinPath(db.Source, entry.Download)
 	if err != nil {
 		return "", err
 	}

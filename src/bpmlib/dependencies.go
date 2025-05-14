@@ -94,8 +94,8 @@ func resolvePackageDependenciesFromDatabase(resolved, unresolved *[]string, pkgI
 				continue
 			}
 			var err error
-			var entry *RepositoryEntry
-			entry, _, err = GetRepositoryEntry(depend)
+			var entry *BPMDatabaseEntry
+			entry, _, err = GetDatabaseEntry(depend)
 			if err != nil {
 				if entry = ResolveVirtualPackage(depend); entry == nil {
 					if !slices.Contains(*unresolved, depend) {

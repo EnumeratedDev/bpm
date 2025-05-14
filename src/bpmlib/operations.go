@@ -26,7 +26,7 @@ func (operation *BPMOperation) ActionsContainPackage(pkg string) bool {
 				return true
 			}
 		} else if action.GetActionType() == "fetch" {
-			if action.(*FetchPackageAction).RepositoryEntry.Info.Name == pkg {
+			if action.(*FetchPackageAction).DatabaseEntry.Info.Name == pkg {
 				return true
 			}
 		} else if action.GetActionType() == "remove" {
@@ -58,7 +58,7 @@ func (operation *BPMOperation) InsertActionAt(index int, action OperationAction)
 			operation.Changes[pkgInfo.Name] = "upgrade"
 		}
 	} else if action.GetActionType() == "fetch" {
-		pkgInfo := action.(*FetchPackageAction).RepositoryEntry.Info
+		pkgInfo := action.(*FetchPackageAction).DatabaseEntry.Info
 		if !IsPackageInstalled(pkgInfo.Name, operation.RootDir) {
 			operation.Changes[pkgInfo.Name] = "install"
 		} else {
@@ -77,7 +77,7 @@ func (operation *BPMOperation) RemoveAction(pkg, actionType string) {
 		if a.GetActionType() == "install" {
 			return a.(*InstallPackageAction).BpmPackage.PkgInfo.Name == pkg
 		} else if a.GetActionType() == "fetch" {
-			return a.(*FetchPackageAction).RepositoryEntry.Info.Name == pkg
+			return a.(*FetchPackageAction).DatabaseEntry.Info.Name == pkg
 		} else if a.GetActionType() == "remove" {
 			return a.(*RemovePackageAction).BpmPackage.PkgInfo.Name == pkg
 		}
@@ -89,7 +89,7 @@ func (operation *BPMOperation) GetTotalDownloadSize() uint64 {
 	var ret uint64 = 0
 	for _, action := range operation.Actions {
 		if action.GetActionType() == "fetch" {
-			ret += action.(*FetchPackageAction).RepositoryEntry.DownloadSize
+			ret += action.(*FetchPackageAction).DatabaseEntry.DownloadSize
 		}
 	}
 	return ret
@@ -101,7 +101,7 @@ func (operation *BPMOperation) GetTotalInstalledSize() uint64 {
 		if action.GetActionType() == "install" {
 			ret += action.(*InstallPackageAction).BpmPackage.GetInstalledSize()
 		} else if action.GetActionType() == "fetch" {
-			ret += action.(*FetchPackageAction).RepositoryEntry.InstalledSize
+			ret += action.(*FetchPackageAction).DatabaseEntry.InstalledSize
 		}
 	}
 	return ret
@@ -116,7 +116,7 @@ func (operation *BPMOperation) GetFinalActionSize(rootDir string) int64 {
 				ret -= int64(GetPackage(action.(*InstallPackageAction).BpmPackage.PkgInfo.Name, rootDir).GetInstalledSize())
 			}
 		} else if action.GetActionType() == "fetch" {
-			ret += int64(action.(*FetchPackageAction).RepositoryEntry.InstalledSize)
+			ret += int64(action.(*FetchPackageAction).DatabaseEntry.InstalledSize)
 		} else if action.GetActionType() == "remove" {
 			ret -= int64(action.(*RemovePackageAction).BpmPackage.GetInstalledSize())
 		}
@@ -133,7 +133,7 @@ func (operation *BPMOperation) ResolveDependencies(reinstallDependencies, instal
 			pkgInfo = action.BpmPackage.PkgInfo
 		} else if value.GetActionType() == "fetch" {
 			action := value.(*FetchPackageAction)
-			pkgInfo = action.RepositoryEntry.Info
+			pkgInfo = action.DatabaseEntry.Info
 		} else {
 			pos++
 			continue
@@ -148,13 +148,13 @@ func (operation *BPMOperation) ResolveDependencies(reinstallDependencies, instal
 				if !reinstallDependencies && IsPackageInstalled(depend, operation.RootDir) {
 					continue
 				}
-				entry, _, err := GetRepositoryEntry(depend)
+				entry, _, err := GetDatabaseEntry(depend)
 				if err != nil {
-					return errors.New("could not get repository entry for package (" + depend + ")")
+					return errors.New("could not get database entry for package (" + depend + ")")
 				}
 				operation.InsertActionAt(pos, &FetchPackageAction{
-					IsDependency:    true,
-					RepositoryEntry: entry,
+					IsDependency:  true,
+					DatabaseEntry: entry,
 				})
 				pos++
 			}
@@ -263,7 +263,7 @@ func (operation *BPMOperation) ReplaceObsoletePackages() {
 
 		} else if value.GetActionType() == "fetch" {
 			action := value.(*FetchPackageAction)
-			pkgInfo = action.RepositoryEntry.Info
+			pkgInfo = action.DatabaseEntry.Info
 		} else {
 			continue
 		}
@@ -301,7 +301,7 @@ func (operation *BPMOperation) CheckForConflicts() (map[string][]string, error) 
 			allPackages = append(allPackages, pkgInfo)
 		} else if value.GetActionType() == "fetch" {
 			action := value.(*FetchPackageAction)
-			pkgInfo := action.RepositoryEntry.Info
+			pkgInfo := action.DatabaseEntry.Info
 			allPackages = append(allPackages, pkgInfo)
 		} else if value.GetActionType() == "remove" {
 			action := value.(*RemovePackageAction)
@@ -342,7 +342,7 @@ func (operation *BPMOperation) ShowOperationSummary() {
 				pkgInfo = pkgInfo.GetSplitPackageInfo(value.(*InstallPackageAction).SplitPackageToInstall)
 			}
 		} else if value.GetActionType() == "fetch" {
-			pkgInfo = value.(*FetchPackageAction).RepositoryEntry.Info
+			pkgInfo = value.(*FetchPackageAction).DatabaseEntry.Info
 		} else {
 			pkgInfo = value.(*RemovePackageAction).BpmPackage.PkgInfo
 			fmt.Printf("%s: %s (Remove)\n", pkgInfo.Name, pkgInfo.GetFullVersion())
@@ -414,11 +414,11 @@ func (operation *BPMOperation) RunHooks(verbose bool) error {
 }
 
 func (operation *BPMOperation) Execute(verbose, force bool) (err error) {
-	// Fetch packages from repositories
+	// Fetch packages from databases
 	if slices.ContainsFunc(operation.Actions, func(action OperationAction) bool {
 		return action.GetActionType() == "fetch"
 	}) {
-		fmt.Println("Fetching packages from available repositories...")
+		fmt.Println("Fetching packages from available databases...")
 
 		// Create map for fetched packages
 		fetchedPackages := make(map[string]string)
@@ -428,16 +428,16 @@ func (operation *BPMOperation) Execute(verbose, force bool) (err error) {
 				continue
 			}
 
-			// Get repository entry
-			entry := action.(*FetchPackageAction).RepositoryEntry
+			// Get database entry
+			entry := action.(*FetchPackageAction).DatabaseEntry
 
 			// Create bpmpkg variable
 			var bpmpkg *BPMPackage
 
 			// Check if package has already been fetched from download link
 			if _, ok := fetchedPackages[entry.Download]; !ok {
-				// Fetch package from repository
-				fetchedPackage, err := entry.Repository.FetchPackage(entry.Info.Name)
+				// Fetch package from database
+				fetchedPackage, err := entry.Database.FetchPackage(entry.Info.Name)
 				if err != nil {
 					return errors.New(fmt.Sprintf("could not fetch package (%s): %s\n", entry.Info.Name, err))
 				}
@@ -596,8 +596,8 @@ func (action *InstallPackageAction) GetActionType() string {
 }
 
 type FetchPackageAction struct {
-	IsDependency    bool
-	RepositoryEntry *RepositoryEntry
+	IsDependency  bool
+	DatabaseEntry *BPMDatabaseEntry
 }
 
 func (action *FetchPackageAction) GetActionType() string {

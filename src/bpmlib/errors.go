@@ -10,7 +10,7 @@ type PackageNotFoundErr struct {
 }
 
 func (e PackageNotFoundErr) Error() string {
-	return "The following packages were not found in any repositories: " + strings.Join(e.packages, ", ")
+	return "The following packages were not found in any databases: " + strings.Join(e.packages, ", ")
 }
 
 type DependencyNotFoundErr struct {
@@ -18,7 +18,7 @@ type DependencyNotFoundErr struct {
 }
 
 func (e DependencyNotFoundErr) Error() string {
-	return "The following dependencies were not found in any repositories: " + strings.Join(e.dependencies, ", ")
+	return "The following dependencies were not found in any databases: " + strings.Join(e.dependencies, ", ")
 }
 
 type PackageConflictErr struct {

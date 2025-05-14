@@ -30,7 +30,7 @@ You are able to install bpm packages by typing the following:
 ```sh
 bpm install /path/to/package.bpm
 ```
-You can also use the package name directly if using repositories
+You can also use the package name directly if using databases
 ```sh
 bpm install package_name
 ```
@@ -50,7 +50,7 @@ To remove all unused dependencies and clean cached files try using the cleanup c
 bpm cleanup
 ```
 
-If using repositories, all packages can be updated using this simple command
+If using databases, all packages can be updated using this simple command
 ```sh
 bpm update
 ```
