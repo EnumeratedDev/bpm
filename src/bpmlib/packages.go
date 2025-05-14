@@ -484,7 +484,7 @@ func ReadPackageInfo(contents string) (*PackageInfo, error) {
 	return pkgInfo, nil
 }
 
-func CreateReadableInfo(showArchitecture, showType, showPackageRelations bool, pkgInfo *PackageInfo, rootDir string) string {
+func CreateReadableInfo(showArchitecture, showType, showPackageRelations, showInstallationReason bool, pkgInfo *PackageInfo, rootDir string) string {
 	ret := make([]string, 0)
 	appendArray := func(label string, array []string) {
 		if len(array) == 0 {
@@ -524,7 +524,9 @@ func CreateReadableInfo(showArchitecture, showType, showPackageRelations bool, p
 		}
 		appendArray("Split Packages", splitPkgs)
 	}
-	ret = append(ret, "Installation Reason: "+string(GetInstallationReason(pkgInfo.Name, rootDir)))
+	if IsPackageInstalled(pkgInfo.Name, rootDir) && showInstallationReason {
+		ret = append(ret, "Installation Reason: "+string(GetInstallationReason(pkgInfo.Name, rootDir)))
+	}
 	return strings.Join(ret, "\n")
 }
 

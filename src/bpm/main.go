@@ -124,6 +124,7 @@ func resolveCommand() {
 		for n, pkg := range packages {
 			var info *bpmlib.PackageInfo
 			isFile := false
+			showInstallationReason := false
 			if showRepoInfo {
 				var err error
 				var entry *bpmlib.RepositoryEntry
@@ -147,6 +148,7 @@ func resolveCommand() {
 				} else {
 					info = bpmlib.GetPackageInfo(pkg, rootDir)
 				}
+				showInstallationReason = true
 			}
 			if info == nil {
 				log.Fatalf("Error: package (%s) is not installed\n", pkg)
@@ -161,7 +163,7 @@ func resolveCommand() {
 				}
 				fmt.Println("File: " + abs)
 			}
-			fmt.Println(bpmlib.CreateReadableInfo(true, true, true, info, rootDir))
+			fmt.Println(bpmlib.CreateReadableInfo(true, true, true, showInstallationReason, info, rootDir))
 		}
 	case list:
 		// Read local databases
@@ -195,7 +197,7 @@ func resolveCommand() {
 				if n != 0 {
 					fmt.Println()
 				}
-				fmt.Println(bpmlib.CreateReadableInfo(true, true, true, info, rootDir))
+				fmt.Println(bpmlib.CreateReadableInfo(true, true, true, true, info, rootDir))
 			}
 		}
 	case search:
