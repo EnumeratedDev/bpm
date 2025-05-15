@@ -264,8 +264,7 @@ func CompileSourcePackage(archiveFilename, outputDirectory string, skipChecks bo
 			pkgInfo.Arch = GetArch()
 		}
 
-		// Remove source package specific fields
-		pkgInfo.MakeDepends = nil
+		// Remove split package field
 		pkgInfo.SplitPackages = nil
 
 		// Marshal package info

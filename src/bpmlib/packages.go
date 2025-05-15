@@ -466,8 +466,7 @@ func ReadPackageInfo(contents string) (*PackageInfo, error) {
 		pkgInfoClone := *pkgInfo
 		pkgInfo.SplitPackages[i] = &pkgInfoClone
 
-		// Set make depends and split package field of split package to nil
-		pkgInfo.SplitPackages[i].MakeDepends = nil
+		// Set split package field of split package to nil
 		pkgInfo.SplitPackages[i].SplitPackages = nil
 
 		// Unmarshal json data back to struct
