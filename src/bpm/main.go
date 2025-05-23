@@ -44,6 +44,7 @@ var installSrcPkgDepends = false
 var skipChecks = false
 var outputDirectory = ""
 var cleanupDependencies = false
+var cleanupMakeDependencies = false
 var cleanupCompilationFiles = false
 var cleanupCompiledPackages = false
 var cleanupFetchedPackages = false
@@ -249,12 +250,14 @@ func resolveCommand() {
 		}
 
 		// Check if installationReason argument is valid
-		ir := bpmlib.InstallationReasonUnknown
+		ir := bpmlib.InstallationReasonManual
 		switch installationReason {
 		case "manual":
 			ir = bpmlib.InstallationReasonManual
 		case "dependency":
 			ir = bpmlib.InstallationReasonDependency
+		case "make-dependency":
+			ir = bpmlib.InstallationReasonMakeDependency
 		case "":
 		default:
 			log.Fatalf("Error: %s is not a valid installation reason", installationReason)
@@ -467,7 +470,7 @@ func resolveCommand() {
 			log.Fatalf("Error: could not complete cache cleanup: %s", err)
 		}
 
-		if cleanupDependencies {
+		if cleanupDependencies || cleanupMakeDependencies {
 			// Read local databases
 			err := bpmlib.ReadLocalDatabaseFiles()
 			if err != nil {
@@ -475,7 +478,7 @@ func resolveCommand() {
 			}
 
 			// Create cleanup operation
-			operation, err := bpmlib.CleanupPackages(rootDir)
+			operation, err := bpmlib.CleanupPackages(cleanupMakeDependencies, rootDir)
 			if errors.As(err, &bpmlib.PackageNotFoundErr{}) || errors.As(err, &bpmlib.DependencyNotFoundErr{}) || errors.As(err, &bpmlib.PackageConflictErr{}) {
 				log.Fatalf("Error: %s", err)
 			} else if err != nil {
@@ -595,7 +598,7 @@ func resolveCommand() {
 
 			// Get direct runtime and make dependencies
 			totalDepends := make([]string, 0)
-			for _, depend := range bpmpkg.PkgInfo.GetDependencies(true, false) {
+			for depend := range bpmpkg.PkgInfo.GetDependencies(true, false) {
 				if !slices.Contains(totalDepends, depend) {
 					totalDepends = append(totalDepends, depend)
 				}
@@ -624,7 +627,7 @@ func resolveCommand() {
 				}
 
 				// Run 'bpm install' using the set privilege escalator command
-				args := []string{executable, "install", "--installation-reason=dependency"}
+				args := []string{executable, "install", "--installation-reason=make-dependency"}
 				args = append(args, unmetDepends...)
 				cmd := exec.Command(bpmlib.BPMConfig.PrivilegeEscalatorCmd, args...)
 				if yesAll {
@@ -777,6 +780,7 @@ func printHelp() {
 	fmt.Println("       -R=<path> lets you define the root path which will be used")
 	fmt.Println("       -y skips the confirmation prompt")
 	fmt.Println("       --depends performs a dependency cleanup")
+	fmt.Println("       --make-depends performs a make dependency cleanup")
 	fmt.Println("       --compilation-files performs a cleanup of compilation files")
 	fmt.Println("       --compiled-pkgs performs a cleanup of compilation compiled binary packages")
 	fmt.Println("       --fetched-pkgs performs a cleanup of fetched packages from databases")
@@ -843,6 +847,7 @@ func resolveFlags() {
 	cleanupFlagSet.BoolVar(&verbose, "v", false, "Show additional information about what BPM is doing")
 	cleanupFlagSet.BoolVar(&yesAll, "y", false, "Skip confirmation prompts")
 	cleanupFlagSet.BoolVar(&cleanupDependencies, "depends", false, "Perform a dependency cleanup")
+	cleanupFlagSet.BoolVar(&cleanupMakeDependencies, "make-depends", false, "Perform a make dependency cleanup")
 	cleanupFlagSet.BoolVar(&cleanupCompilationFiles, "compilation-files", false, "Perform a cleanup of compilation files")
 	cleanupFlagSet.BoolVar(&cleanupCompiledPackages, "compiled-pkgs", false, "Perform a cleanup of compilation compiled binary packages")
 	cleanupFlagSet.BoolVar(&cleanupFetchedPackages, "fetched-pkgs", false, "Perform a cleanup of fetched packages from databases")
@@ -858,8 +863,18 @@ func resolveFlags() {
 	compileFlagSet.StringVar(&outputDirectory, "o", "", "Set output directory")
 	compileFlagSet.BoolVar(&verbose, "v", false, "Show additional information about what BPM is doing")
 	compileFlagSet.BoolVar(&yesAll, "y", false, "Skip confirmation prompts")
-
 	compileFlagSet.Usage = printHelp
+
+	isFlagSet := func(flagSet *flag.FlagSet, name string) bool {
+		found := false
+		flagSet.Visit(func(f *flag.Flag) {
+			if f.Name == name {
+				found = true
+			}
+		})
+		return found
+	}
+
 	if len(os.Args[1:]) <= 0 {
 		subcommand = "help"
 	} else {
@@ -906,8 +921,9 @@ func resolveFlags() {
 			if err != nil {
 				return
 			}
-			if !cleanupDependencies && !cleanupCompilationFiles && !cleanupCompiledPackages && !cleanupFetchedPackages {
+			if !isFlagSet(cleanupFlagSet, "depends") && !isFlagSet(cleanupFlagSet, "make-depends") && !isFlagSet(cleanupFlagSet, "compilation-files") && !isFlagSet(cleanupFlagSet, "compiled-pkgs") && !isFlagSet(cleanupFlagSet, "fetched-pkgs") {
 				cleanupDependencies = true
+				cleanupMakeDependencies = bpmlib.BPMConfig.CleanupMakeDependencies
 				cleanupCompilationFiles = true
 				cleanupCompiledPackages = true
 				cleanupFetchedPackages = true

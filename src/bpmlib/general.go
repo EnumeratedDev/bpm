@@ -21,12 +21,11 @@ const (
 func InstallPackages(rootDir string, installationReason InstallationReason, reinstallMethod ReinstallMethod, installOptionalDependencies, forceInstallation, verbose bool, packages ...string) (operation *BPMOperation, err error) {
 	// Setup operation struct
 	operation = &BPMOperation{
-		Actions:                 make([]OperationAction, 0),
-		UnresolvedDepends:       make([]string, 0),
-		Changes:                 make(map[string]string),
-		RootDir:                 rootDir,
-		ForceInstallationReason: installationReason,
-		compiledPackages:        make(map[string]string),
+		Actions:           make([]OperationAction, 0),
+		UnresolvedDepends: make([]string, 0),
+		Changes:           make(map[string]string),
+		RootDir:           rootDir,
+		compiledPackages:  make(map[string]string),
 	}
 
 	// Resolve packages
@@ -46,7 +45,7 @@ func InstallPackages(rootDir string, installationReason InstallationReason, rein
 
 					operation.AppendAction(&InstallPackageAction{
 						File:                  pkg,
-						IsDependency:          false,
+						InstallationReason:    installationReason,
 						BpmPackage:            bpmpkg,
 						SplitPackageToInstall: splitPkg.Name,
 					})
@@ -59,9 +58,9 @@ func InstallPackages(rootDir string, installationReason InstallationReason, rein
 			}
 
 			operation.AppendAction(&InstallPackageAction{
-				File:         pkg,
-				IsDependency: false,
-				BpmPackage:   bpmpkg,
+				File:               pkg,
+				InstallationReason: installationReason,
+				BpmPackage:         bpmpkg,
 			})
 		} else {
 			var entry *BPMDatabaseEntry
@@ -85,8 +84,8 @@ func InstallPackages(rootDir string, installationReason InstallationReason, rein
 			}
 
 			operation.AppendAction(&FetchPackageAction{
-				IsDependency:  false,
-				DatabaseEntry: entry,
+				InstallationReason: installationReason,
+				DatabaseEntry:      entry,
 			})
 		}
 	}
@@ -161,7 +160,7 @@ func RemovePackages(rootDir string, removeUnusedPackagesOnly, cleanupDependencie
 
 	// Do package cleanup
 	if cleanupDependencies {
-		err := operation.Cleanup()
+		err := operation.Cleanup(true)
 		if err != nil {
 			return nil, fmt.Errorf("could not perform cleanup for operation: %s", err)
 		}
@@ -170,7 +169,7 @@ func RemovePackages(rootDir string, removeUnusedPackagesOnly, cleanupDependencie
 }
 
 // CleanupPackages finds packages installed as dependencies which are no longer required by the rest of the system in the given root directory
-func CleanupPackages(rootDir string) (operation *BPMOperation, err error) {
+func CleanupPackages(cleanupMakeDepends bool, rootDir string) (operation *BPMOperation, err error) {
 	operation = &BPMOperation{
 		Actions:           make([]OperationAction, 0),
 		UnresolvedDepends: make([]string, 0),
@@ -180,7 +179,7 @@ func CleanupPackages(rootDir string) (operation *BPMOperation, err error) {
 	}
 
 	// Do package cleanup
-	err = operation.Cleanup()
+	err = operation.Cleanup(cleanupMakeDepends)
 	if err != nil {
 		return nil, fmt.Errorf("could not perform cleanup for operation: %s", err)
 	}
@@ -300,12 +299,11 @@ func UpdatePackages(rootDir string, syncDatabase bool, installOptionalDependenci
 	}
 
 	operation = &BPMOperation{
-		Actions:                 make([]OperationAction, 0),
-		UnresolvedDepends:       make([]string, 0),
-		Changes:                 make(map[string]string),
-		RootDir:                 rootDir,
-		ForceInstallationReason: InstallationReasonUnknown,
-		compiledPackages:        make(map[string]string),
+		Actions:           make([]OperationAction, 0),
+		UnresolvedDepends: make([]string, 0),
+		Changes:           make(map[string]string),
+		RootDir:           rootDir,
+		compiledPackages:  make(map[string]string),
 	}
 
 	// Search for packages
@@ -328,8 +326,8 @@ func UpdatePackages(rootDir string, syncDatabase bool, installOptionalDependenci
 			comparison := ComparePackageVersions(*entry.Info, *installedInfo)
 			if comparison > 0 {
 				operation.AppendAction(&FetchPackageAction{
-					IsDependency:  false,
-					DatabaseEntry: entry,
+					InstallationReason: GetInstallationReason(pkg, rootDir),
+					DatabaseEntry:      entry,
 				})
 			}
 		}

@@ -6,10 +6,11 @@ import (
 )
 
 type BPMConfigStruct struct {
-	IgnorePackages         []string       `yaml:"ignore_packages"`
-	PrivilegeEscalatorCmd  string         `yaml:"privilege_escalator_cmd"`
-	CompilationEnvironment []string       `yaml:"compilation_env"`
-	Databases              []*BPMDatabase `yaml:"databases"`
+	IgnorePackages          []string       `yaml:"ignore_packages"`
+	PrivilegeEscalatorCmd   string         `yaml:"privilege_escalator_cmd"`
+	CompilationEnvironment  []string       `yaml:"compilation_env"`
+	CleanupMakeDependencies bool           `yaml:"cleanup_make_dependencies"`
+	Databases               []*BPMDatabase `yaml:"databases"`
 }
 
 var BPMConfig BPMConfigStruct
@@ -24,7 +25,9 @@ func ReadConfig() (err error) {
 		return err
 	}
 
-	BPMConfig = BPMConfigStruct{}
+	BPMConfig = BPMConfigStruct{
+		CleanupMakeDependencies: true,
+	}
 	err = yaml.Unmarshal(bytes, &BPMConfig)
 	if err != nil {
 		return err

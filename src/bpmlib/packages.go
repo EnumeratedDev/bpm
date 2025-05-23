@@ -92,9 +92,10 @@ func (pkgInfo *PackageInfo) GetSplitPackageInfo(splitPkg string) *PackageInfo {
 type InstallationReason string
 
 const (
-	InstallationReasonManual     InstallationReason = "manual"
-	InstallationReasonDependency InstallationReason = "dependency"
-	InstallationReasonUnknown    InstallationReason = "unknown"
+	InstallationReasonManual         InstallationReason = "manual"
+	InstallationReasonDependency     InstallationReason = "dependency"
+	InstallationReasonMakeDependency InstallationReason = "make_dependency"
+	InstallationReasonUnknown        InstallationReason = "unknown"
 )
 
 func ComparePackageVersions(info1, info2 PackageInfo) int {
@@ -119,6 +120,8 @@ func GetInstallationReason(pkg, rootDir string) InstallationReason {
 		return InstallationReasonManual
 	} else if reason == "dependency" {
 		return InstallationReasonDependency
+	} else if reason == "make_dependency" {
+		return InstallationReasonMakeDependency
 	}
 	return InstallationReasonUnknown
 }
@@ -524,7 +527,19 @@ func CreateReadableInfo(showArchitecture, showType, showPackageRelations, showIn
 		appendArray("Split Packages", splitPkgs)
 	}
 	if IsPackageInstalled(pkgInfo.Name, rootDir) && showInstallationReason {
-		ret = append(ret, "Installation Reason: "+string(GetInstallationReason(pkgInfo.Name, rootDir)))
+		installationReason := GetInstallationReason(pkgInfo.Name, rootDir)
+		var installationReasonString string
+		switch installationReason {
+		case InstallationReasonManual:
+			installationReasonString = "Manual"
+		case InstallationReasonDependency:
+			installationReasonString = "Dependency"
+		case InstallationReasonMakeDependency:
+			installationReasonString = "Make dependency"
+		default:
+			installationReasonString = "Unknown"
+		}
+		ret = append(ret, "Installation Reason: "+installationReasonString)
 	}
 	return strings.Join(ret, "\n")
 }

@@ -6,14 +6,25 @@ import (
 	"slices"
 )
 
-func (pkgInfo *PackageInfo) GetDependencies(includeMakeDepends, includeOptionalDepends bool) []string {
-	allDepends := make([]string, 0)
-	allDepends = append(allDepends, pkgInfo.Depends...)
-	if includeMakeDepends {
-		allDepends = append(allDepends, pkgInfo.MakeDepends...)
+func (pkgInfo *PackageInfo) GetDependencies(includeMakeDepends, includeOptionalDepends bool) map[string]InstallationReason {
+	allDepends := make(map[string]InstallationReason)
+
+	for _, depend := range pkgInfo.Depends {
+		allDepends[depend] = InstallationReasonDependency
 	}
 	if includeOptionalDepends {
-		allDepends = append(allDepends, pkgInfo.OptionalDepends...)
+		for _, depend := range pkgInfo.OptionalDepends {
+			if _, ok := allDepends[depend]; !ok {
+				allDepends[depend] = InstallationReasonDependency
+			}
+		}
+	}
+	if includeMakeDepends {
+		for _, depend := range pkgInfo.MakeDepends {
+			if _, ok := allDepends[depend]; !ok {
+				allDepends[depend] = InstallationReasonMakeDependency
+			}
+		}
 	}
 	return allDepends
 }
@@ -34,7 +45,10 @@ func (pkgInfo *PackageInfo) getAllDependencies(resolved *[]string, unresolved *[
 	*unresolved = append(*unresolved, pkgInfo.Name)
 
 	// Loop through all dependencies
-	for _, depend := range pkgInfo.GetDependencies(includeMakeDepends, includeOptionalDepends) {
+	for depend := range pkgInfo.GetDependencies(includeMakeDepends, includeOptionalDepends) {
+		if isVirtual, p := IsVirtualPackage(depend, rootDir); isVirtual {
+			depend = p
+		}
 		if !slices.Contains(*resolved, depend) {
 			// Add current dependency to resolved slice when circular dependency is detected
 			if slices.Contains(*unresolved, depend) {
@@ -44,13 +58,7 @@ func (pkgInfo *PackageInfo) getAllDependencies(resolved *[]string, unresolved *[
 				continue
 			}
 
-			var dependInfo *PackageInfo
-
-			if isVirtual, p := IsVirtualPackage(depend, rootDir); isVirtual {
-				dependInfo = GetPackageInfo(p, rootDir)
-			} else {
-				dependInfo = GetPackageInfo(depend, rootDir)
-			}
+			dependInfo := GetPackageInfo(depend, rootDir)
 
 			if dependInfo != nil {
 				dependInfo.getAllDependencies(resolved, unresolved, includeMakeDepends, includeOptionalDepends, rootDir)
@@ -63,31 +71,31 @@ func (pkgInfo *PackageInfo) getAllDependencies(resolved *[]string, unresolved *[
 	*unresolved = stringSliceRemove(*unresolved, pkgInfo.Name)
 }
 
-func ResolvePackageDependenciesFromDatabases(pkgInfo *PackageInfo, checkMake, checkOptional, ignoreInstalled, verbose bool, rootDir string) (resolved []string, unresolved []string) {
+func ResolveAllPackageDependenciesFromDatabases(pkgInfo *PackageInfo, checkMake, checkOptional, ignoreInstalled, verbose bool, rootDir string) (resolved map[string]InstallationReason, unresolved []string) {
 	// Initialize slices
-	resolved = make([]string, 0)
+	resolved = make(map[string]InstallationReason)
 	unresolved = make([]string, 0)
 
 	// Call unexported function
-	resolvePackageDependenciesFromDatabase(&resolved, &unresolved, pkgInfo, checkMake, checkOptional, ignoreInstalled, verbose, rootDir)
+	resolvePackageDependenciesFromDatabase(resolved, &unresolved, pkgInfo, InstallationReasonDependency, checkMake, checkOptional, ignoreInstalled, verbose, rootDir)
 
 	return resolved, unresolved
 }
 
-func resolvePackageDependenciesFromDatabase(resolved, unresolved *[]string, pkgInfo *PackageInfo, checkMake, checkOptional, ignoreInstalled, verbose bool, rootDir string) {
+func resolvePackageDependenciesFromDatabase(resolved map[string]InstallationReason, unresolved *[]string, pkgInfo *PackageInfo, installationReason InstallationReason, checkMake, checkOptional, ignoreInstalled, verbose bool, rootDir string) {
 	// Add current package name to unresolved slice
 	*unresolved = append(*unresolved, pkgInfo.Name)
 
 	// Loop through all dependencies
-	for _, depend := range pkgInfo.GetDependencies(checkMake, checkOptional) {
-		if !slices.Contains(*resolved, depend) {
+	for depend, ir := range pkgInfo.GetDependencies(pkgInfo.Type == "source", checkOptional) {
+		if _, ok := resolved[depend]; !ok {
 			// Add current dependency to resolved slice when circular dependency is detected
 			if slices.Contains(*unresolved, depend) {
 				if verbose {
 					fmt.Printf("Circular dependency was detected (%s -> %s). Installing %s first\n", pkgInfo.Name, depend, depend)
 				}
-				if !slices.Contains(*resolved, depend) {
-					*resolved = append(*resolved, depend)
+				if _, ok := resolved[depend]; !ok {
+					resolved[depend] = ir
 				}
 				continue
 			} else if ignoreInstalled && IsPackageProvided(depend, rootDir) {
@@ -104,11 +112,12 @@ func resolvePackageDependenciesFromDatabase(resolved, unresolved *[]string, pkgI
 					continue
 				}
 			}
-			resolvePackageDependenciesFromDatabase(resolved, unresolved, entry.Info, checkMake, checkOptional, ignoreInstalled, verbose, rootDir)
+			resolvePackageDependenciesFromDatabase(resolved, unresolved, entry.Info, ir, checkMake, checkOptional, ignoreInstalled, verbose, rootDir)
 		}
 	}
-	if !slices.Contains(*resolved, pkgInfo.Name) {
-		*resolved = append(*resolved, pkgInfo.Name)
+
+	if _, ok := resolved[pkgInfo.Name]; !ok {
+		resolved[pkgInfo.Name] = installationReason
 	}
 	*unresolved = stringSliceRemove(*unresolved, pkgInfo.Name)
 }
@@ -145,7 +154,7 @@ func GetPackageDependants(pkgName string, rootDir string) ([]string, error) {
 		dependencies := installedPkg.PkgInfo.GetDependencies(false, true)
 
 		// Add installed package to list if its dependencies include pkgName
-		if slices.Contains(dependencies, pkgName) {
+		if _, ok := dependencies[pkgName]; ok {
 			ret = append(ret, installedPkgName)
 			continue
 		}
@@ -153,7 +162,7 @@ func GetPackageDependants(pkgName string, rootDir string) ([]string, error) {
 		// Loop through each virtual package
 		for _, vpkg := range pkg.PkgInfo.Provides {
 			// Add installed package to list if its dependencies contain a provided virtual package
-			if slices.Contains(dependencies, vpkg) {
+			if _, ok := dependencies[vpkg]; ok {
 				ret = append(ret, installedPkgName)
 				break
 			}
