@@ -598,9 +598,9 @@ func resolveCommand() {
 
 			// Get direct runtime and make dependencies
 			totalDepends := make([]string, 0)
-			for depend := range bpmpkg.PkgInfo.GetDependencies(true, false) {
-				if !slices.Contains(totalDepends, depend) {
-					totalDepends = append(totalDepends, depend)
+			for _, depend := range bpmpkg.PkgInfo.GetDependencies(true, false) {
+				if !slices.Contains(totalDepends, depend.PkgName) {
+					totalDepends = append(totalDepends, depend.PkgName)
 				}
 			}
 

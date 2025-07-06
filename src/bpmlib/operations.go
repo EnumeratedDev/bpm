@@ -142,17 +142,17 @@ func (operation *BPMOperation) ResolveDependencies(reinstallDependencies, instal
 
 		operation.UnresolvedDepends = append(operation.UnresolvedDepends, unresolved...)
 
-		for depend, installationReason := range resolved {
-			if !operation.ActionsContainPackage(depend) && depend != pkgInfo.Name {
-				if !reinstallDependencies && IsPackageInstalled(depend, operation.RootDir) {
+		for _, resolvedPkg := range resolved {
+			if !operation.ActionsContainPackage(resolvedPkg.PkgName) && resolvedPkg.PkgName != pkgInfo.Name {
+				if !reinstallDependencies && IsPackageInstalled(resolvedPkg.PkgName, operation.RootDir) {
 					continue
 				}
-				entry, _, err := GetDatabaseEntry(depend)
+				entry, _, err := GetDatabaseEntry(resolvedPkg.PkgName)
 				if err != nil {
-					return errors.New("could not get database entry for package (" + depend + ")")
+					return errors.New("could not get database entry for package (" + resolvedPkg.PkgName + ")")
 				}
 				operation.InsertActionAt(pos, &FetchPackageAction{
-					InstallationReason: installationReason,
+					InstallationReason: resolvedPkg.InstallationReason,
 					DatabaseEntry:      entry,
 				})
 				pos++
