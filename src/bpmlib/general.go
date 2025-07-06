@@ -7,6 +7,7 @@ import (
 	"os"
 	"path"
 	"slices"
+	"strings"
 )
 
 type ReinstallMethod uint8
@@ -125,6 +126,28 @@ func InstallPackages(rootDir string, installationReason InstallationReason, rein
 			return nil, err
 		} else {
 			log.Printf("Warning: %s", err)
+		}
+	}
+
+	// Check whether compiling source packages on different root directory
+	if rootDir != "/" {
+		sourcePackages := make([]string, 0)
+		for _, action := range operation.Actions {
+			switch action.(type) {
+			case *InstallPackageAction:
+				if action.(*InstallPackageAction).BpmPackage.PkgInfo.Type == "source" {
+					sourcePackages = append(sourcePackages, action.(*InstallPackageAction).BpmPackage.PkgInfo.Name)
+				}
+			case *FetchPackageAction:
+				if action.(*FetchPackageAction).DatabaseEntry.Info.Type == "source" {
+					sourcePackages = append(sourcePackages, action.(*FetchPackageAction).DatabaseEntry.Info.Name)
+				}
+			}
+		}
+
+		// Return error if source packages are present in the operation
+		if len(sourcePackages) != 0 {
+			return nil, fmt.Errorf("cannot compile source packages in different root directory: %s", strings.Join(sourcePackages, ", "))
 		}
 	}
 
