@@ -16,6 +16,7 @@ import (
 	"sort"
 	"strconv"
 	"strings"
+	"syscall"
 )
 
 type BPMPackage struct {
@@ -584,14 +585,25 @@ func extractPackage(bpmpkg *BPMPackage, verbose bool, filename, rootDir string) 
 		extractFilename := path.Join(rootDir, header.Name)
 		switch header.Typeflag {
 		case tar.TypeDir:
-			if err := os.Mkdir(extractFilename, 0755); err != nil {
-				if !os.IsExist(err) {
-					return err
-				}
-			} else {
+			if _, err := os.Stat(extractFilename); err == nil {
 				if verbose {
-					fmt.Println("Creating Directory: " + extractFilename)
+					fmt.Printf("Skipping Directory: %s (Directory already exists)\n", extractFilename)
 				}
+				continue
+			}
+
+			if err := os.Mkdir(extractFilename, 0755); err != nil && !os.IsExist(err) {
+				return err
+			}
+
+			// Using syscall instead of os.Chmod because it seems to strip the setuid, setgid and sticky bits
+			err := syscall.Chmod(extractFilename, uint32(header.Mode))
+			if err != nil {
+				return err
+			}
+
+			if verbose {
+				fmt.Printf("Created directory %s (%o)\n", extractFilename, header.Mode)
 			}
 		case tar.TypeReg:
 			skip := false
@@ -600,7 +612,7 @@ func extractPackage(bpmpkg *BPMPackage, verbose bool, filename, rootDir string) 
 					if strings.HasSuffix(k, "/") {
 						if strings.HasPrefix(header.Name, k) {
 							if verbose {
-								fmt.Println("Skipping File: " + extractFilename + " (Containing directory is set to be kept during reinstalls/updates)")
+								fmt.Printf("Skipping File: %s (Containing directory is set to be kept during reinstalls/updates)\n", extractFilename)
 							}
 							skip = true
 							continue
@@ -608,7 +620,7 @@ func extractPackage(bpmpkg *BPMPackage, verbose bool, filename, rootDir string) 
 					} else {
 						if header.Name == k {
 							if verbose {
-								fmt.Println("Skipping File: " + extractFilename + " (File is configured to be kept during reinstalls/updates)")
+								fmt.Printf("Skipping File: %s (File is configured to be kept during reinstalls/updates)\n", extractFilename)
 							}
 							skip = true
 							continue
@@ -624,33 +636,39 @@ func extractPackage(bpmpkg *BPMPackage, verbose bool, filename, rootDir string) 
 				return err
 			}
 			outFile, err := os.Create(extractFilename)
-			if verbose {
-				fmt.Println("Creating File: " + extractFilename)
-			}
 			if err != nil {
 				return err
 			}
 			if _, err := io.Copy(outFile, packageFilesReader); err != nil {
 				return err
 			}
-			if err := os.Chmod(extractFilename, header.FileInfo().Mode()); err != nil {
-				return err
-			}
 			err = outFile.Close()
 			if err != nil {
 				return err
 			}
-		case tar.TypeSymlink:
-			if verbose {
-				fmt.Println("Creating Symlink: " + extractFilename + " -> " + header.Linkname)
+
+			// Using syscall instead of os.Chmod because it seems to strip the setuid, setgid and sticky bits
+			err = syscall.Chmod(extractFilename, uint32(header.Mode))
+			if err != nil {
+				return err
 			}
+
+			if verbose {
+				fmt.Printf("Created File: %s (%o)\n", extractFilename, header.Mode)
+			}
+		case tar.TypeSymlink:
 			err := os.Remove(extractFilename)
 			if err != nil && !os.IsNotExist(err) {
 				return err
 			}
+
 			err = os.Symlink(header.Linkname, extractFilename)
 			if err != nil {
 				return err
+			}
+
+			if verbose {
+				fmt.Println("Created Symlink: " + extractFilename + " -> " + header.Linkname)
 			}
 		case tar.TypeLink:
 			if verbose {
@@ -666,12 +684,13 @@ func extractPackage(bpmpkg *BPMPackage, verbose bool, filename, rootDir string) 
 		}
 	}
 	for extractFilename, destination := range seenHardlinks {
-		if verbose {
-			fmt.Println("Creating Hard Link: " + extractFilename + " -> " + path.Join(rootDir, destination))
-		}
 		err := os.Link(path.Join(rootDir, destination), extractFilename)
 		if err != nil {
 			return err
+		}
+
+		if verbose {
+			fmt.Println("Created Hard Link: " + extractFilename + " -> " + path.Join(rootDir, destination))
 		}
 	}
 	defer archive.Close()
