@@ -596,6 +596,11 @@ func extractPackage(bpmpkg *BPMPackage, verbose bool, filename, rootDir string) 
 				return err
 			}
 
+			err = os.Chown(extractFilename, header.Uid, header.Gid)
+			if err != nil {
+				return err
+			}
+
 			// Using syscall instead of os.Chmod because it seems to strip the setuid, setgid and sticky bits
 			err := syscall.Chmod(extractFilename, uint32(header.Mode))
 			if err != nil {
@@ -643,6 +648,11 @@ func extractPackage(bpmpkg *BPMPackage, verbose bool, filename, rootDir string) 
 				return err
 			}
 			err = outFile.Close()
+			if err != nil {
+				return err
+			}
+
+			err = os.Chown(extractFilename, header.Uid, header.Gid)
 			if err != nil {
 				return err
 			}
