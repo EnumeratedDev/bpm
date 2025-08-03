@@ -34,7 +34,7 @@ var pkgListNumbers = false
 var pkgListNames = false
 var reinstall = false
 var reinstallAll = false
-var noOptional = false
+var installOptional = false
 var installationReason = ""
 var nosync = true
 var removeUnused = false
@@ -280,7 +280,7 @@ func resolveCommand() {
 		}
 
 		// Create installation operation
-		operation, err := bpmlib.InstallPackages(rootDir, ir, reinstallMethod, !noOptional, force, verbose, subcommandArgs...)
+		operation, err := bpmlib.InstallPackages(rootDir, ir, reinstallMethod, installOptional, force, verbose, subcommandArgs...)
 		if errors.As(err, &bpmlib.PackageNotFoundErr{}) || errors.As(err, &bpmlib.DependencyNotFoundErr{}) || errors.As(err, &bpmlib.PackageConflictErr{}) {
 			log.Fatalf("Error: %s", err)
 		} else if err != nil {
@@ -339,7 +339,7 @@ func resolveCommand() {
 		}
 
 		// Create update operation
-		operation, err := bpmlib.UpdatePackages(rootDir, !nosync, !noOptional, force, verbose)
+		operation, err := bpmlib.UpdatePackages(rootDir, !nosync, installOptional, force, verbose)
 		if errors.As(err, &bpmlib.PackageNotFoundErr{}) || errors.As(err, &bpmlib.DependencyNotFoundErr{}) || errors.As(err, &bpmlib.PackageConflictErr{}) {
 			log.Fatalf("Error: %s", err)
 		} else if err != nil {
@@ -756,7 +756,7 @@ func printHelp() {
 	fmt.Println("       -f skips dependency, conflict and architecture checking")
 	fmt.Println("       --reinstall Reinstalls packages even if they do not have a newer version available")
 	fmt.Println("       --reinstall-all Same as --reinstall but also reinstalls dependencies")
-	fmt.Println("       --no-optional Prevents installation of optional dependencies")
+	fmt.Println("       --optional Installs all optional dependencies")
 	fmt.Println("       --installation-reason=<manual/dependency> sets the installation reason for all newly installed packages")
 	fmt.Println("-> bpm update [-R, -v, -y, -f, --reinstall, --no-sync] | updates all packages that are available in the configured databases")
 	fmt.Println("       -R=<path> lets you define the root path which will be used")
@@ -816,7 +816,7 @@ func resolveFlags() {
 	installFlagSet.BoolVar(&force, "f", false, "Force installation by skipping architecture and dependency resolution")
 	installFlagSet.BoolVar(&reinstall, "reinstall", false, "Reinstalls packages even if they do not have a newer version available")
 	installFlagSet.BoolVar(&reinstallAll, "reinstall-all", false, "Same as --reinstall but also reinstalls dependencies")
-	installFlagSet.BoolVar(&noOptional, "no-optional", false, "Prevents installation of optional dependencies")
+	installFlagSet.BoolVar(&installOptional, "optional", false, "Installs all optional dependencies")
 	installFlagSet.StringVar(&installationReason, "installation-reason", "", "Set the installation reason for all newly installed packages")
 	installFlagSet.Usage = printHelp
 	// Update flags
