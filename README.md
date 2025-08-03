@@ -5,7 +5,7 @@ BPM is a simple package manager for Linux systems
 
 ## Features
 - Simple to use subcommands
-- Can install binary packages (and source packages in the future)
+- Can install both binary and source packages
 
 ## Information
 BPM is still in very early development. Do not install it without knowing what you are doing. I would only recommend using it in a Virtual Machine for testing
