@@ -4,7 +4,7 @@ BINDIR ?= $(PREFIX)/bin
 SYSCONFDIR := $(PREFIX)/etc
 
 # Compilers and tools
-GO ?= $(shell which go)
+GO ?= go
 
 # Build-time variables
 ROOT_COMPILATION_UID ?= 65534

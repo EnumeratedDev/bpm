@@ -14,7 +14,6 @@ BPM is still in very early development. Do not install it without knowing what y
 
 - Download `go` from your package manager or from the go website
 - Download `make` from your package manager
-- Download `which` from your package manager
 - Run the following command to compile the project. You may need to set the `GO` environment variable if your Go installation is not in your PATH
 ```sh
 make
