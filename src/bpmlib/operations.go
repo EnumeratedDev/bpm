@@ -287,7 +287,7 @@ func (operation *BPMOperation) CheckForConflicts() (map[string][]string, error) 
 	for i, value := range installedPackages {
 		bpmpkg := GetPackage(value, operation.RootDir)
 		if bpmpkg == nil {
-			return nil, errors.New(fmt.Sprintf("could not find installed package (%s)", value))
+			return nil, fmt.Errorf("could not find installed package (%s)", value)
 		}
 		allPackages[i] = bpmpkg.PkgInfo
 	}
@@ -452,13 +452,13 @@ func (operation *BPMOperation) Execute(verbose, force bool) (err error) {
 				// Fetch package from database
 				fetchedPackage, err := entry.Database.FetchPackage(entry.Info.Name)
 				if err != nil {
-					return errors.New(fmt.Sprintf("could not fetch package (%s): %s\n", entry.Info.Name, err))
+					return fmt.Errorf("could not fetch package (%s): %s\n", entry.Info.Name, err)
 				}
 
 				// Read fetched package
 				bpmpkg, err = ReadPackage(fetchedPackage)
 				if err != nil {
-					return errors.New(fmt.Sprintf("could not fetch package (%s): %s\n", entry.Info.Name, err))
+					return fmt.Errorf("could not fetch package (%s): %s\n", entry.Info.Name, err)
 				}
 
 				// Add fetched package to map
@@ -469,7 +469,7 @@ func (operation *BPMOperation) Execute(verbose, force bool) (err error) {
 				// Read fetched package
 				bpmpkg, err = ReadPackage(fetchedPackages[entry.Download])
 				if err != nil {
-					return errors.New(fmt.Sprintf("could not read package (%s): %s\n", entry.Info.Name, err))
+					return fmt.Errorf("could not read package (%s): %s\n", entry.Info.Name, err)
 				}
 
 				fmt.Printf("Package (%s) was successfully fetched!\n", entry.Info.Name)
@@ -517,13 +517,12 @@ func (operation *BPMOperation) Execute(verbose, force bool) (err error) {
 			pkgInfo := action.(*RemovePackageAction).BpmPackage.PkgInfo
 			err := removePackage(pkgInfo.Name, verbose, operation.RootDir)
 			if err != nil {
-				return errors.New(fmt.Sprintf("could not remove package (%s): %s\n", pkgInfo.Name, err))
+				return fmt.Errorf("could not remove package (%s): %s\n", pkgInfo.Name, err)
 			}
 		} else if action.GetActionType() == "install" {
 			value := action.(*InstallPackageAction)
 			fileToInstall := value.File
 			bpmpkg := value.BpmPackage
-			isReinstall := IsPackageInstalled(bpmpkg.PkgInfo.Name, operation.RootDir)
 			var err error
 
 			// Compile package if type is 'source'
@@ -572,14 +571,15 @@ func (operation *BPMOperation) Execute(verbose, force bool) (err error) {
 				err = installPackage(fileToInstall, operation.RootDir, verbose, force)
 			}
 			if err != nil {
-				return errors.New(fmt.Sprintf("could not install package (%s): %s\n", bpmpkg.PkgInfo.Name, err))
+				return fmt.Errorf("could not install package (%s): %s\n", bpmpkg.PkgInfo.Name, err)
 			}
-			if !isReinstall {
-				err := SetInstallationReason(bpmpkg.PkgInfo.Name, value.InstallationReason, operation.RootDir)
-				if err != nil {
-					return errors.New(fmt.Sprintf("could not set installation reason for package (%s): %s\n", value.BpmPackage.PkgInfo.Name, err))
-				}
+
+			// Set installed package's installation reason
+			err = SetInstallationReason(bpmpkg.PkgInfo.Name, value.InstallationReason, operation.RootDir)
+			if err != nil {
+				return fmt.Errorf("could not set installation reason for package (%s): %s\n", value.BpmPackage.PkgInfo.Name, err)
 			}
+
 			fmt.Printf("Package (%s) was successfully installed\n", bpmpkg.PkgInfo.Name)
 		}
 	}

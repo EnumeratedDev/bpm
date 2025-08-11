@@ -19,7 +19,8 @@ const (
 )
 
 // InstallPackages installs the specified packages into the given root directory by fetching them from databases or directly from local bpm archives
-func InstallPackages(rootDir string, installationReason InstallationReason, reinstallMethod ReinstallMethod, installOptionalDependencies, forceInstallation, verbose bool, packages ...string) (operation *BPMOperation, err error) {
+func InstallPackages(rootDir string, forceInstallationReason InstallationReason, reinstallMethod ReinstallMethod, installOptionalDependencies, forceInstallation, verbose bool, packages ...string) (operation *BPMOperation, err error) {
+
 	// Setup operation struct
 	operation = &BPMOperation{
 		Actions:           make([]OperationAction, 0),
@@ -44,6 +45,16 @@ func InstallPackages(rootDir string, installationReason InstallationReason, rein
 						continue
 					}
 
+					// Set package installation reason
+					installationReason := forceInstallationReason
+					if installationReason == InstallationReasonUnknown {
+						if IsPackageInstalled(splitPkg.Name, rootDir) {
+							installationReason = GetInstallationReason(splitPkg.Name, rootDir)
+						} else {
+							installationReason = InstallationReasonManual
+						}
+					}
+
 					operation.AppendAction(&InstallPackageAction{
 						File:                  pkg,
 						InstallationReason:    installationReason,
@@ -56,6 +67,16 @@ func InstallPackages(rootDir string, installationReason InstallationReason, rein
 
 			if reinstallMethod == ReinstallMethodNone && IsPackageInstalled(bpmpkg.PkgInfo.Name, rootDir) && GetPackageInfo(bpmpkg.PkgInfo.Name, rootDir).GetFullVersion() == bpmpkg.PkgInfo.GetFullVersion() {
 				continue
+			}
+
+			// Set package installation reason
+			installationReason := forceInstallationReason
+			if installationReason == InstallationReasonUnknown {
+				if IsPackageInstalled(bpmpkg.PkgInfo.Name, rootDir) {
+					installationReason = GetInstallationReason(bpmpkg.PkgInfo.Name, rootDir)
+				} else {
+					installationReason = InstallationReasonManual
+				}
 			}
 
 			operation.AppendAction(&InstallPackageAction{
@@ -82,6 +103,16 @@ func InstallPackages(rootDir string, installationReason InstallationReason, rein
 			}
 			if reinstallMethod == ReinstallMethodNone && IsPackageInstalled(entry.Info.Name, rootDir) && GetPackageInfo(entry.Info.Name, rootDir).GetFullVersion() == entry.Info.GetFullVersion() {
 				continue
+			}
+
+			// Set package installation reason
+			installationReason := forceInstallationReason
+			if installationReason == InstallationReasonUnknown {
+				if IsPackageInstalled(entry.Info.Name, rootDir) {
+					installationReason = GetInstallationReason(entry.Info.Name, rootDir)
+				} else {
+					installationReason = InstallationReasonManual
+				}
 			}
 
 			operation.AppendAction(&FetchPackageAction{

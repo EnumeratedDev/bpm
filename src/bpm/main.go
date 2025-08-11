@@ -5,7 +5,6 @@ import (
 	"errors"
 	"flag"
 	"fmt"
-	"git.enumerated.dev/bubble-package-manager/bpm/src/bpmlib"
 	"log"
 	"os"
 	"os/exec"
@@ -13,6 +12,8 @@ import (
 	"path/filepath"
 	"slices"
 	"strings"
+
+	"git.enumerated.dev/bubble-package-manager/bpm/src/bpmlib"
 )
 
 /* -------------BPM | Bubble Package Manager-------------- */
@@ -250,7 +251,7 @@ func resolveCommand() {
 		}
 
 		// Check if installationReason argument is valid
-		ir := bpmlib.InstallationReasonManual
+		ir := bpmlib.InstallationReasonUnknown
 		switch installationReason {
 		case "manual":
 			ir = bpmlib.InstallationReasonManual
