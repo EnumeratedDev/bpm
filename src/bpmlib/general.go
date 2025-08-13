@@ -5,7 +5,9 @@ import (
 	"fmt"
 	"log"
 	"os"
+	"path"
 	"slices"
+	"strings"
 )
 
 type ReinstallMethod uint8
@@ -16,15 +18,16 @@ const (
 	ReinstallMethodAll       ReinstallMethod = iota
 )
 
-// InstallPackages installs the specified packages into the given root directory by fetching them from repositories or directly from local bpm archives
-func InstallPackages(rootDir string, installationReason InstallationReason, reinstallMethod ReinstallMethod, installOptionalDependencies, forceInstallation, verbose bool, packages ...string) (operation *BPMOperation, err error) {
+// InstallPackages installs the specified packages into the given root directory by fetching them from databases or directly from local bpm archives
+func InstallPackages(rootDir string, forceInstallationReason InstallationReason, reinstallMethod ReinstallMethod, installOptionalDependencies, forceInstallation, verbose bool, packages ...string) (operation *BPMOperation, err error) {
+
 	// Setup operation struct
 	operation = &BPMOperation{
-		Actions:                 make([]OperationAction, 0),
-		UnresolvedDepends:       make([]string, 0),
-		Changes:                 make(map[string]string),
-		RootDir:                 rootDir,
-		ForceInstallationReason: installationReason,
+		Actions:           make([]OperationAction, 0),
+		UnresolvedDepends: make([]string, 0),
+		Changes:           make(map[string]string),
+		RootDir:           rootDir,
+		compiledPackages:  make(map[string]string),
 	}
 
 	// Resolve packages
@@ -35,21 +38,59 @@ func InstallPackages(rootDir string, installationReason InstallationReason, rein
 			if err != nil {
 				return nil, fmt.Errorf("could not read package: %s", err)
 			}
+
+			if bpmpkg.PkgInfo.Type == "source" && bpmpkg.PkgInfo.IsSplitPackage() {
+				for _, splitPkg := range bpmpkg.PkgInfo.SplitPackages {
+					if reinstallMethod == ReinstallMethodNone && IsPackageInstalled(splitPkg.Name, rootDir) && GetPackageInfo(splitPkg.Name, rootDir).GetFullVersion() == splitPkg.GetFullVersion() {
+						continue
+					}
+
+					// Set package installation reason
+					installationReason := forceInstallationReason
+					if installationReason == InstallationReasonUnknown {
+						if IsPackageInstalled(splitPkg.Name, rootDir) {
+							installationReason = GetInstallationReason(splitPkg.Name, rootDir)
+						} else {
+							installationReason = InstallationReasonManual
+						}
+					}
+
+					operation.AppendAction(&InstallPackageAction{
+						File:                  pkg,
+						InstallationReason:    installationReason,
+						BpmPackage:            bpmpkg,
+						SplitPackageToInstall: splitPkg.Name,
+					})
+				}
+				continue
+			}
+
 			if reinstallMethod == ReinstallMethodNone && IsPackageInstalled(bpmpkg.PkgInfo.Name, rootDir) && GetPackageInfo(bpmpkg.PkgInfo.Name, rootDir).GetFullVersion() == bpmpkg.PkgInfo.GetFullVersion() {
 				continue
 			}
+
+			// Set package installation reason
+			installationReason := forceInstallationReason
+			if installationReason == InstallationReasonUnknown {
+				if IsPackageInstalled(bpmpkg.PkgInfo.Name, rootDir) {
+					installationReason = GetInstallationReason(bpmpkg.PkgInfo.Name, rootDir)
+				} else {
+					installationReason = InstallationReasonManual
+				}
+			}
+
 			operation.AppendAction(&InstallPackageAction{
-				File:         pkg,
-				IsDependency: false,
-				BpmPackage:   bpmpkg,
+				File:               pkg,
+				InstallationReason: installationReason,
+				BpmPackage:         bpmpkg,
 			})
 		} else {
-			var entry *RepositoryEntry
+			var entry *BPMDatabaseEntry
 
-			if e, _, err := GetRepositoryEntry(pkg); err == nil {
+			if e, _, err := GetDatabaseEntry(pkg); err == nil {
 				entry = e
 			} else if isVirtual, p := IsVirtualPackage(pkg, rootDir); isVirtual {
-				entry, _, err = GetRepositoryEntry(p)
+				entry, _, err = GetDatabaseEntry(p)
 				if err != nil {
 					pkgsNotFound = append(pkgsNotFound, pkg)
 					continue
@@ -63,9 +104,20 @@ func InstallPackages(rootDir string, installationReason InstallationReason, rein
 			if reinstallMethod == ReinstallMethodNone && IsPackageInstalled(entry.Info.Name, rootDir) && GetPackageInfo(entry.Info.Name, rootDir).GetFullVersion() == entry.Info.GetFullVersion() {
 				continue
 			}
+
+			// Set package installation reason
+			installationReason := forceInstallationReason
+			if installationReason == InstallationReasonUnknown {
+				if IsPackageInstalled(entry.Info.Name, rootDir) {
+					installationReason = GetInstallationReason(entry.Info.Name, rootDir)
+				} else {
+					installationReason = InstallationReasonManual
+				}
+			}
+
 			operation.AppendAction(&FetchPackageAction{
-				IsDependency:    false,
-				RepositoryEntry: entry,
+				InstallationReason: installationReason,
+				DatabaseEntry:      entry,
 			})
 		}
 	}
@@ -108,16 +160,39 @@ func InstallPackages(rootDir string, installationReason InstallationReason, rein
 		}
 	}
 
+	// Check whether compiling source packages on different root directory
+	if rootDir != "/" {
+		sourcePackages := make([]string, 0)
+		for _, action := range operation.Actions {
+			switch action.(type) {
+			case *InstallPackageAction:
+				if action.(*InstallPackageAction).BpmPackage.PkgInfo.Type == "source" {
+					sourcePackages = append(sourcePackages, action.(*InstallPackageAction).BpmPackage.PkgInfo.Name)
+				}
+			case *FetchPackageAction:
+				if action.(*FetchPackageAction).DatabaseEntry.Info.Type == "source" {
+					sourcePackages = append(sourcePackages, action.(*FetchPackageAction).DatabaseEntry.Info.Name)
+				}
+			}
+		}
+
+		// Return error if source packages are present in the operation
+		if len(sourcePackages) != 0 {
+			return nil, fmt.Errorf("cannot compile source packages in different root directory: %s", strings.Join(sourcePackages, ", "))
+		}
+	}
+
 	return operation, nil
 }
 
 // RemovePackages removes the specified packages from the given root directory
-func RemovePackages(rootDir string, removeUnusedPackagesOnly, cleanupDependencies, verbose bool, packages ...string) (operation *BPMOperation, err error) {
+func RemovePackages(rootDir string, removeUnusedPackagesOnly, cleanupDependencies bool, packages ...string) (operation *BPMOperation, err error) {
 	operation = &BPMOperation{
 		Actions:           make([]OperationAction, 0),
 		UnresolvedDepends: make([]string, 0),
 		Changes:           make(map[string]string),
 		RootDir:           rootDir,
+		compiledPackages:  make(map[string]string),
 	}
 
 	// Search for packages
@@ -139,7 +214,7 @@ func RemovePackages(rootDir string, removeUnusedPackagesOnly, cleanupDependencie
 
 	// Do package cleanup
 	if cleanupDependencies {
-		err := operation.Cleanup(verbose)
+		err := operation.Cleanup(true)
 		if err != nil {
 			return nil, fmt.Errorf("could not perform cleanup for operation: %s", err)
 		}
@@ -148,16 +223,17 @@ func RemovePackages(rootDir string, removeUnusedPackagesOnly, cleanupDependencie
 }
 
 // CleanupPackages finds packages installed as dependencies which are no longer required by the rest of the system in the given root directory
-func CleanupPackages(rootDir string, verbose bool) (operation *BPMOperation, err error) {
+func CleanupPackages(cleanupMakeDepends bool, rootDir string) (operation *BPMOperation, err error) {
 	operation = &BPMOperation{
 		Actions:           make([]OperationAction, 0),
 		UnresolvedDepends: make([]string, 0),
 		Changes:           make(map[string]string),
 		RootDir:           rootDir,
+		compiledPackages:  make(map[string]string),
 	}
 
 	// Do package cleanup
-	err = operation.Cleanup(verbose)
+	err = operation.Cleanup(cleanupMakeDepends)
 	if err != nil {
 		return nil, fmt.Errorf("could not perform cleanup for operation: %s", err)
 	}
@@ -165,9 +241,91 @@ func CleanupPackages(rootDir string, verbose bool) (operation *BPMOperation, err
 	return operation, nil
 }
 
+func CleanupCache(rootDir string, cleanupCompilationFiles, cleanupCompiledPackages, cleanupFetchedPackages, verbose bool) error {
+	if cleanupCompilationFiles {
+		globalCompilationCacheDir := path.Join(rootDir, "var/cache/bpm/compilation")
+
+		// Ensure path exists and is a directory
+		if stat, err := os.Stat(globalCompilationCacheDir); err == nil && stat.IsDir() {
+			// Delete directory
+			if verbose {
+				log.Printf("Removing directory (%s)\n", globalCompilationCacheDir)
+			}
+			err = os.RemoveAll(globalCompilationCacheDir)
+			if err != nil {
+				return err
+			}
+		}
+
+		// Get home directories of users in root directory
+		homeDirs, err := os.ReadDir(path.Join(rootDir, "home"))
+		if err != nil {
+			return err
+		}
+
+		// Loop through all home directories
+		for _, homeDir := range homeDirs {
+			// Skip if not a directory
+			if !homeDir.IsDir() {
+				continue
+			}
+
+			localCompilationDir := path.Join(rootDir, "home", homeDir.Name(), ".cache/bpm/compilation")
+
+			// Ensure path exists and is a directory
+			if stat, err := os.Stat(localCompilationDir); err != nil || !stat.IsDir() {
+				continue
+			}
+
+			// Delete directory
+			if verbose {
+				log.Printf("Removing directory (%s)\n", localCompilationDir)
+			}
+			err = os.RemoveAll(localCompilationDir)
+			if err != nil {
+				return err
+			}
+		}
+	}
+
+	if cleanupCompiledPackages {
+		dirToRemove := path.Join(rootDir, "var/cache/bpm/compiled")
+
+		// Ensure path exists and is a directory
+		if stat, err := os.Stat(dirToRemove); err == nil && stat.IsDir() {
+			// Delete directory
+			if verbose {
+				log.Printf("Removing directory (%s)\n", dirToRemove)
+			}
+			err = os.RemoveAll(dirToRemove)
+			if err != nil {
+				return err
+			}
+		}
+	}
+
+	if cleanupFetchedPackages {
+		dirToRemove := path.Join(rootDir, "var/cache/bpm/fetched")
+
+		// Ensure path exists and is a directory
+		if stat, err := os.Stat(dirToRemove); err == nil && stat.IsDir() {
+			// Delete directory
+			if verbose {
+				log.Printf("Removing directory (%s)\n", dirToRemove)
+			}
+			err = os.RemoveAll(dirToRemove)
+			if err != nil {
+				return err
+			}
+		}
+	}
+
+	return nil
+}
+
 // UpdatePackages fetches the newest versions of all installed packages from
 func UpdatePackages(rootDir string, syncDatabase bool, installOptionalDependencies, forceInstallation, verbose bool) (operation *BPMOperation, err error) {
-	// Sync repositories
+	// Sync databases
 	if syncDatabase {
 		err := SyncDatabase(verbose)
 		if err != nil {
@@ -176,12 +334,16 @@ func UpdatePackages(rootDir string, syncDatabase bool, installOptionalDependenci
 		if verbose {
 			fmt.Println("All package databases synced successfully!")
 		}
-	}
 
-	// Reload config and local databases
-	err = ReadConfig()
-	if err != nil {
-		return nil, fmt.Errorf("could not read BPM config: %s", err)
+		// Reload config and local databases
+		err = ReadConfig()
+		if err != nil {
+			return nil, fmt.Errorf("could not read BPM config: %s", err)
+		}
+		err = ReadLocalDatabaseFiles()
+		if err != nil {
+			return nil, fmt.Errorf("could not read local databases: %s", err)
+		}
 	}
 
 	// Get installed packages and check for updates
@@ -191,11 +353,11 @@ func UpdatePackages(rootDir string, syncDatabase bool, installOptionalDependenci
 	}
 
 	operation = &BPMOperation{
-		Actions:                 make([]OperationAction, 0),
-		UnresolvedDepends:       make([]string, 0),
-		Changes:                 make(map[string]string),
-		RootDir:                 rootDir,
-		ForceInstallationReason: InstallationReasonUnknown,
+		Actions:           make([]OperationAction, 0),
+		UnresolvedDepends: make([]string, 0),
+		Changes:           make(map[string]string),
+		RootDir:           rootDir,
+		compiledPackages:  make(map[string]string),
 	}
 
 	// Search for packages
@@ -203,11 +365,11 @@ func UpdatePackages(rootDir string, syncDatabase bool, installOptionalDependenci
 		if slices.Contains(BPMConfig.IgnorePackages, pkg) {
 			continue
 		}
-		var entry *RepositoryEntry
+		var entry *BPMDatabaseEntry
 		// Check if installed package can be replaced and install that instead
 		if e := FindReplacement(pkg); e != nil {
 			entry = e
-		} else if entry, _, err = GetRepositoryEntry(pkg); err != nil {
+		} else if entry, _, err = GetDatabaseEntry(pkg); err != nil {
 			continue
 		}
 
@@ -218,8 +380,8 @@ func UpdatePackages(rootDir string, syncDatabase bool, installOptionalDependenci
 			comparison := ComparePackageVersions(*entry.Info, *installedInfo)
 			if comparison > 0 {
 				operation.AppendAction(&FetchPackageAction{
-					IsDependency:    false,
-					RepositoryEntry: entry,
+					InstallationReason: GetInstallationReason(pkg, rootDir),
+					DatabaseEntry:      entry,
 				})
 			}
 		}
@@ -245,12 +407,12 @@ func UpdatePackages(rootDir string, syncDatabase bool, installOptionalDependenci
 
 // SyncDatabase syncs all databases declared in /etc/bpm.conf
 func SyncDatabase(verbose bool) (err error) {
-	for _, repo := range BPMConfig.Repositories {
+	for _, db := range BPMConfig.Databases {
 		if verbose {
-			fmt.Printf("Fetching package database for repository (%s)...\n", repo.Name)
+			fmt.Printf("Fetching package database file for database (%s)...\n", db.Name)
 		}
 
-		err := repo.SyncLocalDatabase()
+		err := db.SyncLocalDatabaseFile()
 		if err != nil {
 			return err
 		}

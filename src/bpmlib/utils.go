@@ -2,9 +2,7 @@ package bpmlib
 
 import (
 	"fmt"
-	"io"
 	"math"
-	"os"
 	"syscall"
 )
 
@@ -12,7 +10,7 @@ func GetArch() string {
 	uname := syscall.Utsname{}
 	err := syscall.Uname(&uname)
 	if err != nil {
-		return ""
+		return "unknown"
 	}
 
 	var byteString [65]byte
@@ -21,29 +19,6 @@ func GetArch() string {
 		byteString[indexLength] = uint8(uname.Machine[indexLength])
 	}
 	return string(byteString[:indexLength])
-}
-
-func copyFileContents(src, dst string) (err error) {
-	in, err := os.Open(src)
-	if err != nil {
-		return
-	}
-	defer in.Close()
-	out, err := os.Create(dst)
-	if err != nil {
-		return
-	}
-	defer func() {
-		cerr := out.Close()
-		if err == nil {
-			err = cerr
-		}
-	}()
-	if _, err = io.Copy(out, in); err != nil {
-		return
-	}
-	err = out.Sync()
-	return
 }
 
 func stringSliceRemove(s []string, r string) []string {

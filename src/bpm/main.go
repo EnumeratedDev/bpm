@@ -5,12 +5,15 @@ import (
 	"errors"
 	"flag"
 	"fmt"
-	"git.enumerated.dev/bubble-package-manager/bpm/src/bpmlib"
 	"log"
 	"os"
+	"os/exec"
+	"path"
 	"path/filepath"
 	"slices"
 	"strings"
+
+	"git.enumerated.dev/bubble-package-manager/bpm/src/bpmlib"
 )
 
 /* -------------BPM | Bubble Package Manager-------------- */
@@ -32,12 +35,20 @@ var pkgListNumbers = false
 var pkgListNames = false
 var reinstall = false
 var reinstallAll = false
-var noOptional = false
+var installOptional = false
 var installationReason = ""
 var nosync = true
 var removeUnused = false
 var doCleanup = false
-var showRepoInfo = false
+var showDatabaseInfo = false
+var installSrcPkgDepends = false
+var skipChecks = false
+var outputDirectory = ""
+var cleanupDependencies = false
+var cleanupMakeDependencies = false
+var cleanupCompilationFiles = false
+var cleanupCompiledPackages = false
+var cleanupFetchedPackages = false
 
 func main() {
 	err := bpmlib.ReadConfig()
@@ -62,6 +73,7 @@ const (
 	remove
 	cleanup
 	file
+	compile
 )
 
 func getCommandType() commandType {
@@ -86,6 +98,8 @@ func getCommandType() commandType {
 		return cleanup
 	case "file":
 		return file
+	case "compile":
+		return compile
 	default:
 		return help
 	}
@@ -104,7 +118,7 @@ func resolveCommand() {
 		}
 
 		// Read local databases
-		err := bpmlib.ReadLocalDatabases()
+		err := bpmlib.ReadLocalDatabaseFiles()
 		if err != nil {
 			log.Fatalf("Error: could not read local databases: %s", err)
 		}
@@ -112,13 +126,14 @@ func resolveCommand() {
 		for n, pkg := range packages {
 			var info *bpmlib.PackageInfo
 			isFile := false
-			if showRepoInfo {
+			showInstallationReason := false
+			if showDatabaseInfo {
 				var err error
-				var entry *bpmlib.RepositoryEntry
-				entry, _, err = bpmlib.GetRepositoryEntry(pkg)
+				var entry *bpmlib.BPMDatabaseEntry
+				entry, _, err = bpmlib.GetDatabaseEntry(pkg)
 				if err != nil {
 					if entry = bpmlib.ResolveVirtualPackage(pkg); entry == nil {
-						log.Fatalf("Error: could not find package (%s) in any repository\n", pkg)
+						log.Fatalf("Error: could not find package (%s) in any database\n", pkg)
 					}
 				}
 				info = entry.Info
@@ -135,6 +150,7 @@ func resolveCommand() {
 				} else {
 					info = bpmlib.GetPackageInfo(pkg, rootDir)
 				}
+				showInstallationReason = true
 			}
 			if info == nil {
 				log.Fatalf("Error: package (%s) is not installed\n", pkg)
@@ -149,11 +165,11 @@ func resolveCommand() {
 				}
 				fmt.Println("File: " + abs)
 			}
-			fmt.Println(bpmlib.CreateReadableInfo(true, true, true, info, rootDir))
+			fmt.Println(bpmlib.CreateReadableInfo(true, true, true, showInstallationReason, info, rootDir))
 		}
 	case list:
 		// Read local databases
-		err := bpmlib.ReadLocalDatabases()
+		err := bpmlib.ReadLocalDatabaseFiles()
 		if err != nil {
 			log.Fatalf("Error: could not read local databases: %s", err)
 		}
@@ -183,7 +199,7 @@ func resolveCommand() {
 				if n != 0 {
 					fmt.Println()
 				}
-				fmt.Println(bpmlib.CreateReadableInfo(true, true, true, info, rootDir))
+				fmt.Println(bpmlib.CreateReadableInfo(true, true, true, true, info, rootDir))
 			}
 		}
 	case search:
@@ -193,7 +209,7 @@ func resolveCommand() {
 		}
 
 		// Read local databases
-		err := bpmlib.ReadLocalDatabases()
+		err := bpmlib.ReadLocalDatabaseFiles()
 		if err != nil {
 			log.Fatalf("Error: could not read local databases: %s", err)
 		}
@@ -201,8 +217,8 @@ func resolveCommand() {
 		for i, term := range searchTerms {
 			nameResults := make([]*bpmlib.PackageInfo, 0)
 			descResults := make([]*bpmlib.PackageInfo, 0)
-			for _, repo := range bpmlib.BPMConfig.Repositories {
-				for _, entry := range repo.Entries {
+			for _, db := range bpmlib.BPMConfig.Databases {
+				for _, entry := range db.Entries {
 					if strings.Contains(entry.Info.Name, term) {
 						nameResults = append(nameResults, entry.Info)
 					} else if strings.Contains(entry.Info.Description, term) {
@@ -241,6 +257,8 @@ func resolveCommand() {
 			ir = bpmlib.InstallationReasonManual
 		case "dependency":
 			ir = bpmlib.InstallationReasonDependency
+		case "make-dependency":
+			ir = bpmlib.InstallationReasonMakeDependency
 		case "":
 		default:
 			log.Fatalf("Error: %s is not a valid installation reason", installationReason)
@@ -257,13 +275,13 @@ func resolveCommand() {
 		}
 
 		// Read local databases
-		err := bpmlib.ReadLocalDatabases()
+		err := bpmlib.ReadLocalDatabaseFiles()
 		if err != nil {
 			log.Fatalf("Error: could not read local databases: %s", err)
 		}
 
 		// Create installation operation
-		operation, err := bpmlib.InstallPackages(rootDir, ir, reinstallMethod, !noOptional, force, verbose, subcommandArgs...)
+		operation, err := bpmlib.InstallPackages(rootDir, ir, reinstallMethod, installOptional, force, verbose, subcommandArgs...)
 		if errors.As(err, &bpmlib.PackageNotFoundErr{}) || errors.As(err, &bpmlib.DependencyNotFoundErr{}) || errors.As(err, &bpmlib.PackageConflictErr{}) {
 			log.Fatalf("Error: %s", err)
 		} else if err != nil {
@@ -315,14 +333,14 @@ func resolveCommand() {
 
 		// Read local databases if no sync
 		if nosync {
-			err := bpmlib.ReadLocalDatabases()
+			err := bpmlib.ReadLocalDatabaseFiles()
 			if err != nil {
 				log.Fatalf("Error: could not read local databases: %s", err)
 			}
 		}
 
 		// Create update operation
-		operation, err := bpmlib.UpdatePackages(rootDir, !nosync, !noOptional, force, verbose)
+		operation, err := bpmlib.UpdatePackages(rootDir, !nosync, installOptional, force, verbose)
 		if errors.As(err, &bpmlib.PackageNotFoundErr{}) || errors.As(err, &bpmlib.DependencyNotFoundErr{}) || errors.As(err, &bpmlib.PackageConflictErr{}) {
 			log.Fatalf("Error: %s", err)
 		} else if err != nil {
@@ -397,13 +415,13 @@ func resolveCommand() {
 		}
 
 		// Read local databases
-		err := bpmlib.ReadLocalDatabases()
+		err := bpmlib.ReadLocalDatabaseFiles()
 		if err != nil {
 			log.Fatalf("Error: could not read local databases: %s", err)
 		}
 
 		// Create remove operation
-		operation, err := bpmlib.RemovePackages(rootDir, removeUnused, doCleanup, verbose, subcommandArgs...)
+		operation, err := bpmlib.RemovePackages(rootDir, removeUnused, doCleanup, subcommandArgs...)
 		if errors.As(err, &bpmlib.PackageNotFoundErr{}) || errors.As(err, &bpmlib.DependencyNotFoundErr{}) || errors.As(err, &bpmlib.PackageConflictErr{}) {
 			log.Fatalf("Error: %s", err)
 		} else if err != nil {
@@ -448,51 +466,58 @@ func resolveCommand() {
 			log.Fatalf("Error: this subcommand needs to be run with superuser permissions")
 		}
 
-		// Read local databases
-		err := bpmlib.ReadLocalDatabases()
+		err := bpmlib.CleanupCache(rootDir, cleanupCompilationFiles, cleanupCompiledPackages, cleanupFetchedPackages, verbose)
 		if err != nil {
-			log.Fatalf("Error: could not read local databases: %s", err)
+			log.Fatalf("Error: could not complete cache cleanup: %s", err)
 		}
 
-		// Create cleanup operation
-		operation, err := bpmlib.CleanupPackages(rootDir, verbose)
-		if errors.As(err, &bpmlib.PackageNotFoundErr{}) || errors.As(err, &bpmlib.DependencyNotFoundErr{}) || errors.As(err, &bpmlib.PackageConflictErr{}) {
-			log.Fatalf("Error: %s", err)
-		} else if err != nil {
-			log.Fatalf("Error: could not setup operation: %s\n", err)
-		}
-
-		// Exit if operation contains no actions
-		if len(operation.Actions) == 0 {
-			fmt.Println("No action needs to be taken")
-			return
-		}
-
-		// Show operation summary
-		operation.ShowOperationSummary()
-
-		// Confirmation Prompt
-		if !yesAll {
-			fmt.Printf("Are you sure you wish to remove all %d packages? [y\\N] ", len(operation.Actions))
-			reader := bufio.NewReader(os.Stdin)
-			text, _ := reader.ReadString('\n')
-			if strings.TrimSpace(strings.ToLower(text)) != "y" && strings.TrimSpace(strings.ToLower(text)) != "yes" {
-				fmt.Println("Cancelling package removal...")
-				os.Exit(1)
+		if cleanupDependencies || cleanupMakeDependencies {
+			// Read local databases
+			err := bpmlib.ReadLocalDatabaseFiles()
+			if err != nil {
+				log.Fatalf("Error: could not read local databases: %s", err)
 			}
-		}
 
-		// Execute operation
-		err = operation.Execute(verbose, force)
-		if err != nil {
-			log.Fatalf("Error: could not complete operation: %s\n", err)
-		}
+			// Create cleanup operation
+			operation, err := bpmlib.CleanupPackages(cleanupMakeDependencies, rootDir)
+			if errors.As(err, &bpmlib.PackageNotFoundErr{}) || errors.As(err, &bpmlib.DependencyNotFoundErr{}) || errors.As(err, &bpmlib.PackageConflictErr{}) {
+				log.Fatalf("Error: %s", err)
+			} else if err != nil {
+				log.Fatalf("Error: could not setup operation: %s\n", err)
+			}
 
-		// Executing hooks
-		fmt.Println("Running hooks...")
-		err = operation.RunHooks(verbose)
-		if err != nil {
-			log.Fatalf("Error: could not run hooks: %s\n", err)
+			// Exit if operation contains no actions
+			if len(operation.Actions) == 0 {
+				fmt.Println("No action needs to be taken")
+				return
+			}
+
+			// Show operation summary
+			operation.ShowOperationSummary()
+
+			// Confirmation Prompt
+			if !yesAll {
+				fmt.Printf("Are you sure you wish to remove all %d packages? [y\\N] ", len(operation.Actions))
+				reader := bufio.NewReader(os.Stdin)
+				text, _ := reader.ReadString('\n')
+				if strings.TrimSpace(strings.ToLower(text)) != "y" && strings.TrimSpace(strings.ToLower(text)) != "yes" {
+					fmt.Println("Cancelling package removal...")
+					os.Exit(1)
+				}
+			}
+
+			// Execute operation
+			err = operation.Execute(verbose, force)
+			if err != nil {
+				log.Fatalf("Error: could not complete operation: %s\n", err)
+			}
+
+			// Executing hooks
+			fmt.Println("Running hooks...")
+			err = operation.RunHooks(verbose)
+			if err != nil {
+				log.Fatalf("Error: could not run hooks: %s\n", err)
+			}
 		}
 	case file:
 		files := subcommandArgs
@@ -528,7 +553,7 @@ func resolveCommand() {
 
 			var pkgList []string
 			for _, pkg := range pkgs {
-				if slices.ContainsFunc(bpmlib.GetPackageFiles(pkg, rootDir), func(entry *bpmlib.PackageFileEntry) bool {
+				if slices.ContainsFunc(bpmlib.GetPackage(pkg, rootDir).PkgFiles, func(entry *bpmlib.PackageFileEntry) bool {
 					return entry.Path == absFile
 				}) {
 					pkgList = append(pkgList, pkg)
@@ -543,6 +568,169 @@ func resolveCommand() {
 				}
 			}
 		}
+	case compile:
+		if len(subcommandArgs) == 0 {
+			fmt.Println("No source packages were given")
+			return
+		}
+
+		// Read local databases
+		err := bpmlib.ReadLocalDatabaseFiles()
+		if err != nil {
+			log.Fatalf("Error: could not read local databases: %s", err)
+		}
+
+		// Compile packages
+		for _, sourcePackage := range subcommandArgs {
+			if _, err := os.Stat(sourcePackage); os.IsNotExist(err) {
+				log.Fatalf("Error: file (%s) does not exist!", sourcePackage)
+			}
+
+			// Read archive
+			bpmpkg, err := bpmlib.ReadPackage(sourcePackage)
+			if err != nil {
+				log.Fatalf("Could not read package (%s): %s", sourcePackage, err)
+			}
+
+			// Ensure archive is source BPM package
+			if bpmpkg.PkgInfo.Type != "source" {
+				log.Fatalf("Error: cannot compile a non-source package!")
+			}
+
+			// Get direct runtime and make dependencies
+			totalDepends := make([]string, 0)
+			for _, depend := range bpmpkg.PkgInfo.GetDependencies(true, false) {
+				if !slices.Contains(totalDepends, depend.PkgName) {
+					totalDepends = append(totalDepends, depend.PkgName)
+				}
+			}
+
+			// Get unmet dependencies
+			unmetDepends := slices.Clone(totalDepends)
+			installedPackages, err := bpmlib.GetInstalledPackages("/")
+			if err != nil {
+				log.Fatalf("Error: could not get installed packages: %s\n", err)
+			}
+			for i := len(unmetDepends) - 1; i >= 0; i-- {
+				if slices.Contains(installedPackages, unmetDepends[i]) {
+					unmetDepends = append(unmetDepends[:i], unmetDepends[i+1:]...)
+				} else if ok, _ := bpmlib.IsVirtualPackage(unmetDepends[i], rootDir); ok {
+					unmetDepends = append(unmetDepends[:i], unmetDepends[i+1:]...)
+				}
+			}
+
+			// Install missing source package dependencies
+			if installSrcPkgDepends && len(unmetDepends) > 0 {
+				// Get path to current executable
+				executable, err := os.Executable()
+				if err != nil {
+					log.Fatalf("Error: could not get path to executable: %s\n", err)
+				}
+
+				// Run 'bpm install' using the set privilege escalator command
+				args := []string{executable, "install", "--installation-reason=make-dependency"}
+				args = append(args, unmetDepends...)
+				cmd := exec.Command(bpmlib.BPMConfig.PrivilegeEscalatorCmd, args...)
+				if yesAll {
+					cmd.Args = slices.Insert(cmd.Args, 3, "-y")
+				}
+				cmd.Stdout = os.Stdout
+				cmd.Stderr = os.Stderr
+				cmd.Stdin = os.Stdin
+				if verbose {
+					fmt.Println("Running command: " + cmd.String())
+				}
+				err = cmd.Run()
+				if err != nil {
+					log.Fatalf("Error: dependency installation command failed: %s\n", err)
+				}
+			} else {
+				// Ensure the required dependencies are installed
+				if len(unmetDepends) != 0 {
+					log.Fatalf("Error: could not resolve dependencies: the following dependencies were not found in any databases: " + strings.Join(unmetDepends, ", "))
+				}
+			}
+
+			// Get current working directory
+			workdir, err := os.Getwd()
+			if err != nil {
+				log.Fatalf("Error: could not get working directory: %s", err)
+			}
+
+			// Get user home directory
+			homedir, err := os.UserHomeDir()
+			if err != nil {
+				log.Fatalf("Error: could not get user home directory: %s", err)
+			}
+
+			// Trim output directory
+			outputDirectory = strings.TrimSpace(outputDirectory)
+			if outputDirectory != "/" {
+				outputDirectory = strings.TrimSuffix(outputDirectory, "/")
+			}
+
+			// Set output directory if empty
+			if outputDirectory == "" {
+				outputDirectory = workdir
+			}
+
+			// Replace first tilde with user home directory
+			if strings.Split(outputDirectory, "/")[0] == "~" {
+				outputDirectory = strings.Replace(outputDirectory, "~", homedir, 1)
+			}
+
+			// Prepend current working directory to output directory if not an absolute path
+			if outputDirectory != "" && !strings.HasPrefix(outputDirectory, "/") {
+				outputDirectory = filepath.Join(workdir, outputDirectory)
+			}
+
+			// Clean path
+			path.Clean(outputDirectory)
+
+			// Ensure output directory exists and is a directory
+			stat, err := os.Stat(outputDirectory)
+			if err != nil {
+				log.Fatalf("Error: could not stat output directory (%s): %s", outputDirectory, err)
+			}
+			if !stat.IsDir() {
+				log.Fatalf("Error: output directory (%s) is not a directory", outputDirectory)
+			}
+
+			outputBpmPackages, err := bpmlib.CompileSourcePackage(sourcePackage, outputDirectory, skipChecks)
+			if err != nil {
+				log.Fatalf("Error: could not compile source package (%s): %s", sourcePackage, err)
+			}
+
+			for k, v := range outputBpmPackages {
+				fmt.Printf("Package (%s) was successfully compiled! Binary package generated at: %s\n", k, v)
+			}
+
+			// Remove unused packages
+			if installSrcPkgDepends && len(unmetDepends) > 0 {
+				// Get path to current executable
+				executable, err := os.Executable()
+				if err != nil {
+					log.Fatalf("Error: could not get path to executable: %s\n", err)
+				}
+
+				// Run 'bpm cleanup' using the set privilege escalator command
+				cmd := exec.Command(bpmlib.BPMConfig.PrivilegeEscalatorCmd, executable, "cleanup")
+				if yesAll {
+					cmd.Args = slices.Insert(cmd.Args, 3, "-y")
+				}
+				cmd.Stdout = os.Stdout
+				cmd.Stderr = os.Stderr
+				cmd.Stdin = os.Stdin
+				if verbose {
+					fmt.Println("Running command: " + cmd.String())
+				}
+				err = cmd.Run()
+				if err != nil {
+					log.Fatalf("Error: dependency cleanup command failed: %s\n", err)
+				}
+			}
+		}
+
 	default:
 		printHelp()
 	}
@@ -554,25 +742,24 @@ func printHelp() {
 	fmt.Println("-> flags will be read if passed right after the subcommand otherwise they will be read as subcommand arguments")
 	fmt.Println("\033[1m---- Command List ----\033[0m")
 	fmt.Println("-> bpm version | shows information on the installed version of bpm")
-	fmt.Println("-> bpm info [-R, --repos] <packages...> | shows information on an installed package")
+	fmt.Println("-> bpm info [-R, --databases] <packages...> | shows information on an installed package")
 	fmt.Println("       -R=<path> lets you define the root path which will be used")
-	fmt.Println("       --repos show information on package in repository")
+	fmt.Println("       --databases show information on package in configured databases")
 	fmt.Println("-> bpm list [-R, -c, -n] | lists all installed packages")
 	fmt.Println("       -R=<path> lets you define the root path which will be used")
 	fmt.Println("       -c lists the amount of installed packages")
 	fmt.Println("       -n lists only the names of installed packages")
-	fmt.Println("-> bpm search <search terms...> | Searches for packages through declared repositories")
-	fmt.Println("-> bpm install [-R, -v, -y, -f, -o, -c, -b, -k, --reinstall, --reinstall-all, --no-optional, --installation-reason] <packages...> | installs the following files")
+	fmt.Println("-> bpm search <search terms...> | Searches for packages through configured databases")
+	fmt.Println("-> bpm install [-R, -v, -y, -f, --reinstall, --reinstall-all, --no-optional, --installation-reason] <packages...> | installs the following files")
 	fmt.Println("       -R=<path> lets you define the root path which will be used")
 	fmt.Println("       -v Show additional information about what BPM is doing")
 	fmt.Println("       -y skips the confirmation prompt")
 	fmt.Println("       -f skips dependency, conflict and architecture checking")
-	fmt.Println("       -k keeps the compilation directory created by BPM after source package installation")
 	fmt.Println("       --reinstall Reinstalls packages even if they do not have a newer version available")
 	fmt.Println("       --reinstall-all Same as --reinstall but also reinstalls dependencies")
-	fmt.Println("       --no-optional Prevents installation of optional dependencies")
+	fmt.Println("       --optional Installs all optional dependencies")
 	fmt.Println("       --installation-reason=<manual/dependency> sets the installation reason for all newly installed packages")
-	fmt.Println("-> bpm update [-R, -v, -y, -f, --reinstall, --no-sync] | updates all packages that are available in the repositories")
+	fmt.Println("-> bpm update [-R, -v, -y, -f, --reinstall, --no-sync] | updates all packages that are available in the configured databases")
 	fmt.Println("       -R=<path> lets you define the root path which will be used")
 	fmt.Println("       -v Show additional information about what BPM is doing")
 	fmt.Println("       -y skips the confirmation prompt")
@@ -589,12 +776,24 @@ func printHelp() {
 	fmt.Println("       -y skips the confirmation prompt")
 	fmt.Println("       --unused removes only packages that aren't required as dependencies by other packages")
 	fmt.Println("       --cleanup performs a dependency cleanup")
-	fmt.Println("-> bpm cleanup [-R, -v, -y] | remove all unused dependency packages")
+	fmt.Println("-> bpm cleanup [-R, -v, -y, --depends, --compilation-files, --compiled-pkgs, --fetched-pkgs] | remove all unused dependencies and cache directories")
 	fmt.Println("       -v Show additional information about what BPM is doing")
 	fmt.Println("       -R=<path> lets you define the root path which will be used")
 	fmt.Println("       -y skips the confirmation prompt")
+	fmt.Println("       --depends performs a dependency cleanup")
+	fmt.Println("       --make-depends performs a make dependency cleanup")
+	fmt.Println("       --compilation-files performs a cleanup of compilation files")
+	fmt.Println("       --compiled-pkgs performs a cleanup of compilation compiled binary packages")
+	fmt.Println("       --fetched-pkgs performs a cleanup of fetched packages from databases")
 	fmt.Println("-> bpm file [-R] <files...> | shows what packages the following packages are managed by")
 	fmt.Println("       -R=<root_path> lets you define the root path which will be used")
+	fmt.Println("-> bpm compile [-d, -s, -o] <source packages...> | Compile source BPM package")
+	fmt.Println("       -v Show additional information about what BPM is doing")
+	fmt.Println("       -d installs required dependencies for package compilation")
+	fmt.Println("       -s skips the check function in source.sh scripts")
+	fmt.Println("       -o sets output directory")
+	fmt.Println("       -y skips the confirmation prompt")
+
 	fmt.Println("\033[1m----------------\033[0m")
 }
 
@@ -608,7 +807,7 @@ func resolveFlags() {
 	// Info flags
 	infoFlagSet := flag.NewFlagSet("Info flags", flag.ExitOnError)
 	infoFlagSet.StringVar(&rootDir, "R", "/", "Set the destination root")
-	infoFlagSet.BoolVar(&showRepoInfo, "repos", false, "Show information on package in repository")
+	infoFlagSet.BoolVar(&showDatabaseInfo, "databases", false, "Show information on package in configured databases")
 	infoFlagSet.Usage = printHelp
 	// Install flags
 	installFlagSet := flag.NewFlagSet("Install flags", flag.ExitOnError)
@@ -618,7 +817,7 @@ func resolveFlags() {
 	installFlagSet.BoolVar(&force, "f", false, "Force installation by skipping architecture and dependency resolution")
 	installFlagSet.BoolVar(&reinstall, "reinstall", false, "Reinstalls packages even if they do not have a newer version available")
 	installFlagSet.BoolVar(&reinstallAll, "reinstall-all", false, "Same as --reinstall but also reinstalls dependencies")
-	installFlagSet.BoolVar(&noOptional, "no-optional", false, "Prevents installation of optional dependencies")
+	installFlagSet.BoolVar(&installOptional, "optional", false, "Installs all optional dependencies")
 	installFlagSet.StringVar(&installationReason, "installation-reason", "", "Set the installation reason for all newly installed packages")
 	installFlagSet.Usage = printHelp
 	// Update flags
@@ -648,11 +847,35 @@ func resolveFlags() {
 	cleanupFlagSet.StringVar(&rootDir, "R", "/", "Set the destination root")
 	cleanupFlagSet.BoolVar(&verbose, "v", false, "Show additional information about what BPM is doing")
 	cleanupFlagSet.BoolVar(&yesAll, "y", false, "Skip confirmation prompts")
+	cleanupFlagSet.BoolVar(&cleanupDependencies, "depends", false, "Perform a dependency cleanup")
+	cleanupFlagSet.BoolVar(&cleanupMakeDependencies, "make-depends", false, "Perform a make dependency cleanup")
+	cleanupFlagSet.BoolVar(&cleanupCompilationFiles, "compilation-files", false, "Perform a cleanup of compilation files")
+	cleanupFlagSet.BoolVar(&cleanupCompiledPackages, "compiled-pkgs", false, "Perform a cleanup of compilation compiled binary packages")
+	cleanupFlagSet.BoolVar(&cleanupFetchedPackages, "fetched-pkgs", false, "Perform a cleanup of fetched packages from databases")
 	cleanupFlagSet.Usage = printHelp
 	// File flags
 	fileFlagSet := flag.NewFlagSet("Remove flags", flag.ExitOnError)
 	fileFlagSet.StringVar(&rootDir, "R", "/", "Set the destination root")
 	fileFlagSet.Usage = printHelp
+	// Compile flags
+	compileFlagSet := flag.NewFlagSet("Compile flags", flag.ExitOnError)
+	compileFlagSet.BoolVar(&installSrcPkgDepends, "d", false, "Install required dependencies for package compilation")
+	compileFlagSet.BoolVar(&skipChecks, "s", false, "Skip the check function in source.sh scripts")
+	compileFlagSet.StringVar(&outputDirectory, "o", "", "Set output directory")
+	compileFlagSet.BoolVar(&verbose, "v", false, "Show additional information about what BPM is doing")
+	compileFlagSet.BoolVar(&yesAll, "y", false, "Skip confirmation prompts")
+	compileFlagSet.Usage = printHelp
+
+	isFlagSet := func(flagSet *flag.FlagSet, name string) bool {
+		found := false
+		flagSet.Visit(func(f *flag.Flag) {
+			if f.Name == name {
+				found = true
+			}
+		})
+		return found
+	}
+
 	if len(os.Args[1:]) <= 0 {
 		subcommand = "help"
 	} else {
@@ -694,12 +917,31 @@ func resolveFlags() {
 				return
 			}
 			subcommandArgs = removeFlagSet.Args()
+		} else if getCommandType() == cleanup {
+			err := cleanupFlagSet.Parse(subcommandArgs)
+			if err != nil {
+				return
+			}
+			if !isFlagSet(cleanupFlagSet, "depends") && !isFlagSet(cleanupFlagSet, "make-depends") && !isFlagSet(cleanupFlagSet, "compilation-files") && !isFlagSet(cleanupFlagSet, "compiled-pkgs") && !isFlagSet(cleanupFlagSet, "fetched-pkgs") {
+				cleanupDependencies = true
+				cleanupMakeDependencies = bpmlib.BPMConfig.CleanupMakeDependencies
+				cleanupCompilationFiles = true
+				cleanupCompiledPackages = true
+				cleanupFetchedPackages = true
+			}
+			subcommandArgs = cleanupFlagSet.Args()
 		} else if getCommandType() == file {
 			err := fileFlagSet.Parse(subcommandArgs)
 			if err != nil {
 				return
 			}
 			subcommandArgs = fileFlagSet.Args()
+		} else if getCommandType() == compile {
+			err := compileFlagSet.Parse(subcommandArgs)
+			if err != nil {
+				return
+			}
+			subcommandArgs = compileFlagSet.Args()
 		}
 		if reinstallAll {
 			reinstall = true
