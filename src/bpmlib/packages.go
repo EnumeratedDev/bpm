@@ -927,15 +927,14 @@ func installPackage(filename, rootDir string, verbose, force bool) error {
 }
 
 func removePackage(pkg string, verbose bool, rootDir string) error {
-	installedDir := path.Join(rootDir, "var/lib/bpm/installed/")
-	pkgDir := path.Join(installedDir, pkg)
+	pkgDir := path.Join("/var/lib/bpm/installed/", pkg)
 	pkgInfo := GetPackageInfo(pkg, rootDir)
 	if pkgInfo == nil {
 		return errors.New("could not get package info")
 	}
 
 	// Executing pre_remove script
-	if _, err := os.Stat(path.Join(pkgDir, "pre_remove.sh")); err == nil {
+	if _, err := os.Stat(path.Join(rootDir, pkgDir, "pre_remove.sh")); err == nil {
 		cmd := exec.Command("/bin/bash", path.Join(pkgDir, "pre_remove.sh"))
 		// Setup subprocess environment
 		cmd.Dir = "/"
@@ -1032,7 +1031,7 @@ func removePackage(pkg string, verbose bool, rootDir string) error {
 	}
 
 	// Executing post_remove script
-	if _, err := os.Stat(path.Join(pkgDir, "post_remove.sh")); err == nil {
+	if _, err := os.Stat(path.Join(rootDir, pkgDir, "post_remove.sh")); err == nil {
 		cmd := exec.Command("/bin/bash", path.Join(pkgDir, "post_remove.sh"))
 		// Setup subprocess environment
 		cmd.Dir = "/"
@@ -1051,15 +1050,15 @@ func removePackage(pkg string, verbose bool, rootDir string) error {
 
 		err = cmd.Run()
 		if err != nil {
-			log.Printf("Warning: could not run pre_remove.sh package script: %s", err)
+			log.Printf("Warning: could not run post_remove.sh package script: %s", err)
 		}
 	}
 
 	// Removing package directory
 	if verbose {
-		fmt.Println("Removing: " + pkgDir)
+		fmt.Println("Removing: " + path.Join(rootDir, pkgDir))
 	}
-	err = os.RemoveAll(pkgDir)
+	err = os.RemoveAll(path.Join(rootDir, pkgDir))
 	if err != nil {
 		return err
 	}
