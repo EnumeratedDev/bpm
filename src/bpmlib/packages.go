@@ -5,8 +5,6 @@ import (
 	"compress/gzip"
 	"errors"
 	"fmt"
-	version "github.com/knqyf263/go-rpm-version"
-	"gopkg.in/yaml.v3"
 	"io"
 	"log"
 	"os"
@@ -17,6 +15,9 @@ import (
 	"strconv"
 	"strings"
 	"syscall"
+
+	version "github.com/knqyf263/go-rpm-version"
+	"gopkg.in/yaml.v3"
 )
 
 type BPMPackage struct {
@@ -321,19 +322,16 @@ func executePackageScripts(filename, rootDir string, operation packageOperation,
 	}
 
 	run := func(name, content string) error {
-		temp, err := os.CreateTemp("", name)
-		if err != nil {
-			return err
+		cmd := exec.Command("/bin/bash", "-c", content)
+		// Setup subprocess environment
+		cmd.Dir = "/"
+		// Run hook in chroot if using the -R flag
+		if rootDir != "/" {
+			cmd.SysProcAttr = &syscall.SysProcAttr{Chroot: rootDir}
 		}
-		_, err = temp.WriteString(content)
-		if err != nil {
-			return err
-		}
-
-		cmd := exec.Command("/bin/bash", temp.Name())
-		cmd.Dir = rootDir
+		// Setup command environment
 		cmd.Env = os.Environ()
-		cmd.Env = append(cmd.Env, fmt.Sprintf("BPM_ROOT=%s", rootDir))
+		cmd.Env = append(cmd.Env, "BPM_ROOT=/") // Setting to "/" for backwards compatibility
 		cmd.Env = append(cmd.Env, fmt.Sprintf("BPM_PKG_NAME=%s", pkgInfo.PkgInfo.Name))
 		cmd.Env = append(cmd.Env, fmt.Sprintf("BPM_PKG_DESC=%s", pkgInfo.PkgInfo.Description))
 		cmd.Env = append(cmd.Env, fmt.Sprintf("BPM_PKG_VERSION=%s", pkgInfo.PkgInfo.Version))
@@ -939,9 +937,15 @@ func removePackage(pkg string, verbose bool, rootDir string) error {
 	// Executing pre_remove script
 	if _, err := os.Stat(path.Join(pkgDir, "pre_remove.sh")); err == nil {
 		cmd := exec.Command("/bin/bash", path.Join(pkgDir, "pre_remove.sh"))
-		cmd.Dir = rootDir
+		// Setup subprocess environment
+		cmd.Dir = "/"
+		// Run hook in chroot if using the -R flag
+		if rootDir != "/" {
+			cmd.SysProcAttr = &syscall.SysProcAttr{Chroot: rootDir}
+		}
+		// Setup command environment
 		cmd.Env = os.Environ()
-		cmd.Env = append(cmd.Env, fmt.Sprintf("BPM_ROOT=%s", rootDir))
+		cmd.Env = append(cmd.Env, "BPM_ROOT=/") // Setting to "/" for backwards compatibility
 		cmd.Env = append(cmd.Env, fmt.Sprintf("BPM_PKG_NAME=%s", pkgInfo.Name))
 		cmd.Env = append(cmd.Env, fmt.Sprintf("BPM_PKG_VERSION=%s", pkgInfo.Version))
 		cmd.Env = append(cmd.Env, fmt.Sprintf("BPM_PKG_REVISION=%d", pkgInfo.Revision))
@@ -1030,9 +1034,15 @@ func removePackage(pkg string, verbose bool, rootDir string) error {
 	// Executing post_remove script
 	if _, err := os.Stat(path.Join(pkgDir, "post_remove.sh")); err == nil {
 		cmd := exec.Command("/bin/bash", path.Join(pkgDir, "post_remove.sh"))
-		cmd.Dir = rootDir
+		// Setup subprocess environment
+		cmd.Dir = "/"
+		// Run hook in chroot if using the -R flag
+		if rootDir != "/" {
+			cmd.SysProcAttr = &syscall.SysProcAttr{Chroot: rootDir}
+		}
+		// Setup command environment
 		cmd.Env = os.Environ()
-		cmd.Env = append(cmd.Env, fmt.Sprintf("BPM_ROOT=%s", rootDir))
+		cmd.Env = append(cmd.Env, "BPM_ROOT=/") // Setting to "/" for backwards compatibility
 		cmd.Env = append(cmd.Env, fmt.Sprintf("BPM_PKG_NAME=%s", pkgInfo.Name))
 		cmd.Env = append(cmd.Env, fmt.Sprintf("BPM_PKG_VERSION=%s", pkgInfo.Version))
 		cmd.Env = append(cmd.Env, fmt.Sprintf("BPM_PKG_REVISION=%d", pkgInfo.Revision))
