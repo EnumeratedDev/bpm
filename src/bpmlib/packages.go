@@ -368,39 +368,39 @@ func executePackageScripts(filename, rootDir string, operation packageOperation,
 		if val, ok := scripts["pre_install.sh"]; !postOperation && ok {
 			err := run("pre_install.sh", val)
 			if err != nil {
-				return err
+				return PackageScriptErr{err: err, packageName: pkgInfo.PkgInfo.Name, packageScript: "pre_install.sh"}
 			}
 		}
 		if val, ok := scripts["post_install.sh"]; postOperation && ok {
 			err := run("post_install.sh", val)
 			if err != nil {
-				return err
+				return PackageScriptErr{err: err, packageName: pkgInfo.PkgInfo.Name, packageScript: "post_install.sh"}
 			}
 		}
 	} else if operation == packageOperationUpdate {
 		if val, ok := scripts["pre_update.sh"]; !postOperation && ok {
 			err := run("pre_update.sh", val)
 			if err != nil {
-				return err
+				return PackageScriptErr{err: err, packageName: pkgInfo.PkgInfo.Name, packageScript: "pre_update.sh"}
 			}
 		}
 		if val, ok := scripts["post_update.sh"]; postOperation && ok {
 			err := run("post_update.sh", val)
 			if err != nil {
-				return err
+				return PackageScriptErr{err: err, packageName: pkgInfo.PkgInfo.Name, packageScript: "post_update.sh"}
 			}
 		}
 	} else if operation == packageOperationRemove {
 		if val, ok := scripts["pre_remove.sh"]; !postOperation && ok {
 			err := run("pre_remove.sh", val)
 			if err != nil {
-				return err
+				return PackageScriptErr{err: err, packageName: pkgInfo.PkgInfo.Name, packageScript: "pre_remove.sh"}
 			}
 		}
 		if val, ok := scripts["post_remove.sh"]; postOperation && ok {
 			err := run("post_remove.sh", val)
 			if err != nil {
-				return err
+				return PackageScriptErr{err: err, packageName: pkgInfo.PkgInfo.Name, packageScript: "post_remove.sh"}
 			}
 		}
 	}
@@ -547,12 +547,12 @@ func extractPackage(bpmpkg *BPMPackage, verbose bool, filename, rootDir string) 
 	if !IsPackageInstalled(bpmpkg.PkgInfo.Name, rootDir) {
 		err := executePackageScripts(filename, rootDir, packageOperationInstall, false)
 		if err != nil {
-			return err
+			log.Printf("Warning: %s\n", err)
 		}
 	} else {
 		err := executePackageScripts(filename, rootDir, packageOperationUpdate, false)
 		if err != nil {
-			return err
+			log.Printf("Warning: %s\n", err)
 		}
 	}
 	seenHardlinks := make(map[string]string)
@@ -905,12 +905,12 @@ func installPackage(filename, rootDir string, verbose, force bool) error {
 	if !packageInstalled {
 		err = executePackageScripts(filename, rootDir, packageOperationInstall, true)
 		if err != nil {
-			return err
+			log.Printf("Warning: %s\n", err)
 		}
 	} else {
 		err = executePackageScripts(filename, rootDir, packageOperationUpdate, true)
 		if err != nil {
-			return err
+			log.Printf("Warning: %s\n", err)
 		}
 	}
 

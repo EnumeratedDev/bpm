@@ -28,4 +28,15 @@ type PackageConflictErr struct {
 
 func (e PackageConflictErr) Error() string {
 	return fmt.Sprintf("Package (%s) is in conflict with the following packages: %s", e.pkg, strings.Join(e.conflicts, ", "))
+
+}
+
+type PackageScriptErr struct {
+	err           error
+	packageName   string
+	packageScript string
+}
+
+func (e PackageScriptErr) Error() string {
+	return fmt.Sprintf("could not execute package script (%s) for package (%s): %s", e.packageScript, e.packageName, e.err)
 }
