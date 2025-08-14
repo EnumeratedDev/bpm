@@ -3,13 +3,14 @@ package bpmlib
 import (
 	"errors"
 	"fmt"
-	"gopkg.in/yaml.v3"
 	"io"
 	"net/http"
 	"net/url"
 	"os"
 	"path"
 	"strings"
+
+	"gopkg.in/yaml.v3"
 )
 
 type BPMDatabase struct {
@@ -172,7 +173,7 @@ func (db *BPMDatabase) SyncLocalDatabaseFile() error {
 }
 
 func ReadLocalDatabaseFiles() (err error) {
-	for _, db := range BPMConfig.Databases {
+	for _, db := range MainBPMConfig.Databases {
 		// Initialize struct values
 		db.Entries = make(map[string]*BPMDatabaseEntry)
 		db.VirtualPackages = make(map[string][]string)
@@ -188,7 +189,7 @@ func ReadLocalDatabaseFiles() (err error) {
 }
 
 func GetDatabase(name string) *BPMDatabase {
-	for _, db := range BPMConfig.Databases {
+	for _, db := range MainBPMConfig.Databases {
 		if db.Name == name {
 			return db
 		}
@@ -203,7 +204,7 @@ func GetDatabaseEntry(str string) (*BPMDatabaseEntry, *BPMDatabase, error) {
 		if pkgName == "" {
 			return nil, nil, errors.New("could not find database entry for this package")
 		}
-		for _, db := range BPMConfig.Databases {
+		for _, db := range MainBPMConfig.Databases {
 			if db.ContainsPackage(pkgName) {
 				return db.Entries[pkgName], db, nil
 			}
@@ -226,7 +227,7 @@ func GetDatabaseEntry(str string) (*BPMDatabaseEntry, *BPMDatabase, error) {
 }
 
 func FindReplacement(pkg string) *BPMDatabaseEntry {
-	for _, db := range BPMConfig.Databases {
+	for _, db := range MainBPMConfig.Databases {
 		for _, entry := range db.Entries {
 			for _, replaced := range entry.Info.Replaces {
 				if replaced == pkg {
@@ -240,7 +241,7 @@ func FindReplacement(pkg string) *BPMDatabaseEntry {
 }
 
 func ResolveVirtualPackage(vpkg string) *BPMDatabaseEntry {
-	for _, db := range BPMConfig.Databases {
+	for _, db := range MainBPMConfig.Databases {
 		if v, ok := db.VirtualPackages[vpkg]; ok {
 			for _, pkg := range v {
 				return db.Entries[pkg]

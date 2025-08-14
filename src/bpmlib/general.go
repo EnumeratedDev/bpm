@@ -362,7 +362,7 @@ func UpdatePackages(rootDir string, syncDatabase bool, installOptionalDependenci
 
 	// Search for packages
 	for _, pkg := range pkgs {
-		if slices.Contains(BPMConfig.IgnorePackages, pkg) {
+		if slices.Contains(MainBPMConfig.IgnorePackages, pkg) {
 			continue
 		}
 		var entry *BPMDatabaseEntry
@@ -407,7 +407,7 @@ func UpdatePackages(rootDir string, syncDatabase bool, installOptionalDependenci
 
 // SyncDatabase syncs all databases declared in /etc/bpm.conf
 func SyncDatabase(verbose bool) (err error) {
-	for _, db := range BPMConfig.Databases {
+	for _, db := range MainBPMConfig.Databases {
 		if verbose {
 			fmt.Printf("Fetching package database file for database (%s)...\n", db.Name)
 		}

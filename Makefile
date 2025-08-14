@@ -21,6 +21,7 @@ install: build/bpm config/
 	# Install files
 	install -Dm755 build/bpm $(DESTDIR)$(BINDIR)/bpm
 	install -Dm644 config/bpm.conf $(DESTDIR)$(SYSCONFDIR)/bpm.conf
+	install -Dm644 config/bpm-compilation.conf $(DESTDIR)$(SYSCONFDIR)/bpm-compilation.conf
 
 uninstall:
 	rm $(DESTDIR)$(BINDIR)/bpm

@@ -217,7 +217,7 @@ func resolveCommand() {
 		for i, term := range searchTerms {
 			nameResults := make([]*bpmlib.PackageInfo, 0)
 			descResults := make([]*bpmlib.PackageInfo, 0)
-			for _, db := range bpmlib.BPMConfig.Databases {
+			for _, db := range bpmlib.MainBPMConfig.Databases {
 				for _, entry := range db.Entries {
 					if strings.Contains(entry.Info.Name, term) {
 						nameResults = append(nameResults, entry.Info)
@@ -630,7 +630,7 @@ func resolveCommand() {
 				// Run 'bpm install' using the set privilege escalator command
 				args := []string{executable, "install", "--installation-reason=make-dependency"}
 				args = append(args, unmetDepends...)
-				cmd := exec.Command(bpmlib.BPMConfig.PrivilegeEscalatorCmd, args...)
+				cmd := exec.Command(bpmlib.CompilationBPMConfig.PrivilegeEscalatorCmd, args...)
 				if yesAll {
 					cmd.Args = slices.Insert(cmd.Args, 3, "-y")
 				}
@@ -714,7 +714,7 @@ func resolveCommand() {
 				}
 
 				// Run 'bpm cleanup' using the set privilege escalator command
-				cmd := exec.Command(bpmlib.BPMConfig.PrivilegeEscalatorCmd, executable, "cleanup")
+				cmd := exec.Command(bpmlib.CompilationBPMConfig.PrivilegeEscalatorCmd, executable, "cleanup")
 				if yesAll {
 					cmd.Args = slices.Insert(cmd.Args, 3, "-y")
 				}
@@ -924,7 +924,7 @@ func resolveFlags() {
 			}
 			if !isFlagSet(cleanupFlagSet, "depends") && !isFlagSet(cleanupFlagSet, "make-depends") && !isFlagSet(cleanupFlagSet, "compilation-files") && !isFlagSet(cleanupFlagSet, "compiled-pkgs") && !isFlagSet(cleanupFlagSet, "fetched-pkgs") {
 				cleanupDependencies = true
-				cleanupMakeDependencies = bpmlib.BPMConfig.CleanupMakeDependencies
+				cleanupMakeDependencies = bpmlib.MainBPMConfig.CleanupMakeDependencies
 				cleanupCompilationFiles = true
 				cleanupCompiledPackages = true
 				cleanupFetchedPackages = true

@@ -1,41 +1,61 @@
 package bpmlib
 
 import (
-	"gopkg.in/yaml.v3"
 	"os"
+
+	"gopkg.in/yaml.v3"
 )
 
-type BPMConfigStruct struct {
+type MainBPMConfigStruct struct {
 	IgnorePackages          []string       `yaml:"ignore_packages"`
-	PrivilegeEscalatorCmd   string         `yaml:"privilege_escalator_cmd"`
-	CompilationEnvironment  []string       `yaml:"compilation_env"`
 	CleanupMakeDependencies bool           `yaml:"cleanup_make_dependencies"`
 	Databases               []*BPMDatabase `yaml:"databases"`
 }
 
-var BPMConfig BPMConfigStruct
+type CompilationBPMConfigStruct struct {
+	PrivilegeEscalatorCmd  string   `yaml:"privilege_escalator_cmd"`
+	CompilationEnvironment []string `yaml:"compilation_env"`
+}
+
+var MainBPMConfig MainBPMConfigStruct
+var CompilationBPMConfig CompilationBPMConfigStruct
 
 func ReadConfig() (err error) {
-	if _, err = os.Stat("/etc/bpm.conf"); os.IsNotExist(err) {
-		return err
-	}
+	var file *os.File
 
-	bytes, err := os.ReadFile("/etc/bpm.conf")
-	if err != nil {
-		return err
-	}
-
-	BPMConfig = BPMConfigStruct{
+	// Set default config options
+	MainBPMConfig = MainBPMConfigStruct{
 		CleanupMakeDependencies: true,
 	}
-	err = yaml.Unmarshal(bytes, &BPMConfig)
+
+	// Read main BPM config
+	file, err = os.Open("/etc/bpm.conf")
 	if err != nil {
 		return err
 	}
+	err = yaml.NewDecoder(file).Decode(&MainBPMConfig)
+	if err != nil {
+		return err
+	}
+	file.Close()
 
-	for i := len(BPMConfig.Databases) - 1; i >= 0; i-- {
-		if BPMConfig.Databases[i].Disabled != nil && *BPMConfig.Databases[i].Disabled {
-			BPMConfig.Databases = append(BPMConfig.Databases[:i], BPMConfig.Databases[i+1:]...)
+	// Read compilation BPM config
+	if _, err := os.Stat("/etc/bpm-compilation.conf"); err == nil {
+		file, err = os.Open("/etc/bpm-compilation.conf")
+		if err != nil {
+			return err
+		}
+		err = yaml.NewDecoder(file).Decode(&CompilationBPMConfig)
+		if err != nil {
+			return err
+		}
+		file.Close()
+	}
+
+	// Remove disabled databases from memory
+	for i := len(MainBPMConfig.Databases) - 1; i >= 0; i-- {
+		if MainBPMConfig.Databases[i].Disabled != nil && *MainBPMConfig.Databases[i].Disabled {
+			MainBPMConfig.Databases = append(MainBPMConfig.Databases[:i], MainBPMConfig.Databases[i+1:]...)
 		}
 	}
 

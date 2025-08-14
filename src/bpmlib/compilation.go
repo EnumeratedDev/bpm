@@ -3,13 +3,14 @@ package bpmlib
 import (
 	"errors"
 	"fmt"
-	"gopkg.in/yaml.v3"
 	"os"
 	"os/exec"
 	"path"
 	"strconv"
 	"strings"
 	"syscall"
+
+	"gopkg.in/yaml.v3"
 )
 
 var rootCompilationUID = "65534"
@@ -136,7 +137,7 @@ func CompileSourcePackage(archiveFilename, outputDirectory string, skipChecks bo
 	} else {
 		env = append(env, "BPM_PKG_ARCH="+GetArch())
 	}
-	env = append(env, BPMConfig.CompilationEnvironment...)
+	env = append(env, CompilationBPMConfig.CompilationEnvironment...)
 
 	// Execute prepare and build functions in source.sh script
 	cmd := exec.Command("bash", "-c",
