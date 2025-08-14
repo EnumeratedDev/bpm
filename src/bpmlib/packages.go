@@ -311,98 +311,102 @@ const (
 	packageOperationRemove                   = 2
 )
 
-func executePackageScripts(filename, rootDir string, operation packageOperation, postOperation bool) error {
-	pkgInfo, err := ReadPackage(filename)
-	if err != nil {
-		return err
-	}
-	scripts, err := ReadPackageScripts(filename)
-	if err != nil {
-		return err
-	}
+func executePackageScript(pkg, rootDir string, verbose bool, packageScript string) error {
+	var bpmpkg *BPMPackage
+	var err error
+	scripts := make(map[string]string)
 
-	run := func(name, content string) error {
-		cmd := exec.Command("/bin/bash", "-c", content)
-		// Setup subprocess environment
-		cmd.Dir = "/"
-		// Run hook in chroot if using the -R flag
-		if rootDir != "/" {
-			cmd.SysProcAttr = &syscall.SysProcAttr{Chroot: rootDir}
-		}
-		// Setup command environment
-		cmd.Env = os.Environ()
-		cmd.Env = append(cmd.Env, "BPM_ROOT=/") // Setting to "/" for backwards compatibility
-		cmd.Env = append(cmd.Env, fmt.Sprintf("BPM_PKG_NAME=%s", pkgInfo.PkgInfo.Name))
-		cmd.Env = append(cmd.Env, fmt.Sprintf("BPM_PKG_DESC=%s", pkgInfo.PkgInfo.Description))
-		cmd.Env = append(cmd.Env, fmt.Sprintf("BPM_PKG_VERSION=%s", pkgInfo.PkgInfo.Version))
-		if operation != packageOperationInstall {
-			cmd.Env = append(cmd.Env, fmt.Sprintf("BPM_PKG_OLD_VERSION=%s", GetPackageInfo(pkgInfo.PkgInfo.Name, rootDir).Version))
-		}
-		cmd.Env = append(cmd.Env, fmt.Sprintf("BPM_PKG_REVISION=%d", pkgInfo.PkgInfo.Revision))
-		if operation != packageOperationInstall {
-			cmd.Env = append(cmd.Env, fmt.Sprintf("BPM_PKG_OLD_REVISION=%d", GetPackageInfo(pkgInfo.PkgInfo.Name, rootDir).Revision))
-		}
-		cmd.Env = append(cmd.Env, fmt.Sprintf("BPM_PKG_URL=%s", pkgInfo.PkgInfo.Url))
-		cmd.Env = append(cmd.Env, fmt.Sprintf("BPM_PKG_ARCH=%s", pkgInfo.PkgInfo.Arch))
-		depends := make([]string, len(pkgInfo.PkgInfo.Depends))
-		copy(depends, pkgInfo.PkgInfo.Depends)
-		for i := 0; i < len(depends); i++ {
-			depends[i] = fmt.Sprintf("\"%s\"", depends[i])
-		}
-		makeDepends := make([]string, len(pkgInfo.PkgInfo.MakeDepends))
-		copy(makeDepends, pkgInfo.PkgInfo.MakeDepends)
-		for i := 0; i < len(makeDepends); i++ {
-			makeDepends[i] = fmt.Sprintf("\"%s\"", makeDepends[i])
-		}
-		cmd.Env = append(cmd.Env, fmt.Sprintf("BPM_PKG_DEPENDS=(%s)", strings.Join(depends, " ")))
-		cmd.Env = append(cmd.Env, fmt.Sprintf("BPM_PKG_MAKE_DEPENDS=(%s)", strings.Join(makeDepends, " ")))
-		cmd.Env = append(cmd.Env, "BPM_PKG_TYPE=source")
-		err = cmd.Run()
+	// Fetch bpmpkg variable from file or installed package
+	if strings.HasSuffix(pkg, ".bpm") {
+		bpmpkg, err = ReadPackage(pkg)
 		if err != nil {
 			return err
 		}
+
+		// Read package scripts from tarball
+		scripts, err = ReadPackageScripts(pkg)
+		if err != nil {
+			return err
+		}
+	} else {
+		bpmpkg = GetPackage(pkg, rootDir)
+		if bpmpkg == nil {
+			return fmt.Errorf("Package not found: %s", pkg)
+		}
+	}
+
+	// Read installed remove package scripts
+	if IsPackageInstalled(bpmpkg.PkgInfo.Name, rootDir) {
+		pkgDir := path.Join(rootDir, "var/lib/bpm/installed", bpmpkg.PkgInfo.Name)
+		if _, err := os.Stat(path.Join(pkgDir, "pre_remove.sh")); err == nil {
+			data, err := os.ReadFile(path.Join(pkgDir, "pre_remove.sh"))
+			if err != nil {
+				return err
+			}
+			scripts["pre_remove.sh"] = string(data)
+		}
+		if _, err := os.Stat(path.Join(pkgDir, "post_remove.sh")); err == nil {
+			data, err := os.ReadFile(path.Join(pkgDir, "post_remove.sh"))
+			if err != nil {
+				return err
+			}
+			scripts["post_remove.sh"] = string(data)
+		}
+	}
+
+	// Ensure package script exists
+	content, ok := scripts[packageScript]
+	if !ok {
 		return nil
 	}
 
-	if operation == packageOperationInstall {
-		if val, ok := scripts["pre_install.sh"]; !postOperation && ok {
-			err := run("pre_install.sh", val)
-			if err != nil {
-				return PackageScriptErr{err: err, packageName: pkgInfo.PkgInfo.Name, packageScript: "pre_install.sh"}
-			}
-		}
-		if val, ok := scripts["post_install.sh"]; postOperation && ok {
-			err := run("post_install.sh", val)
-			if err != nil {
-				return PackageScriptErr{err: err, packageName: pkgInfo.PkgInfo.Name, packageScript: "post_install.sh"}
-			}
-		}
-	} else if operation == packageOperationUpdate {
-		if val, ok := scripts["pre_update.sh"]; !postOperation && ok {
-			err := run("pre_update.sh", val)
-			if err != nil {
-				return PackageScriptErr{err: err, packageName: pkgInfo.PkgInfo.Name, packageScript: "pre_update.sh"}
-			}
-		}
-		if val, ok := scripts["post_update.sh"]; postOperation && ok {
-			err := run("post_update.sh", val)
-			if err != nil {
-				return PackageScriptErr{err: err, packageName: pkgInfo.PkgInfo.Name, packageScript: "post_update.sh"}
-			}
-		}
-	} else if operation == packageOperationRemove {
-		if val, ok := scripts["pre_remove.sh"]; !postOperation && ok {
-			err := run("pre_remove.sh", val)
-			if err != nil {
-				return PackageScriptErr{err: err, packageName: pkgInfo.PkgInfo.Name, packageScript: "pre_remove.sh"}
-			}
-		}
-		if val, ok := scripts["post_remove.sh"]; postOperation && ok {
-			err := run("post_remove.sh", val)
-			if err != nil {
-				return PackageScriptErr{err: err, packageName: pkgInfo.PkgInfo.Name, packageScript: "post_remove.sh"}
-			}
-		}
+	cmd := exec.Command("/bin/bash", "-c", content)
+	// Setup subprocess environment
+	cmd.Dir = "/"
+	// Run hook in chroot if using the -R flag
+	if rootDir != "/" {
+		cmd.SysProcAttr = &syscall.SysProcAttr{Chroot: rootDir}
+	}
+	// Show output if verbose
+	if verbose {
+		cmd.Stdout = os.Stdout
+		cmd.Stderr = os.Stderr
+	}
+	// Setup command environment
+	cmd.Env = os.Environ()
+	cmd.Env = append(cmd.Env, "BPM_ROOT=/") // Setting to "/" for backwards compatibility
+	cmd.Env = append(cmd.Env, fmt.Sprintf("BPM_PKG_NAME=%s", bpmpkg.PkgInfo.Name))
+	cmd.Env = append(cmd.Env, fmt.Sprintf("BPM_PKG_DESC=%s", bpmpkg.PkgInfo.Description))
+	cmd.Env = append(cmd.Env, fmt.Sprintf("BPM_PKG_VERSION=%s", bpmpkg.PkgInfo.Version))
+	if IsPackageInstalled(bpmpkg.PkgInfo.Name, rootDir) {
+		cmd.Env = append(cmd.Env, fmt.Sprintf("BPM_PKG_OLD_VERSION=%s", GetPackageInfo(bpmpkg.PkgInfo.Name, rootDir).Version))
+	}
+	cmd.Env = append(cmd.Env, fmt.Sprintf("BPM_PKG_REVISION=%d", bpmpkg.PkgInfo.Revision))
+	if IsPackageInstalled(bpmpkg.PkgInfo.Name, rootDir) {
+		cmd.Env = append(cmd.Env, fmt.Sprintf("BPM_PKG_OLD_REVISION=%d", GetPackageInfo(bpmpkg.PkgInfo.Name, rootDir).Revision))
+	}
+	cmd.Env = append(cmd.Env, fmt.Sprintf("BPM_PKG_URL=%s", bpmpkg.PkgInfo.Url))
+	cmd.Env = append(cmd.Env, fmt.Sprintf("BPM_PKG_ARCH=%s", bpmpkg.PkgInfo.Arch))
+	depends := make([]string, len(bpmpkg.PkgInfo.Depends))
+	copy(depends, bpmpkg.PkgInfo.Depends)
+	for i := 0; i < len(depends); i++ {
+		depends[i] = fmt.Sprintf("\"%s\"", depends[i])
+	}
+	makeDepends := make([]string, len(bpmpkg.PkgInfo.MakeDepends))
+	copy(makeDepends, bpmpkg.PkgInfo.MakeDepends)
+	for i := 0; i < len(makeDepends); i++ {
+		makeDepends[i] = fmt.Sprintf("\"%s\"", makeDepends[i])
+	}
+	cmd.Env = append(cmd.Env, fmt.Sprintf("BPM_PKG_DEPENDS=(%s)", strings.Join(depends, " ")))
+	cmd.Env = append(cmd.Env, fmt.Sprintf("BPM_PKG_MAKE_DEPENDS=(%s)", strings.Join(makeDepends, " ")))
+	cmd.Env = append(cmd.Env, "BPM_PKG_TYPE=source")
+	// Run command
+	if verbose {
+		fmt.Printf("Running package script (%s) for package (%s)\n", packageScript, bpmpkg.PkgInfo.Name)
+	}
+	err = cmd.Run()
+	if err != nil {
+		return PackageScriptErr{err: err, packageName: bpmpkg.PkgInfo.Name, packageScript: packageScript}
 	}
 	return nil
 }
@@ -545,12 +549,12 @@ func CreateReadableInfo(showArchitecture, showType, showPackageRelations, showIn
 
 func extractPackage(bpmpkg *BPMPackage, verbose bool, filename, rootDir string) error {
 	if !IsPackageInstalled(bpmpkg.PkgInfo.Name, rootDir) {
-		err := executePackageScripts(filename, rootDir, packageOperationInstall, false)
+		err := executePackageScript(filename, rootDir, verbose, "pre_install.sh")
 		if err != nil {
 			log.Printf("Warning: %s\n", err)
 		}
 	} else {
-		err := executePackageScripts(filename, rootDir, packageOperationUpdate, false)
+		err := executePackageScript(filename, rootDir, verbose, "pre_update.sh")
 		if err != nil {
 			log.Printf("Warning: %s\n", err)
 		}
@@ -903,12 +907,12 @@ func installPackage(filename, rootDir string, verbose, force bool) error {
 	}
 
 	if !packageInstalled {
-		err = executePackageScripts(filename, rootDir, packageOperationInstall, true)
+		err = executePackageScript(filename, rootDir, verbose, "post_install.sh")
 		if err != nil {
 			log.Printf("Warning: %s\n", err)
 		}
 	} else {
-		err = executePackageScripts(filename, rootDir, packageOperationUpdate, true)
+		err = executePackageScript(filename, rootDir, verbose, "post_update.sh")
 		if err != nil {
 			log.Printf("Warning: %s\n", err)
 		}
@@ -934,27 +938,9 @@ func removePackage(pkg string, verbose bool, rootDir string) error {
 	}
 
 	// Executing pre_remove script
-	if _, err := os.Stat(path.Join(rootDir, pkgDir, "pre_remove.sh")); err == nil {
-		cmd := exec.Command("/bin/bash", path.Join(pkgDir, "pre_remove.sh"))
-		// Setup subprocess environment
-		cmd.Dir = "/"
-		// Run hook in chroot if using the -R flag
-		if rootDir != "/" {
-			cmd.SysProcAttr = &syscall.SysProcAttr{Chroot: rootDir}
-		}
-		// Setup command environment
-		cmd.Env = os.Environ()
-		cmd.Env = append(cmd.Env, "BPM_ROOT=/") // Setting to "/" for backwards compatibility
-		cmd.Env = append(cmd.Env, fmt.Sprintf("BPM_PKG_NAME=%s", pkgInfo.Name))
-		cmd.Env = append(cmd.Env, fmt.Sprintf("BPM_PKG_VERSION=%s", pkgInfo.Version))
-		cmd.Env = append(cmd.Env, fmt.Sprintf("BPM_PKG_REVISION=%d", pkgInfo.Revision))
-		cmd.Env = append(cmd.Env, fmt.Sprintf("BPM_PKG_URL=%s", pkgInfo.Url))
-		cmd.Env = append(cmd.Env, fmt.Sprintf("BPM_PKG_ARCH=%s", pkgInfo.Arch))
-
-		err = cmd.Run()
-		if err != nil {
-			log.Printf("Warning: could not run pre_remove.sh package script: %s", err)
-		}
+	err := executePackageScript(pkg, rootDir, verbose, "pre_remove.sh")
+	if err != nil {
+		log.Printf("Warning: %s\n", err)
 	}
 
 	// Fetching and reversing package file entry list
@@ -1031,27 +1017,9 @@ func removePackage(pkg string, verbose bool, rootDir string) error {
 	}
 
 	// Executing post_remove script
-	if _, err := os.Stat(path.Join(rootDir, pkgDir, "post_remove.sh")); err == nil {
-		cmd := exec.Command("/bin/bash", path.Join(pkgDir, "post_remove.sh"))
-		// Setup subprocess environment
-		cmd.Dir = "/"
-		// Run hook in chroot if using the -R flag
-		if rootDir != "/" {
-			cmd.SysProcAttr = &syscall.SysProcAttr{Chroot: rootDir}
-		}
-		// Setup command environment
-		cmd.Env = os.Environ()
-		cmd.Env = append(cmd.Env, "BPM_ROOT=/") // Setting to "/" for backwards compatibility
-		cmd.Env = append(cmd.Env, fmt.Sprintf("BPM_PKG_NAME=%s", pkgInfo.Name))
-		cmd.Env = append(cmd.Env, fmt.Sprintf("BPM_PKG_VERSION=%s", pkgInfo.Version))
-		cmd.Env = append(cmd.Env, fmt.Sprintf("BPM_PKG_REVISION=%d", pkgInfo.Revision))
-		cmd.Env = append(cmd.Env, fmt.Sprintf("BPM_PKG_URL=%s", pkgInfo.Url))
-		cmd.Env = append(cmd.Env, fmt.Sprintf("BPM_PKG_ARCH=%s", pkgInfo.Arch))
-
-		err = cmd.Run()
-		if err != nil {
-			log.Printf("Warning: could not run post_remove.sh package script: %s", err)
-		}
+	err = executePackageScript(pkg, rootDir, verbose, "post_remove.sh")
+	if err != nil {
+		log.Printf("Warning: %s\n", err)
 	}
 
 	// Removing package directory
