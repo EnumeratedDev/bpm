@@ -1,14 +1,12 @@
 # Bubble Package Manager (BPM)
-## _A simple package manager_
-
-BPM is a simple package manager for Linux systems
+## _The official package manager for Tide Linux_
 
 ## Features
 - Simple to use subcommands
 - Can install both binary and source packages
 
 ## Information
-BPM is still in very early development. Do not install it without knowing what you are doing. I would only recommend using it in a Virtual Machine for testing
+BPM is still in very early development. There may be bugs that could completely break installations. For now it is recommended you use this only in Virtual Machines, containers or in a Tide Linux installation
 
 ## Build from source
 
@@ -21,6 +19,7 @@ make
 - Run the following command to install BPM into your system. You may also append a DESTDIR variable at the end of this line if you wish to install in a different location
 ```sh
 make install PREFIX=/usr SYSCONFDIR=/etc
+make install-config PREFIX=/usr SYSCONFDIR=/etc
 ```
 
 ## How to use
@@ -61,6 +60,6 @@ bpm help
 
 ## Package Creation
 
-Package creation is simplified using the bpm-utils package which contains helper scripts for creating and archiving packages
+Package creation is simplified using the bpm-utils package which contains helper scripts for creating packages
 
 Learn more here: https://git.enumerated.dev/bubble-package-manager/bpm-utils
