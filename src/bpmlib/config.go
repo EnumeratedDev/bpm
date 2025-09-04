@@ -7,9 +7,15 @@ import (
 )
 
 type MainBPMConfigStruct struct {
-	IgnorePackages          []string       `yaml:"ignore_packages"`
-	CleanupMakeDependencies bool           `yaml:"cleanup_make_dependencies"`
-	Databases               []*BPMDatabase `yaml:"databases"`
+	IgnorePackages          []string         `yaml:"ignore_packages"`
+	CleanupMakeDependencies bool             `yaml:"cleanup_make_dependencies"`
+	Databases               []configDatabase `yaml:"databases"`
+}
+
+type configDatabase struct {
+	Name     string `yaml:"name"`
+	Source   string `yaml:"source"`
+	Disabled *bool  `yaml:"disabled"`
 }
 
 type CompilationBPMConfigStruct struct {

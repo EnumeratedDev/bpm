@@ -14,27 +14,28 @@ import (
 )
 
 type BPMDatabase struct {
-	Name            string `yaml:"name"`
-	Source          string `yaml:"source"`
-	Disabled        *bool  `yaml:"disabled"`
-	Entries         map[string]*BPMDatabaseEntry
+	DatabaseVersion int                          `yaml:"database_version"`
+	Entries         map[string]*BPMDatabaseEntry `yaml:"entries"`
 	VirtualPackages map[string][]string
+	Source          string
 }
 
 type BPMDatabaseEntry struct {
 	Info          *PackageInfo `yaml:"info"`
-	Download      string       `yaml:"download"`
+	Filepath      string       `yaml:"filepath"`
 	DownloadSize  uint64       `yaml:"download_size"`
 	InstalledSize uint64       `yaml:"installed_size"`
 	Database      *BPMDatabase
 }
+
+var BPMDatabases = make(map[string]*BPMDatabase)
 
 func (db *BPMDatabase) ContainsPackage(pkg string) bool {
 	_, ok := db.Entries[pkg]
 	return ok
 }
 
-func (db *BPMDatabase) ReadLocalDatabase() error {
+func (db *configDatabase) ReadLocalDatabase() error {
 	dbFile := "/var/lib/bpm/databases/" + db.Name + ".bpmdb"
 	if _, err := os.Stat(dbFile); err != nil {
 		return nil
@@ -45,37 +46,23 @@ func (db *BPMDatabase) ReadLocalDatabase() error {
 		return err
 	}
 
-	data := string(bytes)
-	for _, b := range strings.Split(data, "---") {
-		entry := BPMDatabaseEntry{
-			Info: &PackageInfo{
-				Name:            "",
-				Description:     "",
-				Version:         "",
-				Revision:        1,
-				Url:             "",
-				License:         "",
-				Arch:            "",
-				Type:            "",
-				Keep:            make([]string, 0),
-				Depends:         make([]string, 0),
-				MakeDepends:     make([]string, 0),
-				OptionalDepends: make([]string, 0),
-				Conflicts:       make([]string, 0),
-				Provides:        make([]string, 0),
-			},
-			Download:      "",
-			DownloadSize:  0,
-			InstalledSize: 0,
-			Database:      db,
-		}
-		err := yaml.Unmarshal([]byte(b), &entry)
-		if err != nil {
-			return err
-		}
+	// Unmarshal yaml
+	database := &BPMDatabase{}
+	err = yaml.Unmarshal(bytes, database)
+	if err != nil {
+		return err
+	}
 
-		// Create database entries
+	// Initialize struct values
+	database.VirtualPackages = make(map[string][]string)
+	database.Source = db.Source
+
+	entriesToRemove := make([]string, 0)
+	for entryName, entry := range database.Entries {
+		entry.Database = database
+
 		if entry.Info.IsSplitPackage() {
+			// Handle split packages
 			for _, splitPkg := range entry.Info.SplitPackages {
 				// Turn split package into json data
 				splitPkgJson, err := yaml.Marshal(splitPkg)
@@ -101,35 +88,41 @@ func (db *BPMDatabase) ReadLocalDatabase() error {
 				splitPkgClone.Url = entry.Info.Url
 
 				// Create entry for split package
-				db.Entries[splitPkg.Name] = &BPMDatabaseEntry{
+				database.Entries[splitPkg.Name] = &BPMDatabaseEntry{
 					Info:          &splitPkgClone,
-					Download:      entry.Download,
+					Filepath:      entry.Filepath,
 					DownloadSize:  entry.DownloadSize,
 					InstalledSize: 0,
-					Database:      db,
+					Database:      database,
 				}
 
 				// Add virtual packages to database
 				for _, p := range splitPkg.Provides {
-					db.VirtualPackages[p] = append(db.VirtualPackages[p], splitPkg.Name)
+					database.VirtualPackages[p] = append(database.VirtualPackages[p], splitPkg.Name)
 				}
+
+				// Add current entry to list for removal
+				entriesToRemove = append(entriesToRemove, entryName)
 			}
 		} else {
-			// Create entry for package
-			db.Entries[entry.Info.Name] = &entry
-
 			// Add virtual packages to database
 			for _, p := range entry.Info.Provides {
-				db.VirtualPackages[p] = append(db.VirtualPackages[p], entry.Info.Name)
+				database.VirtualPackages[p] = append(database.VirtualPackages[p], entry.Info.Name)
 			}
 		}
-
 	}
+
+	// Remove entries
+	for _, entryName := range entriesToRemove {
+		delete(database.Entries, entryName)
+	}
+
+	BPMDatabases[db.Name] = database
 
 	return nil
 }
 
-func (db *BPMDatabase) SyncLocalDatabaseFile() error {
+func (db *configDatabase) SyncLocalDatabaseFile() error {
 	dbFile := "/var/lib/bpm/databases/" + db.Name + ".bpmdb"
 
 	// Get URL to database
@@ -174,10 +167,6 @@ func (db *BPMDatabase) SyncLocalDatabaseFile() error {
 
 func ReadLocalDatabaseFiles() (err error) {
 	for _, db := range MainBPMConfig.Databases {
-		// Initialize struct values
-		db.Entries = make(map[string]*BPMDatabaseEntry)
-		db.VirtualPackages = make(map[string][]string)
-
 		// Read database
 		err = db.ReadLocalDatabase()
 		if err != nil {
@@ -188,15 +177,6 @@ func ReadLocalDatabaseFiles() (err error) {
 	return nil
 }
 
-func GetDatabase(name string) *BPMDatabase {
-	for _, db := range MainBPMConfig.Databases {
-		if db.Name == name {
-			return db
-		}
-	}
-	return nil
-}
-
 func GetDatabaseEntry(str string) (*BPMDatabaseEntry, *BPMDatabase, error) {
 	split := strings.Split(str, "/")
 	if len(split) == 1 {
@@ -204,7 +184,7 @@ func GetDatabaseEntry(str string) (*BPMDatabaseEntry, *BPMDatabase, error) {
 		if pkgName == "" {
 			return nil, nil, errors.New("could not find database entry for this package")
 		}
-		for _, db := range MainBPMConfig.Databases {
+		for _, db := range BPMDatabases {
 			if db.ContainsPackage(pkgName) {
 				return db.Entries[pkgName], db, nil
 			}
@@ -216,7 +196,7 @@ func GetDatabaseEntry(str string) (*BPMDatabaseEntry, *BPMDatabase, error) {
 		if dbName == "" || pkgName == "" {
 			return nil, nil, errors.New("could not find database entry for this package")
 		}
-		db := GetDatabase(dbName)
+		db := BPMDatabases[dbName]
 		if db == nil || !db.ContainsPackage(pkgName) {
 			return nil, nil, errors.New("could not find database entry for this package")
 		}
@@ -227,7 +207,7 @@ func GetDatabaseEntry(str string) (*BPMDatabaseEntry, *BPMDatabase, error) {
 }
 
 func FindReplacement(pkg string) *BPMDatabaseEntry {
-	for _, db := range MainBPMConfig.Databases {
+	for _, db := range BPMDatabases {
 		for _, entry := range db.Entries {
 			for _, replaced := range entry.Info.Replaces {
 				if replaced == pkg {
@@ -241,7 +221,7 @@ func FindReplacement(pkg string) *BPMDatabaseEntry {
 }
 
 func ResolveVirtualPackage(vpkg string) *BPMDatabaseEntry {
-	for _, db := range MainBPMConfig.Databases {
+	for _, db := range BPMDatabases {
 		if v, ok := db.VirtualPackages[vpkg]; ok {
 			for _, pkg := range v {
 				return db.Entries[pkg]
@@ -257,7 +237,7 @@ func (db *BPMDatabase) FetchPackage(pkg string) (string, error) {
 		return "", errors.New("could not fetch package '" + pkg + "'")
 	}
 	entry := db.Entries[pkg]
-	URL, err := url.JoinPath(db.Source, entry.Download)
+	URL, err := url.JoinPath(db.Source, entry.Filepath)
 	if err != nil {
 		return "", err
 	}
@@ -271,12 +251,12 @@ func (db *BPMDatabase) FetchPackage(pkg string) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	out, err := os.Create("/var/cache/bpm/fetched/" + path.Base(entry.Download))
+	out, err := os.Create("/var/cache/bpm/fetched/" + path.Base(entry.Filepath))
 	if err != nil {
 		return "", err
 	}
 	defer out.Close()
 
 	_, err = io.Copy(out, resp.Body)
-	return "/var/cache/bpm/fetched/" + path.Base(entry.Download), nil
+	return "/var/cache/bpm/fetched/" + path.Base(entry.Filepath), nil
 }

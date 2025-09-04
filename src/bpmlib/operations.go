@@ -448,7 +448,7 @@ func (operation *BPMOperation) Execute(verbose, force bool) (err error) {
 			var bpmpkg *BPMPackage
 
 			// Check if package has already been fetched from download link
-			if _, ok := fetchedPackages[entry.Download]; !ok {
+			if _, ok := fetchedPackages[entry.Filepath]; !ok {
 				// Fetch package from database
 				fetchedPackage, err := entry.Database.FetchPackage(entry.Info.Name)
 				if err != nil {
@@ -462,12 +462,12 @@ func (operation *BPMOperation) Execute(verbose, force bool) (err error) {
 				}
 
 				// Add fetched package to map
-				fetchedPackages[entry.Download] = fetchedPackage
+				fetchedPackages[entry.Filepath] = fetchedPackage
 
 				fmt.Printf("Package (%s) was successfully fetched!\n", entry.Info.Name)
 			} else {
 				// Read fetched package
-				bpmpkg, err = ReadPackage(fetchedPackages[entry.Download])
+				bpmpkg, err = ReadPackage(fetchedPackages[entry.Filepath])
 				if err != nil {
 					return fmt.Errorf("could not read package (%s): %s\n", entry.Info.Name, err)
 				}
@@ -477,14 +477,14 @@ func (operation *BPMOperation) Execute(verbose, force bool) (err error) {
 
 			if bpmpkg.PkgInfo.IsSplitPackage() {
 				operation.Actions[i] = &InstallPackageAction{
-					File:                  fetchedPackages[entry.Download],
+					File:                  fetchedPackages[entry.Filepath],
 					InstallationReason:    action.(*FetchPackageAction).InstallationReason,
 					BpmPackage:            bpmpkg,
 					SplitPackageToInstall: entry.Info.Name,
 				}
 			} else {
 				operation.Actions[i] = &InstallPackageAction{
-					File:               fetchedPackages[entry.Download],
+					File:               fetchedPackages[entry.Filepath],
 					InstallationReason: action.(*FetchPackageAction).InstallationReason,
 					BpmPackage:         bpmpkg,
 				}

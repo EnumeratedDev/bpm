@@ -218,7 +218,7 @@ func resolveCommand() {
 		for i, term := range searchTerms {
 			nameResults := make([]*bpmlib.PackageInfo, 0)
 			descResults := make([]*bpmlib.PackageInfo, 0)
-			for _, db := range bpmlib.MainBPMConfig.Databases {
+			for _, db := range bpmlib.BPMDatabases {
 				for _, entry := range db.Entries {
 					if strings.Contains(entry.Info.Name, term) {
 						nameResults = append(nameResults, entry.Info)
