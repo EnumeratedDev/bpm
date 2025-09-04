@@ -44,6 +44,7 @@ var showDatabaseInfo = false
 var installSrcPkgDepends = false
 var skipChecks = false
 var outputDirectory = ""
+var outputFd = -1
 var cleanupDependencies = false
 var cleanupMakeDependencies = false
 var cleanupCompilationFiles = false
@@ -702,7 +703,17 @@ func resolveCommand() {
 			}
 
 			for k, v := range outputBpmPackages {
-				fmt.Printf("Package (%s) was successfully compiled! Binary package generated at: %s\n", k, v)
+				if outputFd < 0 {
+					fmt.Printf("Package (%s) was successfully compiled! Binary package generated at: %s\n", k, v)
+				} else {
+					f := os.NewFile(uintptr(outputFd), "output_file_descrptor")
+					defer f.Close()
+					if f == nil {
+						log.Printf("Warning: invalid file descriptor: %d", outputFd)
+						break
+					}
+					fmt.Fprintln(f, v)
+				}
 			}
 
 			// Remove unused packages
@@ -793,6 +804,7 @@ func printHelp() {
 	fmt.Println("       -s skips the check function in source.sh scripts")
 	fmt.Println("       -o sets output directory")
 	fmt.Println("       -y skips the confirmation prompt")
+	fmt.Println("       --fd=<file descriptor> Set the file descriptor output package names will be written to")
 
 	fmt.Println("\033[1m----------------\033[0m")
 }
@@ -862,6 +874,7 @@ func resolveFlags() {
 	compileFlagSet.BoolVar(&installSrcPkgDepends, "d", false, "Install required dependencies for package compilation")
 	compileFlagSet.BoolVar(&skipChecks, "s", false, "Skip the check function in source.sh scripts")
 	compileFlagSet.StringVar(&outputDirectory, "o", "", "Set output directory")
+	compileFlagSet.IntVar(&outputFd, "fd", -1, "Set the file descriptor output package names will be written to")
 	compileFlagSet.BoolVar(&verbose, "v", false, "Show additional information about what BPM is doing")
 	compileFlagSet.BoolVar(&yesAll, "y", false, "Skip confirmation prompts")
 	compileFlagSet.Usage = printHelp
