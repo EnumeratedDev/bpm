@@ -1,11 +1,15 @@
 package bpmlib
 
 import (
+	"crypto/sha256"
+	"encoding/hex"
 	"errors"
 	"fmt"
+	"io"
 	"os"
 	"os/exec"
 	"path"
+	"slices"
 	"strconv"
 	"strings"
 	"syscall"
@@ -112,6 +116,12 @@ func CompileSourcePackage(archiveFilename, outputDirectory string, skipChecks bo
 
 	// Change source directory owner
 	err = os.Chown(path.Join(tempDirectory, "source"), uid, gid)
+	if err != nil {
+		return nil, err
+	}
+
+	// Download files
+	err = downloadPackageFiles(bpmpkg.PkgInfo, tempDirectory)
 	if err != nil {
 		return nil, err
 	}
@@ -251,8 +261,9 @@ func CompileSourcePackage(archiveFilename, outputDirectory string, skipChecks bo
 		pkgInfo.Arch = pkg.OutputArch
 		pkgInfo.OutputArch = ""
 
-		// Remove split package field
+		// Remove split package and downloads fields
 		pkgInfo.SplitPackages = nil
+		pkgInfo.Downloads = nil
 
 		// Marshal package info
 		pkgInfoBytes, err := yaml.Marshal(pkgInfo)
@@ -322,4 +333,144 @@ func CompileSourcePackage(archiveFilename, outputDirectory string, skipChecks bo
 	}
 
 	return outputBpmPackages, nil
+}
+
+func downloadPackageFiles(pkgInfo *PackageInfo, tempDirectory string) error {
+	for _, download := range pkgInfo.Downloads {
+		// Replace variables in download url
+		downloadUrl := download.Url
+		downloadUrl = os.Expand(downloadUrl, func(s string) string {
+			switch s {
+			case "BPM_PKG_VERSION":
+				return pkgInfo.Version
+			case "BPM_PKG_NAME":
+				return pkgInfo.Name
+			default:
+				return ""
+			}
+		})
+
+		switch download.Type {
+		case "", "file":
+			filepath := path.Join(tempDirectory, path.Base(downloadUrl))
+			if download.Filepath != "" {
+				filepath = download.Filepath
+			}
+
+			err := downloadFile(downloadUrl, filepath, 0644)
+			if err != nil {
+				return err
+			}
+
+			if download.Checksum != "skip" {
+				f, err := os.Open(filepath)
+				if err != nil {
+					return err
+				}
+				defer f.Close()
+
+				h := sha256.New()
+				_, err = io.Copy(h, f)
+				if err != nil {
+					return err
+				}
+
+				if hex.EncodeToString(h.Sum(nil)) != download.Checksum {
+					fmt.Printf("Downloaded file checksum: %x\n", h.Sum(nil))
+					return fmt.Errorf("downloaded file checksums did not match")
+				}
+			} else {
+				fmt.Println("Skipping checksum checking...")
+			}
+
+			if !download.NoExtract && (strings.Contains(filepath, ".tar") || strings.HasSuffix(filepath, ".tgz")) {
+				cmd := exec.Command("tar", "xvf", filepath, "--strip-components="+strconv.Itoa(download.ExtractStripComponents))
+				if download.ExtractToBPMSource {
+					cmd.Args = append(cmd.Args, "-C", path.Join(tempDirectory, "source"))
+				}
+
+				cmd.Stdout = os.Stdout
+				cmd.Stderr = os.Stderr
+
+				err := cmd.Run()
+				if err != nil {
+					return err
+				}
+			} else if !download.NoExtract && strings.HasSuffix(filepath, ".zip") {
+				cmd := exec.Command("unzip", filepath)
+				if download.ExtractToBPMSource {
+					cmd.Args = append(cmd.Args, "-d", path.Join(tempDirectory, "source"))
+				} else {
+					err := os.Mkdir(path.Join(tempDirectory, strings.TrimSuffix(path.Base(filepath), ".zip")), 0755)
+					if err != nil {
+						return err
+					}
+
+					cmd.Args = append(cmd.Args, "-d", path.Join(tempDirectory, strings.TrimSuffix(path.Base(filepath), ".zip")))
+				}
+
+				cmd.Stdout = os.Stdout
+				cmd.Stderr = os.Stderr
+
+				err := cmd.Run()
+				if err != nil {
+					return err
+				}
+			}
+		case "git":
+			// Replace variables in git branch
+			gitBranch := download.GitBranch
+			gitBranch = os.Expand(gitBranch, func(s string) string {
+				switch s {
+				case "BPM_PKG_VERSION":
+					return pkgInfo.Version
+				case "BPM_PKG_NAME":
+					return pkgInfo.Name
+				default:
+					return ""
+				}
+			})
+
+			cmd := exec.Command("git", "clone", "--depth=1", downloadUrl)
+			if gitBranch != "" {
+				cmd.Args = slices.Insert(cmd.Args, len(cmd.Args)-1, "--branch="+gitBranch)
+			}
+			if download.ExtractToBPMSource {
+				cmd.Args = append(cmd.Args, path.Join(tempDirectory, "source"))
+			}
+
+			cmd.Stdout = os.Stdout
+			cmd.Stderr = os.Stderr
+
+			err := cmd.Run()
+			if err != nil {
+				return err
+			}
+
+			if download.Checksum != "skip" {
+				cmd := exec.Command("git", "rev-parse", "HEAD")
+				if download.ExtractToBPMSource {
+					cmd.Dir = path.Join(tempDirectory, "source")
+				} else {
+					cmd.Dir = path.Join(tempDirectory, strings.TrimSuffix(path.Base(downloadUrl), ".git"))
+				}
+
+				branchChecksum, err := cmd.Output()
+				if err != nil {
+					return err
+				}
+
+				if strings.TrimSpace(string(branchChecksum)) != download.Checksum {
+					fmt.Printf("Git branch checksum: %s\n", strings.TrimSpace(string(branchChecksum)))
+					return fmt.Errorf("Cloned git repository checksum did not match")
+				}
+			} else {
+				fmt.Println("Skipping checksum checking...")
+			}
+		default:
+			return fmt.Errorf("unknown download type (%s)", download.Type)
+		}
+	}
+
+	return nil
 }

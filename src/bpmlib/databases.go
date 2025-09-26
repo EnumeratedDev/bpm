@@ -3,8 +3,6 @@ package bpmlib
 import (
 	"errors"
 	"fmt"
-	"io"
-	"net/http"
 	"net/url"
 	"os"
 	"path"
@@ -132,14 +130,10 @@ func (db *configDatabase) SyncLocalDatabaseFile() error {
 	}
 
 	// Retrieve data from URL
-	resp, err := http.Get(u)
+	buffer, err := retrieveUrlData(u)
 	if err != nil {
 		return err
 	}
-	defer resp.Body.Close()
-
-	// Load data into byte buffer
-	buffer, err := io.ReadAll(resp.Body)
 
 	// Unmarshal data to ensure it is a valid BPM database
 	err = yaml.Unmarshal(buffer, &BPMDatabase{})
@@ -233,30 +227,23 @@ func ResolveVirtualPackage(vpkg string) *BPMDatabaseEntry {
 }
 
 func (db *BPMDatabase) FetchPackage(pkg string) (string, error) {
+	// Check if package exists in database
 	if !db.ContainsPackage(pkg) {
 		return "", errors.New("could not fetch package '" + pkg + "'")
 	}
+
+	// Get package url from database
 	entry := db.Entries[pkg]
-	URL, err := url.JoinPath(db.Source, entry.Filepath)
+	u, err := url.JoinPath(db.Source, entry.Filepath)
 	if err != nil {
 		return "", err
 	}
-	resp, err := http.Get(URL)
-	if err != nil {
-		return "", err
-	}
-	defer resp.Body.Close()
 
-	err = os.MkdirAll("/var/cache/bpm/fetched/", 0755)
+	// Download package from url
+	err = downloadFile(u, path.Join("/var/cache/bpm/fetched/", path.Base(entry.Filepath)), 0644)
 	if err != nil {
 		return "", err
 	}
-	out, err := os.Create("/var/cache/bpm/fetched/" + path.Base(entry.Filepath))
-	if err != nil {
-		return "", err
-	}
-	defer out.Close()
 
-	_, err = io.Copy(out, resp.Body)
-	return "/var/cache/bpm/fetched/" + path.Base(entry.Filepath), nil
+	return path.Join("/var/cache/bpm/fetched/", path.Base(entry.Filepath)), nil
 }
