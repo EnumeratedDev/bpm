@@ -178,10 +178,10 @@ func ReadPackage(filename string) (*BPMPackage, error) {
 	}
 
 	file, err := os.Open(filename)
-	defer file.Close()
 	if err != nil {
 		return nil, err
 	}
+	defer file.Close()
 
 	tr := tar.NewReader(file)
 	for {
@@ -303,14 +303,6 @@ func ReadPackageScripts(filename string) (map[string]string, error) {
 	}
 	return ret, nil
 }
-
-type packageOperation uint8
-
-const (
-	packageOperationInstall packageOperation = 0
-	packageOperationUpdate                   = 1
-	packageOperationRemove                   = 2
-)
 
 func executePackageScript(pkg, rootDir string, verbose bool, packageScript string) error {
 	var bpmpkg *BPMPackage

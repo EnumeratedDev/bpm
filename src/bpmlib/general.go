@@ -164,14 +164,14 @@ func InstallPackages(rootDir string, forceInstallationReason InstallationReason,
 	if rootDir != "/" {
 		sourcePackages := make([]string, 0)
 		for _, action := range operation.Actions {
-			switch action.(type) {
+			switch action := action.(type) {
 			case *InstallPackageAction:
-				if action.(*InstallPackageAction).BpmPackage.PkgInfo.Type == "source" {
-					sourcePackages = append(sourcePackages, action.(*InstallPackageAction).BpmPackage.PkgInfo.Name)
+				if action.BpmPackage.PkgInfo.Type == "source" {
+					sourcePackages = append(sourcePackages, action.BpmPackage.PkgInfo.Name)
 				}
 			case *FetchPackageAction:
-				if action.(*FetchPackageAction).DatabaseEntry.Info.Type == "source" {
-					sourcePackages = append(sourcePackages, action.(*FetchPackageAction).DatabaseEntry.Info.Name)
+				if action.DatabaseEntry.Info.Type == "source" {
+					sourcePackages = append(sourcePackages, action.DatabaseEntry.Info.Name)
 				}
 			}
 		}

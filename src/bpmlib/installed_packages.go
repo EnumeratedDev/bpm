@@ -1,7 +1,6 @@
 package bpmlib
 
 import (
-	"errors"
 	"fmt"
 	"os"
 	"path"
@@ -169,14 +168,11 @@ func GetAllPackageFiles(rootDir string, excludePackages ...string) (map[string][
 		}
 		bpmpkg := GetPackage(pkgName, rootDir)
 		if bpmpkg == nil {
-			return nil, errors.New(fmt.Sprintf("could not get BPM package (%s)", pkgName))
+			return nil, fmt.Errorf("could not get BPM package (%s)", pkgName)
 		}
 		for _, entry := range bpmpkg.PkgFiles {
-			if _, ok := ret[entry.Path]; ok {
-				ret[entry.Path] = append(ret[entry.Path], bpmpkg)
-			} else {
-				ret[entry.Path] = []*BPMPackage{bpmpkg}
-			}
+			ret[entry.Path] = append(ret[entry.Path], bpmpkg)
+
 		}
 	}
 
