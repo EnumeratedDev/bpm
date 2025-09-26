@@ -31,12 +31,6 @@ func CompileSourcePackage(archiveFilename, outputDirectory string, skipChecks bo
 		return nil, errors.New("cannot compile a non-source package")
 	}
 
-	// Read compilation options file in current directory
-	compilationOptions, err := readCompilationOptionsFile()
-	if err != nil {
-		return nil, err
-	}
-
 	// Get HOME directory
 	homeDir, err := os.UserHomeDir()
 	if err != nil {
@@ -131,12 +125,7 @@ func CompileSourcePackage(archiveFilename, outputDirectory string, skipChecks bo
 	env = append(env, "BPM_PKG_NAME="+bpmpkg.PkgInfo.Name)
 	env = append(env, "BPM_PKG_VERSION="+bpmpkg.PkgInfo.Version)
 	env = append(env, "BPM_PKG_REVISION="+strconv.Itoa(bpmpkg.PkgInfo.Revision))
-	// Check for architecture override in compilation options
-	if val, ok := compilationOptions["ARCH"]; ok {
-		env = append(env, "BPM_PKG_ARCH="+val)
-	} else {
-		env = append(env, "BPM_PKG_ARCH="+GetArch())
-	}
+	env = append(env, "BPM_PKG_ARCH="+bpmpkg.PkgInfo.OutputArch)
 	env = append(env, CompilationBPMConfig.CompilationEnvironment...)
 
 	// Execute prepare and build functions in source.sh script
@@ -259,11 +248,8 @@ func CompileSourcePackage(archiveFilename, outputDirectory string, skipChecks bo
 		pkgInfo.Type = "binary"
 
 		// Set package architecture
-		if val, ok := compilationOptions["ARCH"]; ok {
-			pkgInfo.Arch = val
-		} else {
-			pkgInfo.Arch = GetArch()
-		}
+		pkgInfo.Arch = pkg.OutputArch
+		pkgInfo.OutputArch = ""
 
 		// Remove split package field
 		pkgInfo.SplitPackages = nil
@@ -336,48 +322,4 @@ func CompileSourcePackage(archiveFilename, outputDirectory string, skipChecks bo
 	}
 
 	return outputBpmPackages, nil
-}
-
-func readCompilationOptionsFile() (options map[string]string, err error) {
-	// Initialize options map
-	options = make(map[string]string)
-
-	// Check if file compilation options file exists
-	stat, err := os.Stat(".compilation-options")
-	if err != nil {
-		return nil, nil
-	}
-
-	// Ensure it is a regular file
-	if !stat.Mode().IsRegular() {
-		return nil, fmt.Errorf("%s is not a regular file", stat.Name())
-	}
-
-	// Read file data
-	data, err := os.ReadFile(stat.Name())
-	if err != nil {
-		return nil, err
-	}
-
-	for _, line := range strings.Split(string(data), "\n") {
-		// Trim line
-		line = strings.TrimSpace(line)
-
-		// Skip empty lines
-		if line == "" {
-			continue
-		}
-
-		// Split line
-		split := strings.SplitN(line, "=", 2)
-
-		// Throw error if line isn't valid
-		if len(split) < 2 {
-			return nil, fmt.Errorf("invalid line in compilation-options file: '%s'", line)
-		}
-
-		options[split[0]] = split[1]
-	}
-
-	return options, nil
 }

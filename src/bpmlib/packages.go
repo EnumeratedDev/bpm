@@ -33,6 +33,7 @@ type PackageInfo struct {
 	Url             string         `yaml:"url,omitempty"`
 	License         string         `yaml:"license,omitempty"`
 	Arch            string         `yaml:"architecture,omitempty"`
+	OutputArch      string         `yaml:"output_architecture,omitempty"`
 	Type            string         `yaml:"type,omitempty"`
 	Keep            []string       `yaml:"keep,omitempty"`
 	Depends         []string       `yaml:"depends,omitempty"`
@@ -420,6 +421,7 @@ func ReadPackageInfo(contents string) (*PackageInfo, error) {
 		Url:             "",
 		License:         "",
 		Arch:            "",
+		OutputArch:      GetArch(),
 		Type:            "",
 		Keep:            make([]string, 0),
 		Depends:         make([]string, 0),
