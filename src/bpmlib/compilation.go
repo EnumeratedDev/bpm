@@ -14,6 +14,7 @@ import (
 	"strings"
 	"syscall"
 
+	"github.com/drone/envsubst"
 	"gopkg.in/yaml.v3"
 )
 
@@ -339,7 +340,7 @@ func downloadPackageFiles(pkgInfo *PackageInfo, tempDirectory string) error {
 	for _, download := range pkgInfo.Downloads {
 		// Replace variables in download url
 		downloadUrl := download.Url
-		downloadUrl = os.Expand(downloadUrl, func(s string) string {
+		downloadUrl, err := envsubst.Eval(downloadUrl, func(s string) string {
 			switch s {
 			case "BPM_PKG_VERSION":
 				return pkgInfo.Version
@@ -349,6 +350,9 @@ func downloadPackageFiles(pkgInfo *PackageInfo, tempDirectory string) error {
 				return ""
 			}
 		})
+		if err != nil {
+			return err
+		}
 
 		switch download.Type {
 		case "", "file":
@@ -420,7 +424,7 @@ func downloadPackageFiles(pkgInfo *PackageInfo, tempDirectory string) error {
 		case "git":
 			// Replace variables in git branch
 			gitBranch := download.GitBranch
-			gitBranch = os.Expand(gitBranch, func(s string) string {
+			gitBranch, err := envsubst.Eval(gitBranch, func(s string) string {
 				switch s {
 				case "BPM_PKG_VERSION":
 					return pkgInfo.Version
@@ -430,6 +434,9 @@ func downloadPackageFiles(pkgInfo *PackageInfo, tempDirectory string) error {
 					return ""
 				}
 			})
+			if err != nil {
+				return err
+			}
 
 			cmd := exec.Command("git", "clone", "--depth=1", downloadUrl)
 			if gitBranch != "" {
@@ -442,7 +449,7 @@ func downloadPackageFiles(pkgInfo *PackageInfo, tempDirectory string) error {
 			cmd.Stdout = os.Stdout
 			cmd.Stderr = os.Stderr
 
-			err := cmd.Run()
+			err = cmd.Run()
 			if err != nil {
 				return err
 			}
