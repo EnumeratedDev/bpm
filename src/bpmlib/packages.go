@@ -27,8 +27,8 @@ type BPMPackage struct {
 
 type PackageInfo struct {
 	Name            string            `yaml:"name"`
-	Description     string            `yaml:"description"`
-	Version         string            `yaml:"version"`
+	Description     string            `yaml:"description,omitempty"`
+	Version         string            `yaml:"version,omitempty"`
 	Revision        int               `yaml:"revision,omitempty"`
 	Url             string            `yaml:"url,omitempty"`
 	License         string            `yaml:"license,omitempty"`
@@ -37,8 +37,8 @@ type PackageInfo struct {
 	Type            string            `yaml:"type,omitempty"`
 	Keep            []string          `yaml:"keep,omitempty"`
 	Depends         []string          `yaml:"depends,omitempty"`
-	MakeDepends     []string          `yaml:"make_depends,omitempty"`
 	OptionalDepends []string          `yaml:"optional_depends,omitempty"`
+	MakeDepends     []string          `yaml:"make_depends,omitempty"`
 	Conflicts       []string          `yaml:"conflicts,omitempty"`
 	Replaces        []string          `yaml:"replaces,omitempty"`
 	Provides        []string          `yaml:"provides,omitempty"`
@@ -48,13 +48,13 @@ type PackageInfo struct {
 
 type PackageDownload struct {
 	Url                    string `yaml:"url"`
-	Type                   string `yaml:"type"`
-	NoExtract              bool   `yaml:"no_extract"`
-	ExtractToBPMSource     bool   `yaml:"extract_to_bpm_source"`
-	ExtractStripComponents int    `yaml:"extract_strip_components"`
-	GitBranch              string `yaml:"git_branch"`
-	Filepath               string `yaml:"filepath,omitempty"`
-	Checksum               string `yaml:"checksum"`
+	Type                   string `yaml:"type,omitempty"`
+	NoExtract              bool   `yaml:"no_extract,omitempty"`
+	ExtractToBPMSource     bool   `yaml:"extract_to_bpm_source,omitempty"`
+	ExtractStripComponents int    `yaml:"extract_strip_components,omitempty"`
+	GitBranch              string `yaml:"git_branch,omitempty"`
+	Filepath               string `yaml:"filepath,omitempty,omitempty"`
+	Checksum               string `yaml:"checksum,omitempty"`
 }
 
 type PackageFileEntry struct {
@@ -418,15 +418,8 @@ func executePackageScript(pkg, rootDir string, verbose bool, packageScript strin
 
 func ReadPackageInfo(contents string) (*PackageInfo, error) {
 	pkgInfo := &PackageInfo{
-		Name:            "",
-		Description:     "",
-		Version:         "",
 		Revision:        1,
-		Url:             "",
-		License:         "",
-		Arch:            "",
 		OutputArch:      GetArch(),
-		Type:            "",
 		Keep:            make([]string, 0),
 		Depends:         make([]string, 0),
 		MakeDepends:     make([]string, 0),
@@ -469,28 +462,29 @@ func ReadPackageInfo(contents string) (*PackageInfo, error) {
 			return nil, fmt.Errorf("invalid split package name: %s", splitPkg.Name)
 		}
 
-		// Turn split package into json data
-		splitPkgJson, err := yaml.Marshal(splitPkg)
+		// Turn split package into yaml data
+		splitPkgYaml, err := yaml.Marshal(splitPkg)
 		if err != nil {
 			return nil, err
 		}
 
 		// Clone all main package fields onto split package
-		pkgInfoClone := *pkgInfo
-		pkgInfo.SplitPackages[i] = &pkgInfoClone
+		*splitPkg = *pkgInfo
 
 		// Set split package field of split package to nil
-		pkgInfo.SplitPackages[i].SplitPackages = nil
+		splitPkg.SplitPackages = nil
 
 		// Unmarshal json data back to struct
-		err = yaml.Unmarshal(splitPkgJson, &pkgInfo.SplitPackages[i])
+		err = yaml.Unmarshal(splitPkgYaml, splitPkg)
 		if err != nil {
 			return nil, err
 		}
 
 		// Force set split package version, revision
-		pkgInfo.SplitPackages[i].Version = pkgInfo.Version
-		pkgInfo.SplitPackages[i].Revision = pkgInfo.Revision
+		splitPkg.Version = pkgInfo.Version
+		splitPkg.Revision = pkgInfo.Revision
+
+		pkgInfo.SplitPackages[i] = splitPkg
 	}
 
 	return pkgInfo, nil
