@@ -357,8 +357,8 @@ func downloadPackageFiles(pkgInfo *PackageInfo, tempDirectory string) error {
 		switch download.Type {
 		case "", "file":
 			filepath := path.Join(tempDirectory, path.Base(downloadUrl))
-			if download.Filepath != "" {
-				filepath = download.Filepath
+			if download.Filepath != "" && download.Filepath[0] != '/' {
+				filepath = path.Join(tempDirectory, download.Filepath)
 			}
 
 			err := downloadFile(downloadUrl, filepath, 0644)
@@ -389,6 +389,7 @@ func downloadPackageFiles(pkgInfo *PackageInfo, tempDirectory string) error {
 
 			if !download.NoExtract && (strings.Contains(filepath, ".tar") || strings.HasSuffix(filepath, ".tgz")) {
 				cmd := exec.Command("tar", "xvf", filepath, "--strip-components="+strconv.Itoa(download.ExtractStripComponents))
+				cmd.Dir = tempDirectory
 				if download.ExtractToBPMSource {
 					cmd.Args = append(cmd.Args, "-C", path.Join(tempDirectory, "source"))
 				}
@@ -439,6 +440,7 @@ func downloadPackageFiles(pkgInfo *PackageInfo, tempDirectory string) error {
 			}
 
 			cmd := exec.Command("git", "clone", "--depth=1", downloadUrl)
+			cmd.Dir = tempDirectory
 			if gitBranch != "" {
 				cmd.Args = slices.Insert(cmd.Args, len(cmd.Args)-1, "--branch="+gitBranch)
 			}
