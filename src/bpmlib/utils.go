@@ -3,8 +3,51 @@ package bpmlib
 import (
 	"fmt"
 	"math"
+	"os"
+	"path"
 	"syscall"
 )
+
+type BPMLock struct {
+	file *os.File
+	path string
+}
+
+func (lock *BPMLock) Unlock() error {
+	err := lock.file.Close()
+	if err != nil {
+		return err
+	}
+
+	err = os.Remove(lock.path)
+	if err != nil {
+		return err
+	}
+
+	return nil
+}
+
+func LockBPM(rootDir string) (*BPMLock, error) {
+	// Create parent directories if they don't already exist
+	err := os.MkdirAll(path.Join(rootDir, "/var/lib/bpm"), 0755)
+	if err != nil {
+		return nil, err
+	}
+
+	// Create file
+	f, err := os.Create(path.Join(rootDir, "var/lib/bpm/bpm.lock"))
+	if err != nil {
+		return nil, err
+	}
+
+	// Get exclusive file lock on file
+	err = syscall.Flock(int(f.Fd()), syscall.LOCK_EX|syscall.LOCK_NB)
+	if err != nil {
+		return nil, err
+	}
+
+	return &BPMLock{f, path.Join(rootDir, "var/lib/bpm/bpm.lock")}, nil
+}
 
 func GetArch() string {
 	uname := syscall.Utsname{}

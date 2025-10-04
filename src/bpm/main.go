@@ -51,6 +51,8 @@ var cleanupCompilationFiles = false
 var cleanupCompiledPackages = false
 var cleanupFetchedPackages = false
 
+var exitCode = 0
+
 func main() {
 	err := bpmlib.ReadConfig()
 	if err != nil {
@@ -58,6 +60,10 @@ func main() {
 	}
 	resolveFlags()
 	resolveCommand()
+
+	if exitCode != 0 {
+		os.Exit(exitCode)
+	}
 }
 
 type commandType uint8
@@ -121,7 +127,9 @@ func resolveCommand() {
 		// Read local databases
 		err := bpmlib.ReadLocalDatabaseFiles()
 		if err != nil {
-			log.Fatalf("Error: could not read local databases: %s", err)
+			log.Printf("Error: could not read local databases: %s", err)
+			exitCode = 1
+			return
 		}
 
 		for n, pkg := range packages {
@@ -134,14 +142,18 @@ func resolveCommand() {
 				entry, _, err = bpmlib.GetDatabaseEntry(pkg)
 				if err != nil {
 					if entry = bpmlib.ResolveVirtualPackage(pkg); entry == nil {
-						log.Fatalf("Error: could not find package (%s) in any database\n", pkg)
+						log.Printf("Error: could not find package (%s) in any database\n", pkg)
+						exitCode = 1
+						return
 					}
 				}
 				info = entry.Info
 			} else if stat, err := os.Stat(pkg); err == nil && !stat.IsDir() {
 				bpmpkg, err := bpmlib.ReadPackage(pkg)
 				if err != nil {
-					log.Fatalf("Error: could not read package: %s\n", err)
+					log.Printf("Error: could not read package: %s\n", err)
+					exitCode = 1
+					return
 				}
 				info = bpmpkg.PkgInfo
 				isFile = true
@@ -154,7 +166,9 @@ func resolveCommand() {
 				showInstallationReason = true
 			}
 			if info == nil {
-				log.Fatalf("Error: package (%s) is not installed\n", pkg)
+				log.Printf("Error: package (%s) is not installed\n", pkg)
+				exitCode = 1
+				return
 			}
 			if n != 0 {
 				fmt.Println()
@@ -162,7 +176,9 @@ func resolveCommand() {
 			if isFile {
 				abs, err := filepath.Abs(pkg)
 				if err != nil {
-					log.Fatalf("Error: could not get absolute path of file (%s)\n", abs)
+					log.Printf("Error: could not get absolute path of file (%s)\n", abs)
+					exitCode = 1
+					return
 				}
 				fmt.Println("File: " + abs)
 			}
@@ -172,12 +188,15 @@ func resolveCommand() {
 		// Read local databases
 		err := bpmlib.ReadLocalDatabaseFiles()
 		if err != nil {
-			log.Fatalf("Error: could not read local databases: %s", err)
+			log.Printf("Error: could not read local databases: %s", err)
+			exitCode = 1
+			return
 		}
 
 		packages, err := bpmlib.GetInstalledPackages(rootDir)
 		if err != nil {
-			log.Fatalf("Error: could not get installed packages: %s", err.Error())
+			log.Printf("Error: could not get installed packages: %s", err.Error())
+			exitCode = 1
 			return
 		}
 		if pkgListNumbers {
@@ -206,13 +225,17 @@ func resolveCommand() {
 	case search:
 		searchTerms := subcommandArgs
 		if len(searchTerms) == 0 {
-			log.Fatalf("Error: no search terms given")
+			log.Printf("Error: no search terms given")
+			exitCode = 1
+			return
 		}
 
 		// Read local databases
 		err := bpmlib.ReadLocalDatabaseFiles()
 		if err != nil {
-			log.Fatalf("Error: could not read local databases: %s", err)
+			log.Printf("Error: could not read local databases: %s", err)
+			exitCode = 1
+			return
 		}
 
 		for i, term := range searchTerms {
@@ -229,7 +252,9 @@ func resolveCommand() {
 			}
 			results := append(nameResults, descResults...)
 			if len(results) == 0 {
-				log.Fatalf("Error: no results for term (%s) were found\n", term)
+				log.Printf("Error: no results for term (%s) were found\n", term)
+				exitCode = 1
+				return
 			}
 			if i > 0 {
 				fmt.Println()
@@ -242,7 +267,9 @@ func resolveCommand() {
 	case install:
 		// Check for required permissions
 		if os.Getuid() != 0 {
-			log.Fatalf("Error: this subcommand needs to be run with superuser permissions")
+			log.Printf("Error: this subcommand needs to be run with superuser permissions")
+			exitCode = 1
+			return
 		}
 
 		// Return if no packages are specified
@@ -262,7 +289,9 @@ func resolveCommand() {
 			ir = bpmlib.InstallationReasonMakeDependency
 		case "":
 		default:
-			log.Fatalf("Error: %s is not a valid installation reason", installationReason)
+			log.Printf("Error: %s is not a valid installation reason", installationReason)
+			exitCode = 1
+			return
 		}
 
 		// Get reinstall method
@@ -275,18 +304,33 @@ func resolveCommand() {
 			reinstallMethod = bpmlib.ReinstallMethodNone
 		}
 
-		// Read local databases
-		err := bpmlib.ReadLocalDatabaseFiles()
+		// Create BPM Lock file
+		fileLock, err := bpmlib.LockBPM(rootDir)
 		if err != nil {
-			log.Fatalf("Error: could not read local databases: %s", err)
+			log.Printf("Error: could not create BPM lock file: %s", err)
+			exitCode = 1
+			return
+		}
+		defer fileLock.Unlock()
+
+		// Read local databases
+		err = bpmlib.ReadLocalDatabaseFiles()
+		if err != nil {
+			log.Printf("Error: could not read local databases: %s", err)
+			exitCode = 1
+			return
 		}
 
 		// Create installation operation
 		operation, err := bpmlib.InstallPackages(rootDir, ir, reinstallMethod, installOptional, force, verbose, subcommandArgs...)
 		if errors.As(err, &bpmlib.PackageNotFoundErr{}) || errors.As(err, &bpmlib.DependencyNotFoundErr{}) || errors.As(err, &bpmlib.PackageConflictErr{}) {
-			log.Fatalf("Error: %s", err)
+			log.Printf("Error: %s", err)
+			exitCode = 1
+			return
 		} else if err != nil {
-			log.Fatalf("Error: could not setup operation: %s\n", err)
+			log.Printf("Error: could not setup operation: %s\n", err)
+			exitCode = 1
+			return
 		}
 
 		// Exit if operation contains no actions
@@ -310,42 +354,62 @@ func resolveCommand() {
 			text, _ := reader.ReadString('\n')
 			if strings.TrimSpace(strings.ToLower(text)) != "y" && strings.TrimSpace(strings.ToLower(text)) != "yes" {
 				fmt.Println("Cancelling package installation...")
-				os.Exit(1)
+				exitCode = 1
+				return
 			}
 		}
 
 		// Execute operation
 		err = operation.Execute(verbose, force)
 		if err != nil {
-			log.Fatalf("Error: could not complete operation: %s\n", err)
+			log.Printf("Error: could not complete operation: %s\n", err)
+			exitCode = 1
+			return
 		}
 
 		// Executing hooks
 		fmt.Println("Running hooks...")
 		err = operation.RunHooks(verbose)
 		if err != nil {
-			log.Fatalf("Error: could not run hooks: %s\n", err)
+			log.Printf("Error: could not run hooks: %s\n", err)
+			exitCode = 1
+			return
 		}
 	case update:
 		// Check for required permissions
 		if os.Getuid() != 0 {
-			log.Fatalf("Error: this subcommand needs to be run with superuser permissions")
+			log.Printf("Error: this subcommand needs to be run with superuser permissions")
+			exitCode = 1
+			return
 		}
+
+		// Create BPM Lock file
+		fileLock, err := bpmlib.LockBPM(rootDir)
+		if err != nil {
+			log.Printf("Error: could not create BPM lock file: %s", err)
+			exitCode = 1
+			return
+		}
+		defer fileLock.Unlock()
 
 		// Read local databases if no sync
 		if nosync {
 			err := bpmlib.ReadLocalDatabaseFiles()
 			if err != nil {
-				log.Fatalf("Error: could not read local databases: %s", err)
+				log.Printf("Error: could not read local databases: %s", err)
+				exitCode = 1
+				return
 			}
 		}
 
 		// Create update operation
 		operation, err := bpmlib.UpdatePackages(rootDir, !nosync, installOptional, force, verbose)
 		if errors.As(err, &bpmlib.PackageNotFoundErr{}) || errors.As(err, &bpmlib.DependencyNotFoundErr{}) || errors.As(err, &bpmlib.PackageConflictErr{}) {
-			log.Fatalf("Error: %s", err)
+			log.Printf("Error: %s", err)
+			exitCode = 1
+			return
 		} else if err != nil {
-			log.Fatalf("Error: could not setup operation: %s\n", err)
+			log.Printf("Error: could not setup operation: %s\n", err)
 		}
 
 		// Exit if operation contains no actions
@@ -364,27 +428,43 @@ func resolveCommand() {
 			text, _ := reader.ReadString('\n')
 			if strings.TrimSpace(strings.ToLower(text)) != "y" && strings.TrimSpace(strings.ToLower(text)) != "yes" {
 				fmt.Println("Cancelling package update...")
-				os.Exit(1)
+				exitCode = 1
+				return
 			}
 		}
 
 		// Execute operation
 		err = operation.Execute(verbose, force)
 		if err != nil {
-			log.Fatalf("Error: could not complete operation: %s\n", err)
+			log.Printf("Error: could not complete operation: %s\n", err)
+			exitCode = 1
+			return
 		}
 
 		// Executing hooks
 		fmt.Println("Running hooks...")
 		err = operation.RunHooks(verbose)
 		if err != nil {
-			log.Fatalf("Error: could not run hooks: %s\n", err)
+			log.Printf("Error: could not run hooks: %s\n", err)
+			exitCode = 1
+			return
 		}
 	case sync:
 		// Check for required permissions
 		if os.Getuid() != 0 {
-			log.Fatalf("Error: this subcommand needs to be run with superuser permissions")
+			log.Printf("Error: this subcommand needs to be run with superuser permissions")
+			exitCode = 1
+			return
 		}
+
+		// Create BPM Lock file
+		fileLock, err := bpmlib.LockBPM(rootDir)
+		if err != nil {
+			log.Printf("Error: could not create BPM lock file: %s", err)
+			exitCode = 1
+			return
+		}
+		defer fileLock.Unlock()
 
 		// Confirmation Prompt
 		if !yesAll {
@@ -393,21 +473,26 @@ func resolveCommand() {
 			text, _ := reader.ReadString('\n')
 			if strings.TrimSpace(strings.ToLower(text)) != "y" && strings.TrimSpace(strings.ToLower(text)) != "yes" {
 				fmt.Println("Cancelling database synchronization...")
-				os.Exit(1)
+				exitCode = 1
+				return
 			}
 		}
 
 		// Sync databases
-		err := bpmlib.SyncDatabase(verbose)
+		err = bpmlib.SyncDatabase(verbose)
 		if err != nil {
-			log.Fatalf("Error: could not sync local database: %s\n", err)
+			log.Printf("Error: could not sync local database: %s\n", err)
+			exitCode = 1
+			return
 		}
 
 		fmt.Println("All package databases synced successfully!")
 	case remove:
 		// Check for required permissions
 		if os.Getuid() != 0 {
-			log.Fatalf("Error: this subcommand needs to be run with superuser permissions")
+			log.Printf("Error: this subcommand needs to be run with superuser permissions")
+			exitCode = 1
+			return
 		}
 
 		if len(subcommandArgs) == 0 {
@@ -415,18 +500,33 @@ func resolveCommand() {
 			return
 		}
 
-		// Read local databases
-		err := bpmlib.ReadLocalDatabaseFiles()
+		// Create BPM Lock file
+		fileLock, err := bpmlib.LockBPM(rootDir)
 		if err != nil {
-			log.Fatalf("Error: could not read local databases: %s", err)
+			log.Printf("Error: could not create BPM lock file: %s", err)
+			exitCode = 1
+			return
+		}
+		defer fileLock.Unlock()
+
+		// Read local databases
+		err = bpmlib.ReadLocalDatabaseFiles()
+		if err != nil {
+			log.Printf("Error: could not read local databases: %s", err)
+			exitCode = 1
+			return
 		}
 
 		// Create remove operation
 		operation, err := bpmlib.RemovePackages(rootDir, removeUnused, doCleanup, subcommandArgs...)
 		if errors.As(err, &bpmlib.PackageNotFoundErr{}) || errors.As(err, &bpmlib.DependencyNotFoundErr{}) || errors.As(err, &bpmlib.PackageConflictErr{}) {
-			log.Fatalf("Error: %s", err)
+			log.Printf("Error: %s", err)
+			exitCode = 1
+			return
 		} else if err != nil {
-			log.Fatalf("Error: could not setup operation: %s\n", err)
+			log.Printf("Error: could not setup operation: %s\n", err)
+			exitCode = 1
+			return
 		}
 
 		// Exit if operation contains no actions
@@ -445,46 +545,70 @@ func resolveCommand() {
 			text, _ := reader.ReadString('\n')
 			if strings.TrimSpace(strings.ToLower(text)) != "y" && strings.TrimSpace(strings.ToLower(text)) != "yes" {
 				fmt.Println("Cancelling package removal...")
-				os.Exit(1)
+				exitCode = 1
+				return
 			}
 		}
 
 		// Execute operation
 		err = operation.Execute(verbose, force)
 		if err != nil {
-			log.Fatalf("Error: could not complete operation: %s\n", err)
+			log.Printf("Error: could not complete operation: %s\n", err)
+			exitCode = 1
+			return
 		}
 
 		// Executing hooks
 		fmt.Println("Running hooks...")
 		err = operation.RunHooks(verbose)
 		if err != nil {
-			log.Fatalf("Error: could not run hooks: %s\n", err)
+			log.Printf("Error: could not run hooks: %s\n", err)
+			exitCode = 1
+			return
 		}
 	case cleanup:
 		// Check for required permissions
 		if os.Getuid() != 0 {
-			log.Fatalf("Error: this subcommand needs to be run with superuser permissions")
+			log.Printf("Error: this subcommand needs to be run with superuser permissions")
+			exitCode = 1
+			return
 		}
 
-		err := bpmlib.CleanupCache(rootDir, cleanupCompilationFiles, cleanupCompiledPackages, cleanupFetchedPackages, verbose)
+		// Create BPM Lock file
+		fileLock, err := bpmlib.LockBPM(rootDir)
 		if err != nil {
-			log.Fatalf("Error: could not complete cache cleanup: %s", err)
+			log.Printf("Error: could not create BPM lock file: %s", err)
+			exitCode = 1
+			return
+		}
+		defer fileLock.Unlock()
+
+		err = bpmlib.CleanupCache(rootDir, cleanupCompilationFiles, cleanupCompiledPackages, cleanupFetchedPackages, verbose)
+		if err != nil {
+			log.Printf("Error: could not complete cache cleanup: %s", err)
+			exitCode = 1
+			return
 		}
 
 		if cleanupDependencies || cleanupMakeDependencies {
 			// Read local databases
 			err := bpmlib.ReadLocalDatabaseFiles()
 			if err != nil {
-				log.Fatalf("Error: could not read local databases: %s", err)
+				log.Printf("Error: could not read local databases: %s", err)
+				exitCode = 1
+				return
 			}
 
 			// Create cleanup operation
 			operation, err := bpmlib.CleanupPackages(cleanupMakeDependencies, rootDir)
 			if errors.As(err, &bpmlib.PackageNotFoundErr{}) || errors.As(err, &bpmlib.DependencyNotFoundErr{}) || errors.As(err, &bpmlib.PackageConflictErr{}) {
-				log.Fatalf("Error: %s", err)
+				log.Printf("Error: %s", err)
+				exitCode = 1
+				return
 			} else if err != nil {
-				log.Fatalf("Error: could not setup operation: %s\n", err)
+				log.Printf("Error: could not setup operation: %s\n", err)
+				exitCode = 1
+				return
 			}
 
 			// Exit if operation contains no actions
@@ -503,21 +627,26 @@ func resolveCommand() {
 				text, _ := reader.ReadString('\n')
 				if strings.TrimSpace(strings.ToLower(text)) != "y" && strings.TrimSpace(strings.ToLower(text)) != "yes" {
 					fmt.Println("Cancelling package removal...")
-					os.Exit(1)
+					exitCode = 1
+					return
 				}
 			}
 
 			// Execute operation
 			err = operation.Execute(verbose, force)
 			if err != nil {
-				log.Fatalf("Error: could not complete operation: %s\n", err)
+				log.Printf("Error: could not complete operation: %s\n", err)
+				exitCode = 1
+				return
 			}
 
 			// Executing hooks
 			fmt.Println("Running hooks...")
 			err = operation.RunHooks(verbose)
 			if err != nil {
-				log.Fatalf("Error: could not run hooks: %s\n", err)
+				log.Printf("Error: could not run hooks: %s\n", err)
+				exitCode = 1
+				return
 			}
 		}
 	case file:
@@ -529,23 +658,33 @@ func resolveCommand() {
 		for _, file := range files {
 			absFile, err := filepath.Abs(file)
 			if err != nil {
-				log.Fatalf("Error: could not get absolute path of file (%s)\n", file)
+				log.Printf("Error: could not get absolute path of file (%s)\n", file)
+				exitCode = 1
+				return
 			}
 			stat, err := os.Stat(absFile)
 			if os.IsNotExist(err) {
-				log.Fatalf("Error: file (%s) does not exist!\n", absFile)
+				log.Printf("Error: file (%s) does not exist!\n", absFile)
+				exitCode = 1
+				return
 			}
 			pkgs, err := bpmlib.GetInstalledPackages(rootDir)
 			if err != nil {
-				log.Fatalf("Error: could not get installed packages: %s\n", err.Error())
+				log.Printf("Error: could not get installed packages: %s\n", err.Error())
+				exitCode = 1
+				return
 			}
 
 			if !strings.HasPrefix(absFile, rootDir) {
-				log.Fatalf("Error: could not get path of file (%s) relative to root path", absFile)
+				log.Printf("Error: could not get path of file (%s) relative to root path", absFile)
+				exitCode = 1
+				return
 			}
 			absFile, err = filepath.Rel(rootDir, absFile)
 			if err != nil {
-				log.Fatalf("Error: could not get path of file (%s) relative to root path", absFile)
+				log.Printf("Error: could not get path of file (%s) relative to root path", absFile)
+				exitCode = 1
+				return
 			}
 			absFile = strings.TrimPrefix(absFile, "/")
 			if stat.IsDir() {
@@ -578,24 +717,32 @@ func resolveCommand() {
 		// Read local databases
 		err := bpmlib.ReadLocalDatabaseFiles()
 		if err != nil {
-			log.Fatalf("Error: could not read local databases: %s", err)
+			log.Printf("Error: could not read local databases: %s", err)
+			exitCode = 1
+			return
 		}
 
 		// Compile packages
 		for _, sourcePackage := range subcommandArgs {
 			if _, err := os.Stat(sourcePackage); os.IsNotExist(err) {
-				log.Fatalf("Error: file (%s) does not exist!", sourcePackage)
+				log.Printf("Error: file (%s) does not exist!", sourcePackage)
+				exitCode = 1
+				return
 			}
 
 			// Read archive
 			bpmpkg, err := bpmlib.ReadPackage(sourcePackage)
 			if err != nil {
-				log.Fatalf("Could not read package (%s): %s", sourcePackage, err)
+				log.Printf("Could not read package (%s): %s", sourcePackage, err)
+				exitCode = 1
+				return
 			}
 
 			// Ensure archive is source BPM package
 			if bpmpkg.PkgInfo.Type != "source" {
-				log.Fatalf("Error: cannot compile a non-source package!")
+				log.Printf("Error: cannot compile a non-source package!")
+				exitCode = 1
+				return
 			}
 
 			// Get direct runtime and make dependencies
@@ -610,7 +757,9 @@ func resolveCommand() {
 			unmetDepends := slices.Clone(totalDepends)
 			installedPackages, err := bpmlib.GetInstalledPackages("/")
 			if err != nil {
-				log.Fatalf("Error: could not get installed packages: %s\n", err)
+				log.Printf("Error: could not get installed packages: %s\n", err)
+				exitCode = 1
+				return
 			}
 			for i := len(unmetDepends) - 1; i >= 0; i-- {
 				if slices.Contains(installedPackages, unmetDepends[i]) {
@@ -625,7 +774,9 @@ func resolveCommand() {
 				// Get path to current executable
 				executable, err := os.Executable()
 				if err != nil {
-					log.Fatalf("Error: could not get path to executable: %s\n", err)
+					log.Printf("Error: could not get path to executable: %s\n", err)
+					exitCode = 1
+					return
 				}
 
 				// Run 'bpm install' using the set privilege escalator command
@@ -643,25 +794,33 @@ func resolveCommand() {
 				}
 				err = cmd.Run()
 				if err != nil {
-					log.Fatalf("Error: dependency installation command failed: %s\n", err)
+					log.Printf("Error: dependency installation command failed: %s\n", err)
+					exitCode = 1
+					return
 				}
 			} else {
 				// Ensure the required dependencies are installed
 				if len(unmetDepends) != 0 {
-					log.Fatalf("Error: could not resolve dependencies: the following dependencies were not found in any databases: " + strings.Join(unmetDepends, ", "))
+					log.Printf("Error: could not resolve dependencies: the following dependencies were not found in any databases: " + strings.Join(unmetDepends, ", "))
+					exitCode = 1
+					return
 				}
 			}
 
 			// Get current working directory
 			workdir, err := os.Getwd()
 			if err != nil {
-				log.Fatalf("Error: could not get working directory: %s", err)
+				log.Printf("Error: could not get working directory: %s", err)
+				exitCode = 1
+				return
 			}
 
 			// Get user home directory
 			homedir, err := os.UserHomeDir()
 			if err != nil {
-				log.Fatalf("Error: could not get user home directory: %s", err)
+				log.Printf("Error: could not get user home directory: %s", err)
+				exitCode = 1
+				return
 			}
 
 			// Trim output directory
@@ -691,15 +850,21 @@ func resolveCommand() {
 			// Ensure output directory exists and is a directory
 			stat, err := os.Stat(outputDirectory)
 			if err != nil {
-				log.Fatalf("Error: could not stat output directory (%s): %s", outputDirectory, err)
+				log.Printf("Error: could not stat output directory (%s): %s", outputDirectory, err)
+				exitCode = 1
+				return
 			}
 			if !stat.IsDir() {
-				log.Fatalf("Error: output directory (%s) is not a directory", outputDirectory)
+				log.Printf("Error: output directory (%s) is not a directory", outputDirectory)
+				exitCode = 1
+				return
 			}
 
 			outputBpmPackages, err := bpmlib.CompileSourcePackage(sourcePackage, outputDirectory, skipChecks)
 			if err != nil {
-				log.Fatalf("Error: could not compile source package (%s): %s", sourcePackage, err)
+				log.Printf("Error: could not compile source package (%s): %s", sourcePackage, err)
+				exitCode = 1
+				return
 			}
 
 			for k, v := range outputBpmPackages {
@@ -721,7 +886,9 @@ func resolveCommand() {
 				// Get path to current executable
 				executable, err := os.Executable()
 				if err != nil {
-					log.Fatalf("Error: could not get path to executable: %s\n", err)
+					log.Printf("Error: could not get path to executable: %s\n", err)
+					exitCode = 1
+					return
 				}
 
 				// Run 'bpm cleanup' using the set privilege escalator command
@@ -737,7 +904,9 @@ func resolveCommand() {
 				}
 				err = cmd.Run()
 				if err != nil {
-					log.Fatalf("Error: dependency cleanup command failed: %s\n", err)
+					log.Printf("Error: dependency cleanup command failed: %s\n", err)
+					exitCode = 1
+					return
 				}
 			}
 		}
