@@ -5,15 +5,19 @@ import (
 	"errors"
 	"fmt"
 	"log"
+	"maps"
 	"os"
 	"os/exec"
 	"path"
 	"path/filepath"
 	"slices"
+	"sort"
 	"strings"
 
 	"git.enumerated.dev/bubble-package-manager/bpm/src/bpmlib"
 
+	"github.com/adrg/strutil"
+	"github.com/adrg/strutil/metrics"
 	flag "github.com/spf13/pflag"
 )
 
@@ -294,28 +298,42 @@ func searchForPackages() {
 	}
 
 	for i, term := range searchTerms {
-		nameResults := make([]*bpmlib.PackageInfo, 0)
-		descResults := make([]*bpmlib.PackageInfo, 0)
+		resultsMap := make(map[*bpmlib.PackageInfo]float64, 0)
+
+		// Loop through all packages
 		for _, db := range bpmlib.BPMDatabases {
 			for _, entry := range db.Entries {
-				if strings.Contains(entry.Info.Name, term) {
-					nameResults = append(nameResults, entry.Info)
-				} else if strings.Contains(entry.Info.Description, term) {
-					descResults = append(descResults, entry.Info)
+				// Calculate string similarity and add to map
+				similarity := strutil.Similarity(entry.Info.Name, term, metrics.NewSmithWatermanGotoh())
+				if similarity > 0.8 {
+					resultsMap[entry.Info] = similarity
+					continue
+				}
+				similarity = strutil.Similarity(entry.Info.Description, term, metrics.NewSmithWatermanGotoh())
+				if similarity > 0.8 {
+					resultsMap[entry.Info] = similarity
 				}
 			}
 		}
-		results := append(nameResults, descResults...)
-		if len(results) == 0 {
+		if len(resultsMap) == 0 {
 			log.Printf("Error: no results for term (%s) were found\n", term)
 			exitCode = 1
 			return
 		}
+
+		// Sort results
+		results := slices.Collect(maps.Keys(resultsMap))
+		sort.Slice(results, func(i, j int) bool {
+			return resultsMap[results[i]] > resultsMap[results[j]]
+		})
+
+		// Print results
 		if i > 0 {
 			fmt.Println()
 		}
 		fmt.Printf("Results for term (%s)\n", term)
-		for j, result := range results {
+		for j := 0; j < 10 && j < len(results); j++ {
+			result := results[j]
 			fmt.Printf("%d) %s: %s (%s)\n", j+1, result.Name, result.Description, result.GetFullVersion())
 		}
 	}
