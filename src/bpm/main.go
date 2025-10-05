@@ -44,15 +44,15 @@ func main() {
 	case "version":
 		fmt.Println("Bubble Package Manager (BPM)")
 		fmt.Println("Version: " + bpmVer)
-	case "info":
+	case "q", "query":
 		// Setup flags and help
-		currentFlagSet = flag.NewFlagSet("info", flag.ExitOnError)
+		currentFlagSet = flag.NewFlagSet("query", flag.ExitOnError)
 		currentFlagSet.StringP("root", "R", "/", "Operate on specified root directory")
 		currentFlagSet.BoolP("database", "d", false, "Show package information from remote databases")
 		setupFlagsAndHelp(currentFlagSet, fmt.Sprintf("bpm %s <options>", subcommand), "Show information on the specified packages", os.Args[2:])
 
 		showPackageInfo()
-	case "list":
+	case "l", "list":
 		// Setup flags and help
 		currentFlagSet = flag.NewFlagSet("list", flag.ExitOnError)
 		currentFlagSet.StringP("root", "R", "/", "Operate on specified root directory")
@@ -61,13 +61,13 @@ func main() {
 		setupFlagsAndHelp(currentFlagSet, fmt.Sprintf("bpm %s <options>", subcommand), "List packages", os.Args[2:])
 
 		showPackageList()
-	case "search":
+	case "s", "search":
 		// Setup flags and help
 		currentFlagSet = flag.NewFlagSet("search", flag.ExitOnError)
 		setupFlagsAndHelp(currentFlagSet, fmt.Sprintf("bpm %s <options>", subcommand), "Search for packages in remote databases", os.Args[2:])
 
 		searchForPackages()
-	case "install":
+	case "i", "install":
 		// Setup flags and help
 		currentFlagSet = flag.NewFlagSet("install", flag.ExitOnError)
 		currentFlagSet.StringP("root", "R", "/", "Operate on specified root directory")
@@ -81,7 +81,7 @@ func main() {
 		setupFlagsAndHelp(currentFlagSet, fmt.Sprintf("bpm %s <options>", subcommand), "Install the specified packages", os.Args[2:])
 
 		installPackages()
-	case "remove":
+	case "r", "remove":
 		// Setup flags and help
 		currentFlagSet = flag.NewFlagSet("remove", flag.ExitOnError)
 		currentFlagSet.StringP("root", "R", "/", "Operate on specified root directory")
@@ -93,7 +93,7 @@ func main() {
 		setupFlagsAndHelp(currentFlagSet, fmt.Sprintf("bpm %s <options>", subcommand), "Remove the specified packages", os.Args[2:])
 
 		removePackages()
-	case "cleanup":
+	case "n", "cleanup":
 		// Setup flags and help
 		currentFlagSet = flag.NewFlagSet("cleanup", flag.ExitOnError)
 		currentFlagSet.StringP("root", "R", "/", "Operate on specified root directory")
@@ -107,7 +107,7 @@ func main() {
 		setupFlagsAndHelp(currentFlagSet, fmt.Sprintf("bpm %s <options>", subcommand), "Remove unused dependencies, files and directories", os.Args[2:])
 
 		doCleanup()
-	case "sync":
+	case "y", "sync":
 		// Setup flags and help
 		currentFlagSet = flag.NewFlagSet("cleanup", flag.ExitOnError)
 		currentFlagSet.StringP("root", "R", "/", "Operate on specified root directory")
@@ -116,7 +116,7 @@ func main() {
 		setupFlagsAndHelp(currentFlagSet, fmt.Sprintf("bpm %s <options>", subcommand), "Sync all databases", os.Args[2:])
 
 		syncDatabases()
-	case "update":
+	case "u", "update":
 		// Setup flags and help
 		currentFlagSet = flag.NewFlagSet("update", flag.ExitOnError)
 		currentFlagSet.StringP("root", "R", "/", "Operate on specified root directory")
@@ -128,14 +128,14 @@ func main() {
 		setupFlagsAndHelp(currentFlagSet, fmt.Sprintf("bpm %s <options>", subcommand), "Update installed packages", os.Args[2:])
 
 		updatePackages()
-	case "file":
+	case "f", "file":
 		// Setup flags and help
 		currentFlagSet = flag.NewFlagSet("file", flag.ExitOnError)
 		currentFlagSet.StringP("root", "R", "/", "Operate on specified root directory")
 		setupFlagsAndHelp(currentFlagSet, fmt.Sprintf("bpm %s <options>", subcommand), "Show what packages own the specified files", os.Args[2:])
 
 		getFileOwner()
-	case "compile":
+	case "c", "compile":
 		// Setup flags and help
 		currentFlagSet = flag.NewFlagSet("compile", flag.ExitOnError)
 		currentFlagSet.StringP("root", "R", "/", "Operate on specified root directory")
@@ -1054,16 +1054,16 @@ func listSubcommands() {
 	fmt.Printf("Usage: %s <subcommand> [options]\n", os.Args[0])
 	fmt.Println("Description: Manage system packages")
 	fmt.Println("Subcommands:")
-	fmt.Println("  info      Show information on the specified packages")
-	fmt.Println("  list      List packages")
-	fmt.Println("  search    Search for packages in remote databases")
-	fmt.Println("  install   Install the specified packages")
-	fmt.Println("  remove    Remove the specified packages")
-	fmt.Println("  cleanup   Remove unused dependencies, files and directories")
-	fmt.Println("  sync      Sync all databases")
-	fmt.Println("  update    Update installed packages")
-	fmt.Println("  file      Show what packages own the specified files")
-	fmt.Println("  compile   Compile source packages and convert them to binary ones")
+	fmt.Println("  q, query     Show information on the specified packages")
+	fmt.Println("  l, list      List packages")
+	fmt.Println("  s, search    Search for packages in remote databases")
+	fmt.Println("  i, install   Install the specified packages")
+	fmt.Println("  r, remove    Remove the specified packages")
+	fmt.Println("  n, cleanup   Remove unused dependencies, files and directories")
+	fmt.Println("  y, sync      Sync all databases")
+	fmt.Println("  u, update    Update installed packages")
+	fmt.Println("  f, file      Show what packages own the specified files")
+	fmt.Println("  c, compile   Compile source packages and convert them to binary ones")
 }
 
 func setupFlagsAndHelp(flagset *flag.FlagSet, usage, desc string, args []string) {
