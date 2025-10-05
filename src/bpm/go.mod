@@ -4,7 +4,10 @@ go 1.23
 
 toolchain go1.23.7
 
-require git.enumerated.dev/bubble-package-manager/bpm/src/bpmlib v0.5.0
+require (
+	git.enumerated.dev/bubble-package-manager/bpm/src/bpmlib v0.5.0
+	github.com/spf13/pflag v1.0.10
+)
 
 replace git.enumerated.dev/bubble-package-manager/bpm/src/bpmlib => ../bpmlib
 
