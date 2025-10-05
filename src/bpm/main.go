@@ -149,6 +149,7 @@ func main() {
 		currentFlagSet.BoolP("depends", "d", false, "Install required dependencies for package compilation")
 		currentFlagSet.BoolP("skip-checks", "s", false, "Skip the check function in source.sh scripts")
 		currentFlagSet.BoolP("output-directory", "o", false, "Set the output directory for the binary packages")
+		currentFlagSet.Int("output-fd", -1, "Set the file descriptor output package names will be written to")
 		setupFlagsAndHelp(currentFlagSet, fmt.Sprintf("bpm %s <options>", subcommand), "Compile source packages and convert them to binary ones", os.Args[2:])
 
 		compilePackage()
