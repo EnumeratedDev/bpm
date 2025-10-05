@@ -47,14 +47,20 @@ type PackageInfo struct {
 }
 
 type PackageDownload struct {
-	Url                    string `yaml:"url"`
-	Type                   string `yaml:"type,omitempty"`
+	Url      string `yaml:"url"`
+	Type     string `yaml:"type,omitempty"`
+	Filepath string `yaml:"filepath,omitempty,omitempty"`
+
+	// Archive options
 	NoExtract              bool   `yaml:"no_extract,omitempty"`
-	ExtractToBPMSource     bool   `yaml:"extract_to_bpm_source,omitempty"`
+	ExtractTo              string `yaml:"extract_to,omitempty"`
 	ExtractStripComponents int    `yaml:"extract_strip_components,omitempty"`
-	GitBranch              string `yaml:"git_branch,omitempty"`
-	Filepath               string `yaml:"filepath,omitempty,omitempty"`
-	Checksum               string `yaml:"checksum,omitempty"`
+
+	// Git options
+	CloneTo   string `yaml:"clone_to,omitempty"`
+	GitBranch string `yaml:"git_branch,omitempty"`
+
+	Checksum string `yaml:"checksum,omitempty"`
 }
 
 type PackageFileEntry struct {
