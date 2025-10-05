@@ -128,11 +128,11 @@ func main() {
 		setupFlagsAndHelp(currentFlagSet, fmt.Sprintf("bpm %s <options>", subcommand), "Update installed packages", os.Args[2:])
 
 		updatePackages()
-	case "f", "file":
+	case "o", "owner":
 		// Setup flags and help
-		currentFlagSet = flag.NewFlagSet("file", flag.ExitOnError)
+		currentFlagSet = flag.NewFlagSet("owner", flag.ExitOnError)
 		currentFlagSet.StringP("root", "R", "/", "Operate on specified root directory")
-		setupFlagsAndHelp(currentFlagSet, fmt.Sprintf("bpm %s <options>", subcommand), "Show what packages own the specified files", os.Args[2:])
+		setupFlagsAndHelp(currentFlagSet, fmt.Sprintf("bpm %s <options>", subcommand), "Show what packages own the specified paths", os.Args[2:])
 
 		getFileOwner()
 	case "c", "compile":
@@ -777,22 +777,53 @@ func getFileOwner() {
 	// Get files
 	files := currentFlagSet.Args()
 	if len(files) == 0 {
-		fmt.Println("No files were given to get which packages manage it")
+		fmt.Println("No files were given to get which packages own it")
 		return
 	}
-	for _, file := range files {
-		absFile, err := filepath.Abs(file)
-		if err != nil {
-			log.Printf("Error: could not get absolute path of file (%s)\n", file)
-			exitCode = 1
-			return
-		}
-		stat, err := os.Stat(absFile)
+
+	for _, path := range files {
+		// Ensure file exists
+		stat, err := os.Lstat(path)
 		if os.IsNotExist(err) {
-			log.Printf("Error: file (%s) does not exist!\n", absFile)
+			log.Printf("Error: file (%s) does not exist!\n", path)
 			exitCode = 1
 			return
 		}
+
+		// Get path type
+		pathType := "File"
+		if stat.IsDir() {
+			pathType = "Directory"
+		} else if stat.Mode()&os.ModeSymlink != 0 {
+			pathType = "Symlink"
+		}
+
+		// Get absolte path to path
+		absPath, err := filepath.Abs(path)
+		if err != nil {
+			log.Printf("Error: could not get absolute path of file (%s)\n", path)
+			exitCode = 1
+			return
+		}
+
+		// Get path relative to rootDir
+		if !strings.HasPrefix(absPath, rootDir) {
+			log.Printf("Error: could not get path of file (%s) relative to root path", absPath)
+			exitCode = 1
+			return
+		}
+		absPath, err = filepath.Rel(rootDir, absPath)
+		if err != nil {
+			log.Printf("Error: could not get path of file (%s) relative to root path", absPath)
+			exitCode = 1
+			return
+		}
+
+		// Trim leading and trailing slashes
+		absPath = strings.TrimLeft(absPath, "/")
+		absPath = strings.TrimRight(absPath, "/")
+
+		// Get installed packages
 		pkgs, err := bpmlib.GetInstalledPackages(rootDir)
 		if err != nil {
 			log.Printf("Error: could not get installed packages: %s\n", err.Error())
@@ -800,34 +831,21 @@ func getFileOwner() {
 			return
 		}
 
-		if !strings.HasPrefix(absFile, rootDir) {
-			log.Printf("Error: could not get path of file (%s) relative to root path", absFile)
-			exitCode = 1
-			return
-		}
-		absFile, err = filepath.Rel(rootDir, absFile)
-		if err != nil {
-			log.Printf("Error: could not get path of file (%s) relative to root path", absFile)
-			exitCode = 1
-			return
-		}
-		absFile = strings.TrimPrefix(absFile, "/")
-		if stat.IsDir() {
-			absFile = absFile + "/"
-		}
-
+		// Add packages that own path to list
 		var pkgList []string
 		for _, pkg := range pkgs {
 			if slices.ContainsFunc(bpmlib.GetPackage(pkg, rootDir).PkgFiles, func(entry *bpmlib.PackageFileEntry) bool {
-				return entry.Path == absFile
+				return entry.Path == absPath
 			}) {
 				pkgList = append(pkgList, pkg)
 			}
 		}
+
+		// Print packages
 		if len(pkgList) == 0 {
-			fmt.Println(absFile + " is not managed by any packages")
+			fmt.Printf("%s (%s) is not owned by any packages!\n", absPath, pathType)
 		} else {
-			fmt.Println(absFile + " is managed by the following packages:")
+			fmt.Printf("%s (%s) is owned by the following packages:\n", absPath, pathType)
 			for _, pkg := range pkgList {
 				fmt.Println("- " + pkg)
 			}
@@ -1062,7 +1080,7 @@ func listSubcommands() {
 	fmt.Println("  n, cleanup   Remove unused dependencies, files and directories")
 	fmt.Println("  y, sync      Sync all databases")
 	fmt.Println("  u, update    Update installed packages")
-	fmt.Println("  f, file      Show what packages own the specified files")
+	fmt.Println("  o, owner     Show what packages own the specified paths")
 	fmt.Println("  c, compile   Compile source packages and convert them to binary ones")
 }
 
