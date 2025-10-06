@@ -103,6 +103,7 @@ func main() {
 		currentFlagSet.StringP("root", "R", "/", "Operate on specified root directory")
 		currentFlagSet.BoolP("verbose", "v", false, "Show additional information about the current operation")
 		currentFlagSet.BoolP("force", "f", false, "Bypass warnings during package cleanup")
+		currentFlagSet.BoolP("yes", "y", false, "Enter 'yes' in all prompts")
 		currentFlagSet.BoolP("depends", "d", false, "Perform a dependency cleanup")
 		currentFlagSet.BoolP("make-depends", "m", false, "Perform a make dependency cleanup")
 		currentFlagSet.BoolP("compilation-files", "c", false, "Perform a cleanup of compilation files")
