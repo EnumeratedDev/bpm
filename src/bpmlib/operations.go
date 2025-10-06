@@ -15,7 +15,9 @@ type BPMOperation struct {
 	UnresolvedDepends []string
 	Changes           map[string]string
 	RootDir           string
-	compiledPackages  map[string]string
+
+	compiledPackages   map[string]string
+	hasFetchedPackages bool
 }
 
 func (operation *BPMOperation) ActionsContainPackage(pkg string) bool {
@@ -395,6 +397,34 @@ func (operation *BPMOperation) ShowOperationSummary() {
 	}
 }
 
+func (operation *BPMOperation) ShowSourcePackageContent() (sourcePackagesShown int, err error) {
+	// Fetch packages
+	if !operation.hasFetchedPackages {
+		err = operation.FetchPackages()
+		if err != nil {
+			return 0, err
+		}
+	}
+
+	for _, action := range operation.Actions {
+		if action.GetActionType() != "install" {
+			continue
+		}
+		if action.(*InstallPackageAction).BpmPackage.PkgInfo.Type != "source" {
+			continue
+		}
+
+		err = showPackageFiles(action.(*InstallPackageAction).File)
+		if err != nil {
+			return 0, err
+		}
+
+		sourcePackagesShown++
+	}
+
+	return sourcePackagesShown, nil
+}
+
 func (operation *BPMOperation) RunHooks(verbose bool) error {
 	// Return if hooks directory does not exist
 	if stat, err := os.Stat(path.Join(operation.RootDir, "var/lib/bpm/hooks")); err != nil || !stat.IsDir() {
@@ -426,7 +456,7 @@ func (operation *BPMOperation) RunHooks(verbose bool) error {
 	return nil
 }
 
-func (operation *BPMOperation) Execute(verbose, force bool) (err error) {
+func (operation *BPMOperation) FetchPackages() (err error) {
 	// Fetch packages from databases
 	if slices.ContainsFunc(operation.Actions, func(action OperationAction) bool {
 		return action.GetActionType() == "fetch"
@@ -489,6 +519,19 @@ func (operation *BPMOperation) Execute(verbose, force bool) (err error) {
 					BpmPackage:         bpmpkg,
 				}
 			}
+		}
+	}
+
+	operation.hasFetchedPackages = true
+	return nil
+}
+
+func (operation *BPMOperation) Execute(verbose, force bool) (err error) {
+	// Fetch packages
+	if !operation.hasFetchedPackages {
+		err = operation.FetchPackages()
+		if err != nil {
+			return err
 		}
 	}
 

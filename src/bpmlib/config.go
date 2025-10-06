@@ -7,9 +7,10 @@ import (
 )
 
 type MainBPMConfigStruct struct {
-	IgnorePackages          []string         `yaml:"ignore_packages"`
-	CleanupMakeDependencies bool             `yaml:"cleanup_make_dependencies"`
-	Databases               []configDatabase `yaml:"databases"`
+	IgnorePackages            []string         `yaml:"ignore_packages"`
+	ShowSourcePackageContents string           `yaml:"show_source_package_contents"`
+	CleanupMakeDependencies   bool             `yaml:"cleanup_make_dependencies"`
+	Databases                 []configDatabase `yaml:"databases"`
 }
 
 type configDatabase struct {
@@ -31,7 +32,8 @@ func ReadConfig() (err error) {
 
 	// Set default config options
 	MainBPMConfig = MainBPMConfigStruct{
-		CleanupMakeDependencies: true,
+		ShowSourcePackageContents: "always",
+		CleanupMakeDependencies:   true,
 	}
 
 	// Read main BPM config

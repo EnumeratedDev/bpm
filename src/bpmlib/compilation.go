@@ -515,3 +515,75 @@ func downloadPackageFiles(pkgInfo *PackageInfo, tempDirectory string) error {
 
 	return nil
 }
+
+func showPackageFiles(archiveFilename string) error {
+	// Read BPM archive
+	bpmpkg, err := ReadPackage(archiveFilename)
+	if err != nil {
+		return err
+	}
+
+	// Ensure package type is 'source'
+	if bpmpkg.PkgInfo.Type != "source" {
+		return fmt.Errorf("cannot compile a non-source package")
+	}
+
+	printTarballContent := func(filename string) error {
+		// Get tarball reader for file
+		reader, err := readTarballFile(archiveFilename, filename)
+		if err != nil {
+			return err
+		}
+
+		// Read file content
+		data, err := io.ReadAll(reader.tarReader)
+		if err != nil {
+			return err
+		}
+
+		// Print file name and content
+		fmt.Println("==============================")
+		fmt.Printf("%s: %s\n", bpmpkg.PkgInfo.Name, filename)
+		fmt.Println("==============================")
+		fmt.Printf("%s\n", data)
+
+		// Close reader
+		err = reader.file.Close()
+		if err != nil {
+			return err
+		}
+
+		return nil
+	}
+
+	// Print pkg.info content
+	err = printTarballContent("pkg.info")
+	if err != nil {
+		return err
+	}
+
+	// Print source files contents
+	files, err := listTarballContent(archiveFilename)
+	if err != nil {
+		return err
+	}
+	for _, file := range files {
+		if !strings.HasPrefix(file, "source-files/") {
+			continue
+		}
+
+		// Print source file content
+		err = printTarballContent(file)
+		if err != nil {
+			return err
+		}
+	}
+
+	// Print source.sh content
+	err = printTarballContent("source.sh")
+	if err != nil {
+		return err
+	}
+
+	return nil
+}

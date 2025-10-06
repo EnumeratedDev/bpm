@@ -446,6 +446,37 @@ func installPackages() {
 		}
 	}
 
+	// Fetch packages
+	err = operation.FetchPackages()
+	if err != nil {
+		log.Printf("Error: could not fetch packages for operation: %s\n", err)
+		exitCode = 1
+		return
+	}
+
+	if bpmlib.MainBPMConfig.ShowSourcePackageContents == "always" || bpmlib.MainBPMConfig.ShowSourcePackageContents == "install-only" {
+		// Show source package contents
+		sourcePackagesShown, err := operation.ShowSourcePackageContent()
+		if err != nil {
+			log.Printf("Error: could not show source package content: %s\n", err)
+			exitCode = 1
+			return
+		}
+
+		// Confirmation Prompt
+		if sourcePackagesShown > 0 && !yesAll {
+			reader := bufio.NewReader(os.Stdin)
+			fmt.Printf("Are you sure you wish to continue? [y\\N] ")
+
+			text, _ := reader.ReadString('\n')
+			if strings.TrimSpace(strings.ToLower(text)) != "y" && strings.TrimSpace(strings.ToLower(text)) != "yes" {
+				fmt.Println("Cancelling package installation...")
+				exitCode = 1
+				return
+			}
+		}
+	}
+
 	// Execute operation
 	err = operation.Execute(verbose, force)
 	if err != nil {
@@ -768,6 +799,37 @@ func updatePackages() {
 			fmt.Println("Cancelling package update...")
 			exitCode = 1
 			return
+		}
+	}
+
+	// Fetch packages
+	err = operation.FetchPackages()
+	if err != nil {
+		log.Printf("Error: could not fetch packages for operation: %s\n", err)
+		exitCode = 1
+		return
+	}
+
+	if bpmlib.MainBPMConfig.ShowSourcePackageContents == "always" {
+		// Show source package contents
+		sourcePackagesShown, err := operation.ShowSourcePackageContent()
+		if err != nil {
+			log.Printf("Error: could not show source package content: %s\n", err)
+			exitCode = 1
+			return
+		}
+
+		// Confirmation Prompt
+		if sourcePackagesShown > 0 && !yesAll {
+			reader := bufio.NewReader(os.Stdin)
+			fmt.Printf("Are you sure you wish to continue? [y\\N] ")
+
+			text, _ := reader.ReadString('\n')
+			if strings.TrimSpace(strings.ToLower(text)) != "y" && strings.TrimSpace(strings.ToLower(text)) != "yes" {
+				fmt.Println("Cancelling package installation...")
+				exitCode = 1
+				return
+			}
 		}
 	}
 
