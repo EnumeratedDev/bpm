@@ -8,6 +8,7 @@ import (
 	"path"
 	"slices"
 	"strings"
+	"text/tabwriter"
 )
 
 type BPMOperation struct {
@@ -335,6 +336,9 @@ func (operation *BPMOperation) ShowOperationSummary() {
 		return
 	}
 
+	writer := tabwriter.NewWriter(os.Stdout, 6, 4, 6, ' ', 0)
+	fmt.Fprintln(writer, "Name\tVersion\tAction\tInstallation Reason\tFrom Source")
+
 	for _, value := range operation.Actions {
 		var pkgInfo *PackageInfo
 		var installationReason = InstallationReasonUnknown
@@ -349,40 +353,39 @@ func (operation *BPMOperation) ShowOperationSummary() {
 			pkgInfo = value.(*FetchPackageAction).DatabaseEntry.Info
 		} else {
 			pkgInfo = value.(*RemovePackageAction).BpmPackage.PkgInfo
-			fmt.Printf("%s: %s (Remove)\n", pkgInfo.Name, pkgInfo.GetFullVersion())
+			fmt.Fprintf(writer, "%s\t%s\t%s\t%s\t%s\n", pkgInfo.Name, pkgInfo.GetFullVersion(), "Remove", "-", "-")
 			continue
 		}
 
-		installedInfo := GetPackageInfo(pkgInfo.Name, operation.RootDir)
-		additionalInfo := ""
+		installationReasonStr := ""
 		switch installationReason {
 		case InstallationReasonManual:
-			additionalInfo = "(Manual)"
+			installationReasonStr = "Manual"
 		case InstallationReasonDependency:
-			additionalInfo = "(Dependency)"
+			installationReasonStr = "Dependency"
 		case InstallationReasonMakeDependency:
-			additionalInfo = "(Make dependency)"
+			installationReasonStr = "Make dependency"
 		default:
-			additionalInfo = "(Unknown)"
+			installationReasonStr = "Unknown"
 		}
 
-		if pkgInfo.Type == "source" {
-			additionalInfo += " (From Source)"
-		}
-
+		installedInfo := GetPackageInfo(pkgInfo.Name, operation.RootDir)
 		if installedInfo == nil {
-			fmt.Printf("%s: %s (Install) %s\n", pkgInfo.Name, pkgInfo.GetFullVersion(), additionalInfo)
+			fmt.Fprintf(writer, "%s\t%s\t%s\t%s\t%t\n", pkgInfo.Name, pkgInfo.GetFullVersion(), "Install", installationReasonStr, pkgInfo.Type == "source")
 		} else {
 			comparison := ComparePackageVersions(*pkgInfo, *installedInfo)
 			if comparison < 0 {
-				fmt.Printf("%s: %s -> %s (Downgrade) %s\n", pkgInfo.Name, installedInfo.GetFullVersion(), pkgInfo.GetFullVersion(), additionalInfo)
+				fmt.Fprintf(writer, "%s\t%s -> %s\t%s\t%s\t%t\n", pkgInfo.Name, installedInfo.GetFullVersion(), pkgInfo.GetFullVersion(), "Downgrade", installationReasonStr, pkgInfo.Type == "source")
 			} else if comparison > 0 {
-				fmt.Printf("%s: %s -> %s (Upgrade) %s\n", pkgInfo.Name, installedInfo.GetFullVersion(), pkgInfo.GetFullVersion(), additionalInfo)
+				fmt.Fprintf(writer, "%s\t%s -> %s\t%s\t%s\t%t\n", pkgInfo.Name, installedInfo.GetFullVersion(), pkgInfo.GetFullVersion(), "Upgrade", installationReasonStr, pkgInfo.Type == "source")
 			} else {
-				fmt.Printf("%s: %s (Reinstall) %s\n", pkgInfo.Name, pkgInfo.GetFullVersion(), additionalInfo)
+				fmt.Fprintf(writer, "%s\t%s\t%s\t%s\t%t\n", pkgInfo.Name, pkgInfo.GetFullVersion(), "Reinstall", installationReasonStr, pkgInfo.Type == "source")
 			}
 		}
 	}
+
+	writer.Flush()
+	fmt.Println()
 
 	if operation.RootDir != "/" {
 		fmt.Println("Warning: Operating in " + operation.RootDir)
