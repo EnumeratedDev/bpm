@@ -1045,9 +1045,39 @@ func compilePackage() {
 			}
 		}
 
+		// Setup cleanup function
+		cleanupFunc := func() {
+			if installSrcPkgDepends && len(unmetDepends) > 0 {
+				// Get path to current executable
+				executable, err := os.Executable()
+				if err != nil {
+					log.Printf("Warning: could not get path to executable: %s\n", err)
+				}
+
+				// Run 'bpm cleanup' using the set privilege escalator command
+				cmd := exec.Command(bpmlib.CompilationBPMConfig.PrivilegeEscalatorCmd, executable, "cleanup")
+				if yesAll {
+					cmd.Args = slices.Insert(cmd.Args, 3, "-y")
+				}
+				cmd.Stdout = os.Stdout
+				cmd.Stderr = os.Stderr
+				cmd.Stdin = os.Stdin
+				if verbose {
+					fmt.Println("Running command: " + cmd.String())
+				}
+				err = cmd.Run()
+				if err != nil {
+					log.Printf("Warning: dependency cleanup command failed: %s\n", err)
+				}
+			}
+		}
+
 		// Get current working directory
 		workdir, err := os.Getwd()
 		if err != nil {
+			// Remove unused packages
+			cleanupFunc()
+
 			log.Printf("Error: could not get working directory: %s", err)
 			exitCode = 1
 			return
@@ -1056,6 +1086,9 @@ func compilePackage() {
 		// Get user home directory
 		homedir, err := os.UserHomeDir()
 		if err != nil {
+			// Remove unused packages
+			cleanupFunc()
+
 			log.Printf("Error: could not get user home directory: %s", err)
 			exitCode = 1
 			return
@@ -1088,11 +1121,17 @@ func compilePackage() {
 		// Ensure output directory exists and is a directory
 		stat, err := os.Stat(outputDirectory)
 		if err != nil {
+			// Remove unused packages
+			cleanupFunc()
+
 			log.Printf("Error: could not stat output directory (%s): %s", outputDirectory, err)
 			exitCode = 1
 			return
 		}
 		if !stat.IsDir() {
+			// Remove unused packages
+			cleanupFunc()
+
 			log.Printf("Error: output directory (%s) is not a directory", outputDirectory)
 			exitCode = 1
 			return
@@ -1100,6 +1139,9 @@ func compilePackage() {
 
 		outputBpmPackages, err := bpmlib.CompileSourcePackage(sourcePackage, outputDirectory, skipChecks)
 		if err != nil {
+			// Remove unused packages
+			cleanupFunc()
+
 			log.Printf("Error: could not compile source package (%s): %s", sourcePackage, err)
 			exitCode = 1
 			return
@@ -1120,33 +1162,7 @@ func compilePackage() {
 		}
 
 		// Remove unused packages
-		if installSrcPkgDepends && len(unmetDepends) > 0 {
-			// Get path to current executable
-			executable, err := os.Executable()
-			if err != nil {
-				log.Printf("Error: could not get path to executable: %s\n", err)
-				exitCode = 1
-				return
-			}
-
-			// Run 'bpm cleanup' using the set privilege escalator command
-			cmd := exec.Command(bpmlib.CompilationBPMConfig.PrivilegeEscalatorCmd, executable, "cleanup")
-			if yesAll {
-				cmd.Args = slices.Insert(cmd.Args, 3, "-y")
-			}
-			cmd.Stdout = os.Stdout
-			cmd.Stderr = os.Stderr
-			cmd.Stdin = os.Stdin
-			if verbose {
-				fmt.Println("Running command: " + cmd.String())
-			}
-			err = cmd.Run()
-			if err != nil {
-				log.Printf("Error: dependency cleanup command failed: %s\n", err)
-				exitCode = 1
-				return
-			}
-		}
+		cleanupFunc()
 	}
 }
 
