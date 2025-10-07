@@ -104,6 +104,7 @@ func main() {
 		currentFlagSet.BoolP("verbose", "v", false, "Show additional information about the current operation")
 		currentFlagSet.BoolP("force", "f", false, "Bypass warnings during package cleanup")
 		currentFlagSet.BoolP("yes", "y", false, "Enter 'yes' in all prompts")
+		currentFlagSet.BoolP("all", "a", false, "Perform all types of cleanup")
 		currentFlagSet.BoolP("depends", "d", false, "Perform a dependency cleanup")
 		currentFlagSet.BoolP("make-depends", "m", false, "Perform a make dependency cleanup")
 		currentFlagSet.BoolP("compilation-files", "c", false, "Perform a cleanup of compilation files")
@@ -589,6 +590,7 @@ func doCleanup() {
 	verbose, _ := currentFlagSet.GetBool("verbose")
 	force, _ := currentFlagSet.GetBool("force")
 	yesAll, _ := currentFlagSet.GetBool("yes")
+	all, _ := currentFlagSet.GetBool("all")
 	cleanupDepends, _ := currentFlagSet.GetBool("depends")
 	cleanupMakeDepends, _ := currentFlagSet.GetBool("make-depends")
 	cleanupCompilationFiles, _ := currentFlagSet.GetBool("compilation-files")
@@ -596,7 +598,13 @@ func doCleanup() {
 	cleanupFetchedPackages, _ := currentFlagSet.GetBool("fetched-packages")
 
 	// Set default behaviour
-	if !isFlagSet(currentFlagSet, "depends") && !isFlagSet(currentFlagSet, "make-depends") && !isFlagSet(currentFlagSet, "compilation-files") && !isFlagSet(currentFlagSet, "binary-packages") && !isFlagSet(currentFlagSet, "fetched-packages") {
+	if all {
+		cleanupDepends = true
+		cleanupMakeDepends = bpmlib.MainBPMConfig.CleanupMakeDependencies
+		cleanupCompilationFiles = true
+		cleanupBinaryPackages = true
+		cleanupFetchedPackages = true
+	} else if !isFlagSet(currentFlagSet, "depends") && !isFlagSet(currentFlagSet, "make-depends") && !isFlagSet(currentFlagSet, "compilation-files") && !isFlagSet(currentFlagSet, "binary-packages") && !isFlagSet(currentFlagSet, "fetched-packages") {
 		cleanupDepends = true
 		cleanupMakeDepends = bpmlib.MainBPMConfig.CleanupMakeDependencies
 		cleanupCompilationFiles = false
