@@ -507,10 +507,6 @@ func removePackages() {
 
 	// Get packages
 	packages := currentFlagSet.Args()
-	if len(packages) == 0 {
-		fmt.Println("No packages were given to remove")
-		return
-	}
 
 	// Check for required permissions
 	if os.Getuid() != 0 {
