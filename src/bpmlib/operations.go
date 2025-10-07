@@ -230,7 +230,7 @@ func (operation *BPMOperation) Cleanup(cleanupMakeDepends bool) error {
 		}
 
 		keepPackages = append(keepPackages, pkg.Name)
-		resolved := pkg.GetAllDependencies(!cleanupMakeDepends, true, operation.RootDir)
+		resolved := pkg.GetDependenciesRecursive(!cleanupMakeDepends, operation.RootDir)
 		for _, value := range resolved {
 			if !slices.Contains(keepPackages, value) {
 				keepPackages = append(keepPackages, value)

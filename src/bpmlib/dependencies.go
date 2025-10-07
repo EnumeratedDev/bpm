@@ -31,7 +31,7 @@ func (pkgInfo *PackageInfo) GetDependencies(includeMakeDepends, includeOptionalD
 			}) {
 				allDepends = append(allDepends, pkgInstallationReason{
 					PkgName:            depend,
-					InstallationReason: InstallationReasonDependency,
+					InstallationReason: InstallationReasonManual,
 				})
 			}
 		}
@@ -51,23 +51,23 @@ func (pkgInfo *PackageInfo) GetDependencies(includeMakeDepends, includeOptionalD
 	return allDepends
 }
 
-func (pkgInfo *PackageInfo) GetAllDependencies(includeMakeDepends, includeOptionalDepends bool, rootDir string) (resolved []string) {
+func (pkgInfo *PackageInfo) GetDependenciesRecursive(includeMakeDepends bool, rootDir string) (resolved []string) {
 	// Initialize slices
 	resolved = make([]string, 0)
 	unresolved := make([]string, 0)
 
 	// Call unexported function
-	pkgInfo.getAllDependencies(&resolved, &unresolved, includeMakeDepends, includeOptionalDepends, rootDir)
+	pkgInfo.getDependenciesRecursive(&resolved, &unresolved, includeMakeDepends, rootDir)
 
 	return resolved
 }
 
-func (pkgInfo *PackageInfo) getAllDependencies(resolved *[]string, unresolved *[]string, includeMakeDepends, includeOptionalDepends bool, rootDir string) {
+func (pkgInfo *PackageInfo) getDependenciesRecursive(resolved *[]string, unresolved *[]string, includeMakeDepends bool, rootDir string) {
 	// Add current package name to unresolved slice
 	*unresolved = append(*unresolved, pkgInfo.Name)
 
 	// Loop through all dependencies
-	for _, pkgIR := range pkgInfo.GetDependencies(includeMakeDepends, includeOptionalDepends) {
+	for _, pkgIR := range pkgInfo.GetDependencies(includeMakeDepends, false) {
 		depend := pkgIR.PkgName
 
 		if isVirtual, p := IsVirtualPackage(depend, rootDir); isVirtual {
@@ -86,7 +86,7 @@ func (pkgInfo *PackageInfo) getAllDependencies(resolved *[]string, unresolved *[
 			dependInfo := GetPackageInfo(depend, rootDir)
 
 			if dependInfo != nil {
-				dependInfo.getAllDependencies(resolved, unresolved, includeMakeDepends, includeOptionalDepends, rootDir)
+				dependInfo.getDependenciesRecursive(resolved, unresolved, includeMakeDepends, rootDir)
 			}
 		}
 	}
@@ -155,7 +155,7 @@ func resolvePackageDependenciesFromDatabase(resolved *[]pkgInstallationReason, u
 		}
 
 		// Resolve the dependencies of this dependency
-		resolvePackageDependenciesFromDatabase(resolved, unresolved, entry.Info, checkMake, checkOptional, ignoreInstalled, verbose, rootDir)
+		resolvePackageDependenciesFromDatabase(resolved, unresolved, entry.Info, checkMake, false, ignoreInstalled, verbose, rootDir)
 
 		// Move dependency from the unresolved slice to the resolved slice
 		if !slices.ContainsFunc(*resolved, func(p pkgInstallationReason) bool {
