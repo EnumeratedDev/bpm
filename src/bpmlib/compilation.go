@@ -132,7 +132,6 @@ func CompileSourcePackage(archiveFilename, outputDirectory string, skipChecks bo
 	env = append(env, "HOME="+tempDirectory)
 	env = append(env, "BPM_WORKDIR="+tempDirectory)
 	env = append(env, "BPM_SOURCE="+path.Join(tempDirectory, "source"))
-	env = append(env, "BPM_OUTPUT="+path.Join(tempDirectory, "output"))
 	env = append(env, "BPM_PKG_NAME="+bpmpkg.PkgInfo.Name)
 	env = append(env, "BPM_PKG_VERSION="+bpmpkg.PkgInfo.Version)
 	env = append(env, "BPM_PKG_REVISION="+strconv.Itoa(bpmpkg.PkgInfo.Revision))
@@ -188,32 +187,27 @@ func CompileSourcePackage(archiveFilename, outputDirectory string, skipChecks bo
 		packagesToCompile = append(packagesToCompile, bpmpkg.PkgInfo)
 	}
 
+	// Create output directories for each package
+	for _, pkg := range packagesToCompile {
+		// Create new output directory
+		err = os.Mkdir(path.Join(tempDirectory, "output_"+pkg.Name), 0755)
+		if err != nil {
+			return nil, err
+		}
+
+		// Change output directory owner
+		err = os.Chown(path.Join(tempDirectory, "output_"+pkg.Name), uid, gid)
+		if err != nil {
+			return nil, err
+		}
+	}
+
 	// Compile each package
 	for _, pkg := range packagesToCompile {
 		// Get package function name
 		packageFunctionName := "package"
 		if bpmpkg.PkgInfo.IsSplitPackage() {
 			packageFunctionName = "package_" + pkg.Name
-		}
-
-		// Remove output directory if it already exists
-		if _, err := os.Stat(path.Join(tempDirectory, "output")); err == nil {
-			err := os.RemoveAll(path.Join(tempDirectory, "output"))
-			if err != nil {
-				return nil, err
-			}
-		}
-
-		// Create new output directory
-		err = os.Mkdir(path.Join(tempDirectory, "output"), 0755)
-		if err != nil {
-			return nil, err
-		}
-
-		// Change output directory owner
-		err = os.Chown(path.Join(tempDirectory, "output"), uid, gid)
-		if err != nil {
-			return nil, err
 		}
 
 		// Execute package function in source.sh script and generate package file list
@@ -224,10 +218,11 @@ func CompileSourcePackage(archiveFilename, outputDirectory string, skipChecks bo
 				"echo \"Running "+packageFunctionName+"() function\"\n"+
 				"( cd \"$BPM_SOURCE\" && fakeroot -s \"$BPM_WORKDIR\"/fakeroot_file bash -e -c '"+packageFunctionName+"' ) || exit 1\n"+ // Run package() function
 				"fakeroot -i \"$BPM_WORKDIR\"/fakeroot_file find \"$BPM_OUTPUT\" -mindepth 1 -printf \"%P %#m %U %G %s\\n\" > \"$BPM_WORKDIR\"/pkg.files") // Create package file list
+
 		cmd.Dir = tempDirectory
 		cmd.Stdout = os.Stdout
 		cmd.Stderr = os.Stderr
-		cmd.Env = env
+		cmd.Env = append(env, "BPM_OUTPUT="+path.Join(tempDirectory, "output_"+pkg.Name))
 		if os.Getuid() == 0 {
 			cmd.SysProcAttr = &syscall.SysProcAttr{}
 			cmd.SysProcAttr.Credential = &syscall.Credential{Uid: uint32(uid), Gid: uint32(gid)}
@@ -238,7 +233,7 @@ func CompileSourcePackage(archiveFilename, outputDirectory string, skipChecks bo
 		}
 
 		// Create gzip-compressed archive for the package files
-		cmd = exec.Command("bash", "-c", "find output -printf \"%P\\n\" | fakeroot -i \"$BPM_WORKDIR\"/fakeroot_file tar -czf files.tar.gz --no-recursion -C output -T -")
+		cmd = exec.Command("bash", "-c", fmt.Sprintf("find %s -printf \"%%P\\n\" | fakeroot -i %s/fakeroot_file tar -czf files.tar.gz --no-recursion -C %s -T -", "output_"+pkg.Name, tempDirectory, "output_"+pkg.Name))
 		cmd.Dir = tempDirectory
 		cmd.Stdout = os.Stdout
 		cmd.Stderr = os.Stderr
@@ -326,6 +321,12 @@ func CompileSourcePackage(archiveFilename, outputDirectory string, skipChecks bo
 
 		// Set final BPM archive owner
 		err = os.Chown(outputFilename, os.Getuid(), os.Getgid())
+		if err != nil {
+			return nil, err
+		}
+
+		// Remove output directory
+		err = os.RemoveAll(path.Join(tempDirectory, "output_"+pkg.Name))
 		if err != nil {
 			return nil, err
 		}
