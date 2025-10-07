@@ -93,7 +93,7 @@ func main() {
 		currentFlagSet.BoolP("force", "f", false, "Bypass warnings during package removal")
 		currentFlagSet.BoolP("yes", "y", false, "Enter 'yes' in all prompts")
 		currentFlagSet.BoolP("unused", "u", false, "Remove packages only if they are not required as dependencies")
-		currentFlagSet.BoolP("cleanup", "c", false, "Additionally remove all unused dependencies")
+		currentFlagSet.BoolP("cleanup", "n", false, "Additionally remove all unused dependencies")
 		setupFlagsAndHelp(currentFlagSet, fmt.Sprintf("bpm %s <options>", subcommand), "Remove the specified packages", os.Args[2:])
 
 		removePackages()
