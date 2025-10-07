@@ -10,6 +10,7 @@ import (
 	"os"
 	"os/exec"
 	"path"
+	"regexp"
 	"slices"
 	"sort"
 	"strconv"
@@ -461,11 +462,21 @@ func ReadPackageInfo(contents string) (*PackageInfo, error) {
 		}
 	}
 
+	// Ensure package name is valid
+	if match, _ := regexp.MatchString("^[a-zA-Z0-9._-]+$", pkgInfo.Name); !match {
+		return nil, fmt.Errorf("package name (%s) is invalid", pkgInfo.Name)
+	}
+
 	// Setup split package information
 	for i, splitPkg := range pkgInfo.SplitPackages {
 		// Ensure split package contains a name
 		if splitPkg.Name == "" {
-			return nil, fmt.Errorf("invalid split package name: %s", splitPkg.Name)
+			return nil, fmt.Errorf("package name (%s) is invalid", splitPkg.Name)
+		}
+
+		// Ensure split package name is valid
+		if match, _ := regexp.MatchString("^[a-zA-Z0-9._-]+$", splitPkg.Name); !match {
+			return nil, fmt.Errorf("package name (%s) is invalid", splitPkg.Name)
 		}
 
 		// Turn split package into yaml data
