@@ -433,15 +433,12 @@ func installPackages() {
 
 	// Confirmation Prompt
 	if !yesAll {
-		reader := bufio.NewReader(os.Stdin)
-		if len(operation.Actions) == 1 {
-			fmt.Printf("Do you wish to install this package? [y\\N] ")
-		} else {
-			fmt.Printf("Do you wish to install these %d packages? [y\\N] ", len(operation.Actions))
+		prompt := "Do you wish to install this package?"
+		if len(operation.Actions) != 1 {
+			prompt = fmt.Sprintf("Do you wish to install all %d packages?", len(operation.Actions))
 		}
 
-		text, _ := reader.ReadString('\n')
-		if strings.TrimSpace(strings.ToLower(text)) != "y" && strings.TrimSpace(strings.ToLower(text)) != "yes" {
+		if !showConfirmationPrompt(prompt, false) {
 			fmt.Println("Cancelling package installation...")
 			exitCode = 1
 			return
@@ -467,11 +464,7 @@ func installPackages() {
 
 		// Confirmation Prompt
 		if sourcePackagesShown > 0 && !yesAll {
-			reader := bufio.NewReader(os.Stdin)
-			fmt.Printf("Are you sure you wish to continue? [y\\N] ")
-
-			text, _ := reader.ReadString('\n')
-			if strings.TrimSpace(strings.ToLower(text)) != "y" && strings.TrimSpace(strings.ToLower(text)) != "yes" {
+			if !showConfirmationPrompt("Do you wish to continue?", false) {
 				fmt.Println("Cancelling package installation...")
 				exitCode = 1
 				return
@@ -556,10 +549,12 @@ func removePackages() {
 
 	// Confirmation Prompt
 	if !yesAll {
-		fmt.Printf("Are you sure you wish to remove all %d packages? [y\\N] ", len(operation.Actions))
-		reader := bufio.NewReader(os.Stdin)
-		text, _ := reader.ReadString('\n')
-		if strings.TrimSpace(strings.ToLower(text)) != "y" && strings.TrimSpace(strings.ToLower(text)) != "yes" {
+		prompt := "Do you wish to remove this package?"
+		if len(operation.Actions) != 1 {
+			prompt = fmt.Sprintf("Do you wish to remove all %d packages?", len(operation.Actions))
+		}
+
+		if !showConfirmationPrompt(prompt, false) {
 			fmt.Println("Cancelling package removal...")
 			exitCode = 1
 			return
@@ -667,10 +662,12 @@ func doCleanup() {
 
 		// Confirmation Prompt
 		if !yesAll {
-			fmt.Printf("Are you sure you wish to remove all %d packages? [y\\N] ", len(operation.Actions))
-			reader := bufio.NewReader(os.Stdin)
-			text, _ := reader.ReadString('\n')
-			if strings.TrimSpace(strings.ToLower(text)) != "y" && strings.TrimSpace(strings.ToLower(text)) != "yes" {
+			prompt := "Do you wish to remove this package?"
+			if len(operation.Actions) != 1 {
+				prompt = fmt.Sprintf("Do you wish to remove all %d packages?", len(operation.Actions))
+			}
+
+			if !showConfirmationPrompt(prompt, false) {
 				fmt.Println("Cancelling package removal...")
 				exitCode = 1
 				return
@@ -720,10 +717,7 @@ func syncDatabases() {
 
 	// Confirmation Prompt
 	if !yesAll {
-		fmt.Printf("Are you sure you wish to sync all databases? [y\\N] ")
-		reader := bufio.NewReader(os.Stdin)
-		text, _ := reader.ReadString('\n')
-		if strings.TrimSpace(strings.ToLower(text)) != "y" && strings.TrimSpace(strings.ToLower(text)) != "yes" {
+		if !showConfirmationPrompt("Do you wish to sync all databases?", false) {
 			fmt.Println("Cancelling database synchronization...")
 			exitCode = 1
 			return
@@ -797,10 +791,12 @@ func updatePackages() {
 
 	// Confirmation Prompt
 	if !yesAll {
-		fmt.Printf("Are you sure you wish to update all %d packages? [y\\N] ", len(operation.Actions))
-		reader := bufio.NewReader(os.Stdin)
-		text, _ := reader.ReadString('\n')
-		if strings.TrimSpace(strings.ToLower(text)) != "y" && strings.TrimSpace(strings.ToLower(text)) != "yes" {
+		prompt := "Do you wish to update this package?"
+		if len(operation.Actions) != 1 {
+			prompt = fmt.Sprintf("Do you wish to update all %d packages?", len(operation.Actions))
+		}
+
+		if !showConfirmationPrompt(prompt, false) {
 			fmt.Println("Cancelling package update...")
 			exitCode = 1
 			return
@@ -826,11 +822,7 @@ func updatePackages() {
 
 		// Confirmation Prompt
 		if sourcePackagesShown > 0 && !yesAll {
-			reader := bufio.NewReader(os.Stdin)
-			fmt.Printf("Are you sure you wish to continue? [y\\N] ")
-
-			text, _ := reader.ReadString('\n')
-			if strings.TrimSpace(strings.ToLower(text)) != "y" && strings.TrimSpace(strings.ToLower(text)) != "yes" {
+			if !showConfirmationPrompt("Do you wish to continue?", false) {
 				fmt.Println("Cancelling package installation...")
 				exitCode = 1
 				return
@@ -1207,4 +1199,27 @@ func isFlagSet(flagSet *flag.FlagSet, name string) bool {
 		}
 	})
 	return found
+}
+
+func showConfirmationPrompt(prompt string, defaultTo bool) bool {
+	reader := bufio.NewReader(os.Stdin)
+	if defaultTo {
+		fmt.Printf("%s [Y/n] ", prompt)
+	} else {
+		fmt.Printf("%s [y/N] ", prompt)
+	}
+
+	text, _ := reader.ReadString('\n')
+	text = strings.TrimSpace(text)
+
+	if len(text) > 0 {
+		switch text[0] {
+		case 'y', 'Y':
+			return true
+		case 'n', 'N':
+			return false
+		}
+	}
+
+	return defaultTo
 }
