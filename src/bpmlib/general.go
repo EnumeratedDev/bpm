@@ -207,7 +207,7 @@ func RemovePackages(rootDir string, force, cleanupDependencies bool, packages ..
 
 	// Do package cleanup
 	if cleanupDependencies {
-		err := operation.Cleanup(true)
+		err := operation.Cleanup(MainBPMConfig.CleanupMakeDependencies)
 		if err != nil {
 			return nil, fmt.Errorf("could not perform cleanup for operation: %s", err)
 		}
