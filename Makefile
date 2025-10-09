@@ -12,7 +12,7 @@ ROOT_COMPILATION_GID ?= 65534
 
 build:
 	mkdir -p build
-	cd src/bpm; $(GO) build -ldflags "-w -X 'git.enumerated.dev/bubble-package-manager/bpm/src/bpmlib.rootCompilationUID=$(ROOT_COMPILATION_UID)' -X 'git.enumerated.dev/bubble-package-manager/bpm/src/bpmlib.rootCompilationGID=$(ROOT_COMPILATION_GID)'" -o ../../build/bpm git.enumerated.dev/bubble-package-manager/bpm/src/bpm
+	cd src/bpm; $(GO) build $(GOFLAGS) -ldflags "-w -X 'git.enumerated.dev/bubble-package-manager/bpm/src/bpmlib.rootCompilationUID=$(ROOT_COMPILATION_UID)' -X 'git.enumerated.dev/bubble-package-manager/bpm/src/bpmlib.rootCompilationGID=$(ROOT_COMPILATION_GID)'" -o ../../build/bpm git.enumerated.dev/bubble-package-manager/bpm/src/bpm
 
 install: build/bpm config/
 	# Create directory
