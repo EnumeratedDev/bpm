@@ -40,3 +40,11 @@ type PackageScriptErr struct {
 func (e PackageScriptErr) Error() string {
 	return fmt.Sprintf("could not execute package script (%s) for package (%s): %s", e.packageScript, e.packageName, e.err)
 }
+
+type PackageRemovalDependencyErr struct {
+	RequiredPackages map[string][]string
+}
+
+func (e PackageRemovalDependencyErr) Error() string {
+	return "removing these package would break other installed packages"
+}

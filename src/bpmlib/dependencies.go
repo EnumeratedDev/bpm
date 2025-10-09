@@ -198,12 +198,9 @@ func GetPackageDependants(pkgName string, rootDir string) ([]string, error) {
 			continue
 		}
 
-		// Get installed package dependencies
-		dependencies := installedPkg.PkgInfo.GetDependencies(false, true)
-
 		// Add installed package to list if its dependencies include pkgName
-		if slices.ContainsFunc(dependencies, func(p pkgInstallationReason) bool {
-			return p.PkgName == pkgName
+		if slices.ContainsFunc(installedPkg.PkgInfo.Depends, func(n string) bool {
+			return n == pkgName
 		}) {
 			ret = append(ret, installedPkgName)
 			continue
@@ -212,8 +209,8 @@ func GetPackageDependants(pkgName string, rootDir string) ([]string, error) {
 		// Loop through each virtual package
 		for _, vpkg := range pkg.PkgInfo.Provides {
 			// Add installed package to list if its dependencies contain a provided virtual package
-			if slices.ContainsFunc(dependencies, func(p pkgInstallationReason) bool {
-				return p.PkgName == vpkg
+			if slices.ContainsFunc(installedPkg.PkgInfo.Depends, func(n string) bool {
+				return n == vpkg
 			}) {
 				ret = append(ret, installedPkgName)
 				break

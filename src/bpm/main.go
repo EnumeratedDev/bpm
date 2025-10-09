@@ -92,7 +92,6 @@ func main() {
 		currentFlagSet.BoolP("verbose", "v", false, "Show additional information about the current operation")
 		currentFlagSet.BoolP("force", "f", false, "Bypass warnings during package removal")
 		currentFlagSet.BoolP("yes", "y", false, "Enter 'yes' in all prompts")
-		currentFlagSet.BoolP("unused", "u", false, "Remove packages only if they are not required as dependencies")
 		currentFlagSet.BoolP("cleanup", "n", false, "Additionally remove all unused dependencies")
 		setupFlagsAndHelp(currentFlagSet, fmt.Sprintf("bpm %s <options>", subcommand), "Remove the specified packages", os.Args[2:])
 
@@ -496,7 +495,6 @@ func removePackages() {
 	verbose, _ := currentFlagSet.GetBool("verbose")
 	force, _ := currentFlagSet.GetBool("force")
 	yesAll, _ := currentFlagSet.GetBool("yes")
-	removeUnused, _ := currentFlagSet.GetBool("unused")
 	cleanupPackages, _ := currentFlagSet.GetBool("cleanup")
 
 	// Get packages
@@ -527,8 +525,16 @@ func removePackages() {
 	}
 
 	// Create remove operation
-	operation, err := bpmlib.RemovePackages(rootDir, removeUnused, cleanupPackages, packages...)
+	operation, err := bpmlib.RemovePackages(rootDir, force, cleanupPackages, packages...)
 	if errors.As(err, &bpmlib.PackageNotFoundErr{}) || errors.As(err, &bpmlib.DependencyNotFoundErr{}) || errors.As(err, &bpmlib.PackageConflictErr{}) {
+		log.Printf("Error: %s", err)
+		exitCode = 1
+		return
+	} else if errors.As(err, &bpmlib.PackageRemovalDependencyErr{}) {
+		for pkg, dependants := range err.(bpmlib.PackageRemovalDependencyErr).RequiredPackages {
+			fmt.Printf("The following packages depend on package (%s): %s\n", pkg, strings.Join(dependants, ", "))
+		}
+
 		log.Printf("Error: %s", err)
 		exitCode = 1
 		return

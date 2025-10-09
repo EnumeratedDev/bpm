@@ -4,6 +4,7 @@ import (
 	"errors"
 	"fmt"
 	"log"
+	"maps"
 	"os"
 	"path"
 	"slices"
@@ -186,7 +187,7 @@ func InstallPackages(rootDir string, forceInstallationReason InstallationReason,
 }
 
 // RemovePackages removes the specified packages from the given root directory
-func RemovePackages(rootDir string, removeUnusedPackagesOnly, cleanupDependencies bool, packages ...string) (operation *BPMOperation, err error) {
+func RemovePackages(rootDir string, force, cleanupDependencies bool, packages ...string) (operation *BPMOperation, err error) {
 	operation = &BPMOperation{
 		Actions:           make([]OperationAction, 0),
 		UnresolvedDepends: make([]string, 0),
@@ -204,14 +205,6 @@ func RemovePackages(rootDir string, removeUnusedPackagesOnly, cleanupDependencie
 		operation.AppendAction(&RemovePackageAction{BpmPackage: bpmpkg})
 	}
 
-	// Do not remove packages which other packages depend on
-	if removeUnusedPackagesOnly {
-		err := operation.RemoveNeededPackages()
-		if err != nil {
-			return nil, fmt.Errorf("could not skip needed packages: %s", err)
-		}
-	}
-
 	// Do package cleanup
 	if cleanupDependencies {
 		err := operation.Cleanup(true)
@@ -219,6 +212,40 @@ func RemovePackages(rootDir string, removeUnusedPackagesOnly, cleanupDependencie
 			return nil, fmt.Errorf("could not perform cleanup for operation: %s", err)
 		}
 	}
+
+	// Return error if other packages depend on removed ones
+	if !force {
+		// Get packages and their dependants
+		packageDepndants := make(map[string][]string, 0)
+		for _, action := range operation.Actions {
+			dependants, err := GetPackageDependants(action.(*RemovePackageAction).BpmPackage.PkgInfo.Name, rootDir)
+			if err != nil {
+				return nil, fmt.Errorf("could not get package dependants: %s", err)
+			}
+
+			packageDepndants[action.(*RemovePackageAction).BpmPackage.PkgInfo.Name] = dependants
+		}
+
+		// Remove dependant packages from map if they are to be removed by this operation
+		for pkg, required := range packageDepndants {
+			required = slices.DeleteFunc(required, func(pkgName string) bool {
+				_, ok := packageDepndants[pkgName]
+				return ok
+			})
+			packageDepndants[pkg] = required
+		}
+
+		// Remove empty keys from map
+		maps.DeleteFunc(packageDepndants, func(pkg string, required []string) bool {
+			return len(required) == 0
+		})
+
+		// Return error
+		if len(packageDepndants) != 0 {
+			return nil, PackageRemovalDependencyErr{RequiredPackages: packageDepndants}
+		}
+	}
+
 	return operation, nil
 }
 
