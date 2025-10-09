@@ -199,6 +199,9 @@ func RemovePackages(rootDir string, force, cleanupDependencies bool, packages ..
 	// Search for packages
 	for _, pkg := range packages {
 		bpmpkg := GetPackage(pkg, rootDir)
+		if isVirutal, vpkg := IsVirtualPackage(pkg, rootDir); isVirutal {
+			bpmpkg = GetPackage(vpkg, rootDir)
+		}
 		if bpmpkg == nil {
 			continue
 		}
