@@ -6,6 +6,7 @@ import (
 	"net/url"
 	"os"
 	"path"
+	"slices"
 	"strings"
 
 	"gopkg.in/yaml.v3"
@@ -217,9 +218,8 @@ func FindReplacement(pkg string) *BPMDatabaseEntry {
 func ResolveVirtualPackage(vpkg string) *BPMDatabaseEntry {
 	for _, db := range BPMDatabases {
 		if v, ok := db.VirtualPackages[vpkg]; ok {
-			for _, pkg := range v {
-				return db.Entries[pkg]
-			}
+			slices.Sort(v)
+			return db.Entries[v[0]]
 		}
 	}
 
