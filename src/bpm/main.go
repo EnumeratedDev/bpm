@@ -149,6 +149,7 @@ func main() {
 		currentFlagSet.BoolP("yes", "y", false, "Enter 'yes' in all prompts")
 		currentFlagSet.BoolP("depends", "d", false, "Install required dependencies for package compilation")
 		currentFlagSet.BoolP("skip-checks", "s", false, "Skip the check function in source.sh scripts")
+		currentFlagSet.BoolP("keep", "k", false, "Keep compilation files after successful package compilation")
 		currentFlagSet.BoolP("output-directory", "o", false, "Set the output directory for the binary packages")
 		currentFlagSet.Int("output-fd", -1, "Set the file descriptor output package names will be written to")
 		setupFlagsAndHelp(currentFlagSet, fmt.Sprintf("bpm %s <options>", subcommand), "Compile source packages and convert them to binary ones", os.Args[2:])
@@ -942,6 +943,7 @@ func compilePackage() {
 	rootDir, _ := currentFlagSet.GetString("root")
 	verbose, _ := currentFlagSet.GetBool("verbose")
 	yesAll, _ := currentFlagSet.GetBool("yes")
+	keepCompilationFiles, _ := currentFlagSet.GetBool("keep")
 	installSrcPkgDepends, _ := currentFlagSet.GetBool("depends")
 	skipChecks, _ := currentFlagSet.GetBool("skip-checks")
 	outputDirectory, _ := currentFlagSet.GetString("output-directory")
@@ -1139,7 +1141,7 @@ func compilePackage() {
 			return
 		}
 
-		outputBpmPackages, err := bpmlib.CompileSourcePackage(sourcePackage, outputDirectory, skipChecks)
+		outputBpmPackages, err := bpmlib.CompileSourcePackage(sourcePackage, outputDirectory, skipChecks, keepCompilationFiles)
 		if err != nil {
 			// Remove unused packages
 			cleanupFunc()

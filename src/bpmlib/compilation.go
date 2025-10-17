@@ -21,7 +21,7 @@ import (
 var rootCompilationUID = "65534"
 var rootCompilationGID = "65534"
 
-func CompileSourcePackage(archiveFilename, outputDirectory string, skipChecks bool) (outputBpmPackages map[string]string, err error) {
+func CompileSourcePackage(archiveFilename, outputDirectory string, skipChecks, keepCompilationFiles bool) (outputBpmPackages map[string]string, err error) {
 	// Initialize map
 	outputBpmPackages = make(map[string]string)
 
@@ -332,6 +332,11 @@ func CompileSourcePackage(archiveFilename, outputDirectory string, skipChecks bo
 		}
 
 		outputBpmPackages[pkgInfo.Name] = outputFilename
+	}
+
+	// Delete temporary directory
+	if !keepCompilationFiles {
+		os.RemoveAll(tempDirectory)
 	}
 
 	return outputBpmPackages, nil
