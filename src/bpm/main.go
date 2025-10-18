@@ -207,7 +207,6 @@ func showPackageInfo() {
 
 		var info *bpmlib.PackageInfo
 		isFile := false
-		showInstallationReason := false
 		if stat, err := os.Stat(pkg); err == nil && !stat.IsDir() {
 			bpmpkg, err := bpmlib.ReadPackage(pkg)
 			if err != nil {
@@ -223,7 +222,6 @@ func showPackageInfo() {
 			} else {
 				info = bpmlib.GetPackageInfo(pkg, rootDir)
 			}
-			showInstallationReason = true
 		}
 		if info == nil {
 			log.Printf("Error: package (%s) is not installed\n", pkg)
@@ -242,7 +240,7 @@ func showPackageInfo() {
 			}
 			fmt.Println("File: " + abs)
 		}
-		fmt.Println(bpmlib.CreateReadableInfo(true, true, true, showInstallationReason, info, rootDir))
+		fmt.Println(info.CreateReadableInfo(rootDir))
 	}
 }
 
@@ -286,7 +284,7 @@ func showPackageList() {
 			if n != 0 {
 				fmt.Println()
 			}
-			fmt.Println(bpmlib.CreateReadableInfo(true, true, true, true, info, rootDir))
+			fmt.Println(info.CreateReadableInfo(rootDir))
 		}
 	}
 }

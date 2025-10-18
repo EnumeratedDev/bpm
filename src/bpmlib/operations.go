@@ -176,10 +176,7 @@ func (operation *BPMOperation) RemoveNeededPackages() error {
 	}
 
 	for pkg, action := range removeActions {
-		dependants, err := GetPackageDependants(action.BpmPackage.PkgInfo.Name, operation.RootDir)
-		if err != nil {
-			return errors.New("could not get dependant packages for package (" + pkg + ")")
-		}
+		dependants := action.BpmPackage.PkgInfo.GetPackageDependants(operation.RootDir)
 		dependants = slices.DeleteFunc(dependants, func(d string) bool {
 			if _, ok := removeActions[d]; ok {
 				return true

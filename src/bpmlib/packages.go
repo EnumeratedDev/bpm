@@ -507,39 +507,39 @@ func ReadPackageInfo(contents string) (*PackageInfo, error) {
 	return pkgInfo, nil
 }
 
-func CreateReadableInfo(showArchitecture, showType, showPackageRelations, showInstallationReason bool, pkgInfo *PackageInfo, rootDir string) string {
+func (pkgInfo *PackageInfo) CreateReadableInfo(rootDir string) string {
 	ret := make([]string, 0)
 	appendArray := func(label string, array []string) {
 		if len(array) == 0 {
 			return
 		}
+
+		// Sort array
+		slices.Sort(array)
+
 		ret = append(ret, fmt.Sprintf("%s: %s", label, strings.Join(array, ", ")))
 	}
+
 	ret = append(ret, "Name: "+pkgInfo.Name)
 	ret = append(ret, "Description: "+pkgInfo.Description)
 	ret = append(ret, "Version: "+pkgInfo.GetFullVersion())
 	ret = append(ret, "URL: "+pkgInfo.Url)
 	ret = append(ret, "License: "+pkgInfo.License)
-	if showArchitecture {
-		ret = append(ret, "Architecture: "+pkgInfo.Arch)
+	ret = append(ret, "Architecture: "+pkgInfo.Arch)
+	ret = append(ret, "Type: "+pkgInfo.Type)
+	appendArray("Dependencies", pkgInfo.Depends)
+	if pkgInfo.Type == "source" {
+		appendArray("Make Dependencies", pkgInfo.MakeDepends)
 	}
-	if showType {
-		ret = append(ret, "Type: "+pkgInfo.Type)
+	appendArray("Optional dependencies", pkgInfo.OptionalDepends)
+	dependants := pkgInfo.GetPackageDependants(rootDir)
+	if len(dependants) > 0 {
+		appendArray("Dependant packages", dependants)
 	}
-	if showPackageRelations {
-		appendArray("Dependencies", pkgInfo.Depends)
-		if pkgInfo.Type == "source" {
-			appendArray("Make Dependencies", pkgInfo.MakeDepends)
-		}
-		appendArray("Optional dependencies", pkgInfo.OptionalDepends)
-		dependants, err := GetPackageDependants(pkgInfo.Name, rootDir)
-		if err == nil {
-			appendArray("Dependant packages", dependants)
-		}
-		appendArray("Conflicting packages", pkgInfo.Conflicts)
-		appendArray("Provided packages", pkgInfo.Provides)
-		appendArray("Replaces packages", pkgInfo.Replaces)
-	}
+	appendArray("Conflicting packages", pkgInfo.Conflicts)
+	appendArray("Provided packages", pkgInfo.Provides)
+	appendArray("Replaces packages", pkgInfo.Replaces)
+
 	if pkgInfo.Type == "source" && len(pkgInfo.SplitPackages) != 0 {
 		splitPkgs := make([]string, len(pkgInfo.SplitPackages))
 		for i, splitPkgInfo := range pkgInfo.SplitPackages {
@@ -547,7 +547,8 @@ func CreateReadableInfo(showArchitecture, showType, showPackageRelations, showIn
 		}
 		appendArray("Split Packages", splitPkgs)
 	}
-	if IsPackageInstalled(pkgInfo.Name, rootDir) && showInstallationReason {
+
+	if rootDir != "" && IsPackageInstalled(pkgInfo.Name, rootDir) {
 		installationReason := GetInstallationReason(pkgInfo.Name, rootDir)
 		var installationReasonString string
 		switch installationReason {

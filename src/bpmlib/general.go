@@ -221,11 +221,7 @@ func RemovePackages(rootDir string, force, cleanupDependencies bool, packages ..
 		// Get packages and their dependants
 		packageDepndants := make(map[string][]string, 0)
 		for _, action := range operation.Actions {
-			dependants, err := GetPackageDependants(action.(*RemovePackageAction).BpmPackage.PkgInfo.Name, rootDir)
-			if err != nil {
-				return nil, fmt.Errorf("could not get package dependants: %s", err)
-			}
-
+			dependants := action.(*RemovePackageAction).BpmPackage.PkgInfo.GetPackageDependants(rootDir)
 			packageDepndants[action.(*RemovePackageAction).BpmPackage.PkgInfo.Name] = dependants
 		}
 

@@ -1,7 +1,6 @@
 package bpmlib
 
 import (
-	"errors"
 	"fmt"
 	"slices"
 )
@@ -170,19 +169,11 @@ func resolvePackageDependenciesFromDatabase(resolved *[]pkgInstallationReason, u
 	}
 }
 
-func GetPackageDependants(pkgName string, rootDir string) ([]string, error) {
-	ret := make([]string, 0)
-
-	// Get BPM package
-	pkg := GetPackage(pkgName, rootDir)
-	if pkg == nil {
-		return nil, errors.New("package not found: " + pkgName)
-	}
-
+func (pkgInfo *PackageInfo) GetPackageDependants(rootDir string) (dependants []string) {
 	// Get installed package names
 	pkgs, err := GetInstalledPackages(rootDir)
 	if err != nil {
-		return nil, errors.New("could not get installed packages")
+		return nil
 	}
 
 	// Loop through all installed packages
@@ -190,33 +181,33 @@ func GetPackageDependants(pkgName string, rootDir string) ([]string, error) {
 		// Get installed BPM package
 		installedPkg := GetPackage(installedPkgName, rootDir)
 		if installedPkg == nil {
-			return nil, errors.New("package not found: " + installedPkgName)
+			return nil
 		}
 
 		// Skip iteration if comparing the same packages
-		if installedPkg.PkgInfo.Name == pkgName {
+		if installedPkg.PkgInfo.Name == pkgInfo.Name {
 			continue
 		}
 
 		// Add installed package to list if its dependencies include pkgName
 		if slices.ContainsFunc(installedPkg.PkgInfo.Depends, func(n string) bool {
-			return n == pkgName
+			return n == pkgInfo.Name
 		}) {
-			ret = append(ret, installedPkgName)
+			dependants = append(dependants, installedPkgName)
 			continue
 		}
 
 		// Loop through each virtual package
-		for _, vpkg := range pkg.PkgInfo.Provides {
+		for _, vpkg := range pkgInfo.Provides {
 			// Add installed package to list if its dependencies contain a provided virtual package
 			if slices.ContainsFunc(installedPkg.PkgInfo.Depends, func(n string) bool {
 				return n == vpkg
 			}) {
-				ret = append(ret, installedPkgName)
+				dependants = append(dependants, installedPkgName)
 				break
 			}
 		}
 	}
 
-	return ret, nil
+	return dependants
 }
