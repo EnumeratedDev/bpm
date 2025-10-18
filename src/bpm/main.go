@@ -185,9 +185,6 @@ func showPackageInfo() {
 	}
 
 	for n, pkg := range packages {
-		var info *bpmlib.PackageInfo
-		isFile := false
-		showInstallationReason := false
 		if showDatabaseInfo {
 			var err error
 			var entry *bpmlib.BPMDatabaseEntry
@@ -199,8 +196,19 @@ func showPackageInfo() {
 					return
 				}
 			}
-			info = entry.Info
-		} else if stat, err := os.Stat(pkg); err == nil && !stat.IsDir() {
+
+			if n != 0 {
+				fmt.Println()
+			}
+			fmt.Println(entry.CreateReadableInfo(rootDir))
+
+			return
+		}
+
+		var info *bpmlib.PackageInfo
+		isFile := false
+		showInstallationReason := false
+		if stat, err := os.Stat(pkg); err == nil && !stat.IsDir() {
 			bpmpkg, err := bpmlib.ReadPackage(pkg)
 			if err != nil {
 				log.Printf("Error: could not read package: %s\n", err)
