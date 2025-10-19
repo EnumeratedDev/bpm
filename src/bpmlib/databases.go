@@ -299,8 +299,12 @@ func (entry *BPMDatabaseEntry) CreateReadableInfo(rootDir string) string {
 	ret = append(ret, "Database: "+entry.Database.Name)
 	ret = append(ret, "Description: "+entry.Info.Description)
 	ret = append(ret, "Version: "+entry.Info.GetFullVersion())
-	ret = append(ret, "URL: "+entry.Info.Url)
-	ret = append(ret, "License: "+entry.Info.License)
+	if entry.Info.Url != "" {
+		ret = append(ret, "URL: "+entry.Info.Url)
+	}
+	if entry.Info.License != "" {
+		ret = append(ret, "License: "+entry.Info.License)
+	}
 	ret = append(ret, "Architecture: "+entry.Info.Arch)
 	if entry.Info.Type == "source" && entry.Info.OutputArch != "" && entry.Info.OutputArch != GetArch() {
 		ret = append(ret, "Output architecture: "+entry.Info.OutputArch)
