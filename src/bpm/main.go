@@ -26,7 +26,7 @@ import (
 /*             A simple-to-use package manager             */
 /* ------------------------------------------------------- */
 
-var bpmVer = "0.6.0"
+var bpmVer = "0.6.1"
 
 var currentFlagSet *flag.FlagSet
 
