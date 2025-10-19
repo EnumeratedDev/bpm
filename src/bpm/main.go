@@ -45,7 +45,7 @@ func main() {
 	}
 
 	switch subcommand {
-	case "version":
+	case "v", "version":
 		fmt.Println("Bubble Package Manager (BPM)")
 		fmt.Println("Version: " + bpmVer)
 	case "q", "query":
