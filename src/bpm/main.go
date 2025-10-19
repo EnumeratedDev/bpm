@@ -62,6 +62,9 @@ func main() {
 		currentFlagSet.StringP("root", "R", "/", "Operate on specified root directory")
 		currentFlagSet.BoolP("count", "c", false, "Show total package count")
 		currentFlagSet.BoolP("names", "n", false, "Show all package names")
+		currentFlagSet.Bool("manual", false, "Show packages installed as dependencies")
+		currentFlagSet.Bool("depends", false, "Show packages installed as dependencies")
+		currentFlagSet.Bool("make-depends", false, "Show packages installed as make dependencies")
 		setupFlagsAndHelp(currentFlagSet, fmt.Sprintf("bpm %s <options>", subcommand), "List packages", os.Args[2:])
 
 		showPackageList()
@@ -249,6 +252,15 @@ func showPackageList() {
 	rootDir, _ := currentFlagSet.GetString("root")
 	showPkgCount, _ := currentFlagSet.GetBool("count")
 	showPkgNames, _ := currentFlagSet.GetBool("names")
+	showManual, _ := currentFlagSet.GetBool("manual")
+	showDepends, _ := currentFlagSet.GetBool("depends")
+	showMakeDepends, _ := currentFlagSet.GetBool("make-depends")
+
+	if !isFlagSet(currentFlagSet, "manual") && !isFlagSet(currentFlagSet, "depends") && !isFlagSet(currentFlagSet, "make-depends") {
+		showManual = true
+		showDepends = true
+		showMakeDepends = true
+	}
 
 	// Read local databases
 	err := bpmlib.ReadLocalDatabaseFiles()
@@ -268,6 +280,17 @@ func showPackageList() {
 		fmt.Println(len(packages))
 	} else if showPkgNames {
 		for _, pkg := range packages {
+			installationReason := bpmlib.GetInstallationReason(pkg, rootDir)
+			if installationReason == bpmlib.InstallationReasonManual && !showManual {
+				continue
+			} else if installationReason == bpmlib.InstallationReasonDependency && !showDepends {
+				continue
+			} else if installationReason == bpmlib.InstallationReasonMakeDependency && !showMakeDepends {
+				continue
+			} else if installationReason == bpmlib.InstallationReasonUnknown && (!showManual || !showDepends || !showMakeDepends) {
+				continue
+			}
+
 			fmt.Println(pkg)
 		}
 	} else {
@@ -281,6 +304,18 @@ func showPackageList() {
 				fmt.Printf("Package (%s) could not be found\n", pkg)
 				continue
 			}
+
+			installationReason := bpmlib.GetInstallationReason(info.Name, rootDir)
+			if installationReason == bpmlib.InstallationReasonManual && !showManual {
+				continue
+			} else if installationReason == bpmlib.InstallationReasonDependency && !showDepends {
+				continue
+			} else if installationReason == bpmlib.InstallationReasonMakeDependency && !showMakeDepends {
+				continue
+			} else if installationReason == bpmlib.InstallationReasonUnknown && (!showManual || !showDepends || !showMakeDepends) {
+				continue
+			}
+
 			if n != 0 {
 				fmt.Println()
 			}

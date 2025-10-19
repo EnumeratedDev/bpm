@@ -75,6 +75,9 @@ func GetInstalledPackages(rootDir string) (ret []string, err error) {
 		ret = append(ret, bpmpkg.PkgInfo.Name)
 	}
 
+	// Sort packages
+	slices.Sort(ret)
+
 	return ret, nil
 }
 
