@@ -526,6 +526,9 @@ func (pkgInfo *PackageInfo) CreateReadableInfo(rootDir string) string {
 	ret = append(ret, "URL: "+pkgInfo.Url)
 	ret = append(ret, "License: "+pkgInfo.License)
 	ret = append(ret, "Architecture: "+pkgInfo.Arch)
+	if pkgInfo.Type == "source" && pkgInfo.OutputArch != "" && pkgInfo.OutputArch != GetArch() {
+		ret = append(ret, "Output architecture: "+pkgInfo.Arch)
+	}
 	ret = append(ret, "Type: "+pkgInfo.Type)
 	appendArray("Dependencies", pkgInfo.Depends)
 	if pkgInfo.Type == "source" {
