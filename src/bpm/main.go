@@ -62,6 +62,7 @@ func main() {
 		currentFlagSet.StringP("root", "R", "/", "Operate on specified root directory")
 		currentFlagSet.BoolP("count", "c", false, "Show total package count")
 		currentFlagSet.BoolP("names", "n", false, "Show all package names")
+		currentFlagSet.BoolP("database", "d", false, "Show packages from remote databases")
 		currentFlagSet.Bool("manual", false, "Show packages installed as dependencies")
 		currentFlagSet.Bool("depends", false, "Show packages installed as dependencies")
 		currentFlagSet.Bool("make-depends", false, "Show packages installed as make dependencies")
@@ -252,6 +253,7 @@ func showPackageList() {
 	rootDir, _ := currentFlagSet.GetString("root")
 	showPkgCount, _ := currentFlagSet.GetBool("count")
 	showPkgNames, _ := currentFlagSet.GetBool("names")
+	showDatabase, _ := currentFlagSet.GetBool("database")
 	showManual, _ := currentFlagSet.GetBool("manual")
 	showDepends, _ := currentFlagSet.GetBool("depends")
 	showMakeDepends, _ := currentFlagSet.GetBool("make-depends")
@@ -270,56 +272,85 @@ func showPackageList() {
 		return
 	}
 
-	packages, err := bpmlib.GetInstalledPackages(rootDir)
+	installedPackages, err := bpmlib.GetInstalledPackages(rootDir)
 	if err != nil {
 		log.Printf("Error: could not get installed packages: %s", err.Error())
 		exitCode = 1
 		return
 	}
-	if showPkgCount {
-		fmt.Println(len(packages))
-	} else if showPkgNames {
-		for _, pkg := range packages {
-			installationReason := bpmlib.GetInstallationReason(pkg, rootDir)
-			if installationReason == bpmlib.InstallationReasonManual && !showManual {
-				continue
-			} else if installationReason == bpmlib.InstallationReasonDependency && !showDepends {
-				continue
-			} else if installationReason == bpmlib.InstallationReasonMakeDependency && !showMakeDepends {
-				continue
-			} else if installationReason == bpmlib.InstallationReasonUnknown && (!showManual || !showDepends || !showMakeDepends) {
-				continue
-			}
 
-			fmt.Println(pkg)
+	databaseEntries := make([]*bpmlib.BPMDatabaseEntry, 0)
+	for _, db := range bpmlib.BPMDatabases {
+		databaseEntries = append(databaseEntries, slices.Collect(maps.Values(db.Entries))...)
+	}
+
+	if showPkgCount {
+		if showDatabase {
+			fmt.Println(len(databaseEntries))
+		} else {
+			fmt.Println(len(installedPackages))
+		}
+	} else if showPkgNames {
+		if showDatabase {
+			for _, entry := range databaseEntries {
+				fmt.Println(entry.Database.Name + "/" + entry.Info.Name)
+			}
+		} else {
+			for _, pkg := range installedPackages {
+				installationReason := bpmlib.GetInstallationReason(pkg, rootDir)
+				if installationReason == bpmlib.InstallationReasonManual && !showManual {
+					continue
+				} else if installationReason == bpmlib.InstallationReasonDependency && !showDepends {
+					continue
+				} else if installationReason == bpmlib.InstallationReasonMakeDependency && !showMakeDepends {
+					continue
+				} else if installationReason == bpmlib.InstallationReasonUnknown && (!showManual || !showDepends || !showMakeDepends) {
+					continue
+				}
+
+				fmt.Println(pkg)
+			}
 		}
 	} else {
-		if len(packages) == 0 {
-			fmt.Println("No packages have been installed")
-			return
-		}
-		for n, pkg := range packages {
-			info := bpmlib.GetPackageInfo(pkg, rootDir)
-			if info == nil {
-				fmt.Printf("Package (%s) could not be found\n", pkg)
-				continue
+		if showDatabase {
+			if len(databaseEntries) == 0 {
+				fmt.Println("There are no database entries available")
+				return
 			}
+			for n, entry := range databaseEntries {
+				if n != 0 {
+					fmt.Println()
+				}
+				fmt.Println(entry.CreateReadableInfo(rootDir))
+			}
+		} else {
+			if len(installedPackages) == 0 {
+				fmt.Println("No packages have been installed")
+				return
+			}
+			for n, pkg := range installedPackages {
+				info := bpmlib.GetPackageInfo(pkg, rootDir)
+				if info == nil {
+					fmt.Printf("Package (%s) could not be found\n", pkg)
+					continue
+				}
 
-			installationReason := bpmlib.GetInstallationReason(info.Name, rootDir)
-			if installationReason == bpmlib.InstallationReasonManual && !showManual {
-				continue
-			} else if installationReason == bpmlib.InstallationReasonDependency && !showDepends {
-				continue
-			} else if installationReason == bpmlib.InstallationReasonMakeDependency && !showMakeDepends {
-				continue
-			} else if installationReason == bpmlib.InstallationReasonUnknown && (!showManual || !showDepends || !showMakeDepends) {
-				continue
-			}
+				installationReason := bpmlib.GetInstallationReason(info.Name, rootDir)
+				if installationReason == bpmlib.InstallationReasonManual && !showManual {
+					continue
+				} else if installationReason == bpmlib.InstallationReasonDependency && !showDepends {
+					continue
+				} else if installationReason == bpmlib.InstallationReasonMakeDependency && !showMakeDepends {
+					continue
+				} else if installationReason == bpmlib.InstallationReasonUnknown && (!showManual || !showDepends || !showMakeDepends) {
+					continue
+				}
 
-			if n != 0 {
-				fmt.Println()
+				if n != 0 {
+					fmt.Println()
+				}
+				fmt.Println(info.CreateReadableInfo(rootDir))
 			}
-			fmt.Println(info.CreateReadableInfo(rootDir))
 		}
 	}
 }
