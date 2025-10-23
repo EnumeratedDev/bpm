@@ -21,7 +21,7 @@ import (
 var rootCompilationUID = "65534"
 var rootCompilationGID = "65534"
 
-func CompileSourcePackage(archiveFilename, outputDirectory string, skipChecks, keepCompilationFiles bool) (outputBpmPackages map[string]string, err error) {
+func CompileSourcePackage(archiveFilename, outputDirectory string, skipChecks, keepCompilationFiles, verbose bool) (outputBpmPackages map[string]string, err error) {
 	// Initialize map
 	outputBpmPackages = make(map[string]string)
 
@@ -122,7 +122,7 @@ func CompileSourcePackage(archiveFilename, outputDirectory string, skipChecks, k
 	}
 
 	// Download files
-	err = downloadPackageFiles(bpmpkg.PkgInfo, tempDirectory)
+	err = downloadPackageFiles(bpmpkg.PkgInfo, tempDirectory, verbose)
 	if err != nil {
 		return nil, err
 	}
@@ -342,7 +342,7 @@ func CompileSourcePackage(archiveFilename, outputDirectory string, skipChecks, k
 	return outputBpmPackages, nil
 }
 
-func downloadPackageFiles(pkgInfo *PackageInfo, tempDirectory string) error {
+func downloadPackageFiles(pkgInfo *PackageInfo, tempDirectory string, verbose bool) error {
 	for _, download := range pkgInfo.Downloads {
 		// Replace variables
 		replaceVars := func(s string) string {
@@ -414,7 +414,10 @@ func downloadPackageFiles(pkgInfo *PackageInfo, tempDirectory string) error {
 			}
 
 			if !download.NoExtract && (strings.Contains(filepath, ".tar") || strings.HasSuffix(filepath, ".tgz")) {
-				cmd := exec.Command("tar", "xvf", filepath, "--strip-components="+strconv.Itoa(download.ExtractStripComponents))
+				cmd := exec.Command("tar", "xf", filepath, "--strip-components="+strconv.Itoa(download.ExtractStripComponents))
+				if verbose {
+					cmd.Args[1] = "xvf"
+				}
 				cmd.Dir = tempDirectory
 				if extractTo != "" {
 					err := os.MkdirAll(extractTo, 0755)

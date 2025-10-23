@@ -1213,7 +1213,7 @@ func compilePackage() {
 			return
 		}
 
-		outputBpmPackages, err := bpmlib.CompileSourcePackage(sourcePackage, outputDirectory, skipChecks, keepCompilationFiles)
+		outputBpmPackages, err := bpmlib.CompileSourcePackage(sourcePackage, outputDirectory, skipChecks, keepCompilationFiles, verbose)
 		if err != nil {
 			// Remove unused packages
 			cleanupFunc()

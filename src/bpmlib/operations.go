@@ -589,7 +589,7 @@ func (operation *BPMOperation) Execute(verbose, force bool) (err error) {
 
 				// Compile source package if not compiled already
 				if _, ok := operation.compiledPackages[pkgNameToInstall]; !ok {
-					outputBpmPackages, err := CompileSourcePackage(value.File, compiledDir, false, false)
+					outputBpmPackages, err := CompileSourcePackage(value.File, compiledDir, false, false, verbose)
 					if err != nil {
 						return fmt.Errorf("could not compile source package (%s): %s\n", value.File, err)
 					}
