@@ -16,8 +16,7 @@ import (
 
 	"git.enumerated.dev/bubble-package-manager/bpm/src/bpmlib"
 
-	"github.com/adrg/strutil"
-	"github.com/adrg/strutil/metrics"
+	"github.com/lithammer/fuzzysearch/fuzzy"
 	flag "github.com/spf13/pflag"
 )
 
@@ -404,23 +403,19 @@ func searchForPackages() {
 	}
 
 	for i, term := range searchTerms {
-		resultsMap := make(map[*bpmlib.PackageInfo]float64, 0)
-
-		// Loop through all packages
+		// Find matches
+		resultsMap := make(map[*bpmlib.BPMDatabaseEntry]int)
 		for _, db := range bpmlib.BPMDatabases {
 			for _, entry := range db.Entries {
-				// Calculate string similarity and add to map
-				similarity := strutil.Similarity(entry.Info.Name, term, metrics.NewSmithWatermanGotoh())
-				if similarity > 0.8 {
-					resultsMap[entry.Info] = similarity
+				match := fuzzy.RankMatchNormalizedFold(term, entry.Info.Name)
+				if match == -1 {
 					continue
 				}
-				similarity = strutil.Similarity(entry.Info.Description, term, metrics.NewSmithWatermanGotoh())
-				if similarity > 0.8 {
-					resultsMap[entry.Info] = similarity
-				}
+
+				resultsMap[entry] = match
 			}
 		}
+
 		if len(resultsMap) == 0 {
 			log.Printf("Error: no results for term (%s) were found\n", term)
 			exitCode = 1
@@ -430,7 +425,7 @@ func searchForPackages() {
 		// Sort results
 		results := slices.Collect(maps.Keys(resultsMap))
 		sort.Slice(results, func(i, j int) bool {
-			return resultsMap[results[i]] > resultsMap[results[j]]
+			return resultsMap[results[i]] < resultsMap[results[j]]
 		})
 
 		// Print results
@@ -440,7 +435,7 @@ func searchForPackages() {
 		fmt.Printf("Results for term (%s)\n", term)
 		for j := 0; j < 10 && j < len(results); j++ {
 			result := results[j]
-			fmt.Printf("%d) %s: %s (%s)\n", j+1, result.Name, result.Description, result.GetFullVersion())
+			fmt.Printf("%d) %s/%s: %s (%s)\n", j+1, result.Database.Name, result.Info.Name, result.Info.Description, result.Info.GetFullVersion())
 		}
 	}
 }
