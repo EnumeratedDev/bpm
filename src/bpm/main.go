@@ -67,6 +67,8 @@ func main() {
 		currentFlagSet.Bool("manual", false, "Show packages installed as dependencies")
 		currentFlagSet.Bool("depends", false, "Show packages installed as dependencies")
 		currentFlagSet.Bool("make-depends", false, "Show packages installed as make dependencies")
+		currentFlagSet.String("sort", "", "Sort listed packages by 'name' or 'size")
+		currentFlagSet.Bool("reverse", false, "Reverse the order in which packages are listed")
 		currentFlagSet.BoolP("human-readable", "h", false, "Show package installed size in a human readable format")
 		setupFlagsAndHelp(currentFlagSet, fmt.Sprintf("bpm %s <options>", subcommand), "List packages", os.Args[2:])
 
@@ -259,6 +261,8 @@ func showPackageList() {
 	showManual, _ := currentFlagSet.GetBool("manual")
 	showDepends, _ := currentFlagSet.GetBool("depends")
 	showMakeDepends, _ := currentFlagSet.GetBool("make-depends")
+	sortPackages, _ := currentFlagSet.GetString("sort")
+	reversePackages, _ := currentFlagSet.GetBool("reverse")
 	showHumanReadableSize, _ := currentFlagSet.GetBool("human-readable")
 
 	if !isFlagSet(currentFlagSet, "manual") && !isFlagSet(currentFlagSet, "depends") && !isFlagSet(currentFlagSet, "make-depends") {
@@ -275,16 +279,41 @@ func showPackageList() {
 		return
 	}
 
-	installedPackages, err := bpmlib.GetInstalledPackages(rootDir)
+	installedPackageNames, err := bpmlib.GetInstalledPackages(rootDir)
 	if err != nil {
 		log.Printf("Error: could not get installed packages: %s", err.Error())
 		exitCode = 1
 		return
 	}
 
+	installedPackages := make([]*bpmlib.BPMPackage, len(installedPackageNames))
+	for i, pkgName := range installedPackageNames {
+		installedPackages[i] = bpmlib.GetPackage(pkgName, rootDir)
+	}
+
 	databaseEntries := make([]*bpmlib.BPMDatabaseEntry, 0)
 	for _, db := range bpmlib.BPMDatabases {
 		databaseEntries = append(databaseEntries, slices.Collect(maps.Values(db.Entries))...)
+	}
+
+	switch sortPackages {
+	case "", "name":
+	case "size":
+		slices.SortFunc(installedPackages, func(a, b *bpmlib.BPMPackage) int {
+			return int(b.GetInstalledSize() - a.GetInstalledSize())
+		})
+		slices.SortFunc(databaseEntries, func(a, b *bpmlib.BPMDatabaseEntry) int {
+			return int(b.InstalledSize - a.InstalledSize)
+		})
+	default:
+		log.Printf("Error: cannot sort by '%s'", sortPackages)
+		exitCode = 1
+		return
+	}
+
+	if reversePackages {
+		slices.Reverse(installedPackages)
+		slices.Reverse(databaseEntries)
 	}
 
 	if showPkgCount {
@@ -300,7 +329,7 @@ func showPackageList() {
 			}
 		} else {
 			for _, pkg := range installedPackages {
-				installationReason := bpmlib.GetInstallationReason(pkg, rootDir)
+				installationReason := bpmlib.GetInstallationReason(pkg.PkgInfo.Name, rootDir)
 				if installationReason == bpmlib.InstallationReasonManual && !showManual {
 					continue
 				} else if installationReason == bpmlib.InstallationReasonDependency && !showDepends {
@@ -311,7 +340,7 @@ func showPackageList() {
 					continue
 				}
 
-				fmt.Println(pkg)
+				fmt.Println(pkg.PkgInfo.Name)
 			}
 		}
 	} else {
@@ -331,10 +360,9 @@ func showPackageList() {
 				fmt.Println("No packages have been installed")
 				return
 			}
-			for n, pkg := range installedPackages {
-				bpmpkg := bpmlib.GetPackage(pkg, rootDir)
+			for n, bpmpkg := range installedPackages {
 				if bpmpkg == nil {
-					fmt.Printf("Package (%s) could not be found\n", pkg)
+					fmt.Printf("Package (%s) could not be found\n", installedPackageNames[n])
 					continue
 				}
 
