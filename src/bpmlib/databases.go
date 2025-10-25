@@ -8,6 +8,7 @@ import (
 	"os"
 	"path"
 	"slices"
+	"strconv"
 	"strings"
 
 	"gopkg.in/yaml.v3"
@@ -280,7 +281,7 @@ func (entry *BPMDatabaseEntry) GetEntryDependants() (dependants []string) {
 	return dependants
 }
 
-func (entry *BPMDatabaseEntry) CreateReadableInfo(rootDir string) string {
+func (entry *BPMDatabaseEntry) CreateReadableInfo(rootDir string, humanReadableSize bool) string {
 	ret := make([]string, 0)
 	appendArray := func(label string, array []string, sort bool) {
 		if len(array) == 0 {
@@ -345,6 +346,16 @@ func (entry *BPMDatabaseEntry) CreateReadableInfo(rootDir string) string {
 			installationReasonString = "Unknown"
 		}
 		ret = append(ret, "Installation Reason: "+installationReasonString)
+	}
+	if entry.Info.Type == "binary" {
+		installedSize := int64(entry.InstalledSize)
+		var installedSizeStr string
+		if humanReadableSize {
+			installedSizeStr = bytesToHumanReadable(installedSize)
+		} else {
+			installedSizeStr = strconv.FormatInt(installedSize, 10)
+		}
+		ret = append(ret, "Installed size: "+installedSizeStr)
 	}
 	return strings.Join(ret, "\n")
 }

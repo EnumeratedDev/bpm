@@ -53,6 +53,7 @@ func main() {
 		currentFlagSet = flag.NewFlagSet("query", flag.ExitOnError)
 		currentFlagSet.StringP("root", "R", "/", "Operate on specified root directory")
 		currentFlagSet.BoolP("database", "d", false, "Show package information from remote databases")
+		currentFlagSet.BoolP("human-readable", "h", false, "Show package installed size in a human readable format")
 		setupFlagsAndHelp(currentFlagSet, fmt.Sprintf("bpm %s <options>", subcommand), "Show information on the specified packages", os.Args[2:])
 
 		showPackageInfo()
@@ -66,6 +67,7 @@ func main() {
 		currentFlagSet.Bool("manual", false, "Show packages installed as dependencies")
 		currentFlagSet.Bool("depends", false, "Show packages installed as dependencies")
 		currentFlagSet.Bool("make-depends", false, "Show packages installed as make dependencies")
+		currentFlagSet.BoolP("human-readable", "h", false, "Show package installed size in a human readable format")
 		setupFlagsAndHelp(currentFlagSet, fmt.Sprintf("bpm %s <options>", subcommand), "List packages", os.Args[2:])
 
 		showPackageList()
@@ -172,6 +174,7 @@ func showPackageInfo() {
 	// Get flags
 	rootDir, _ := currentFlagSet.GetString("root")
 	showDatabaseInfo, _ := currentFlagSet.GetBool("database")
+	showHumanReadableSize, _ := currentFlagSet.GetBool("human-readable")
 
 	// Get packages
 	packages := currentFlagSet.Args()
@@ -204,30 +207,29 @@ func showPackageInfo() {
 			if n != 0 {
 				fmt.Println()
 			}
-			fmt.Println(entry.CreateReadableInfo(rootDir))
+			fmt.Println(entry.CreateReadableInfo(rootDir, showHumanReadableSize))
 
 			return
 		}
 
-		var info *bpmlib.PackageInfo
+		var bpmpkg *bpmlib.BPMPackage
 		isFile := false
 		if stat, err := os.Stat(pkg); err == nil && !stat.IsDir() {
-			bpmpkg, err := bpmlib.ReadPackage(pkg)
+			bpmpkg, err = bpmlib.ReadPackage(pkg)
 			if err != nil {
 				log.Printf("Error: could not read package: %s\n", err)
 				exitCode = 1
 				return
 			}
-			info = bpmpkg.PkgInfo
 			isFile = true
 		} else {
 			if isVirtual, p := bpmlib.IsVirtualPackage(pkg, rootDir); isVirtual {
-				info = bpmlib.GetPackageInfo(p, rootDir)
+				bpmpkg = bpmlib.GetPackage(p, rootDir)
 			} else {
-				info = bpmlib.GetPackageInfo(pkg, rootDir)
+				bpmpkg = bpmlib.GetPackage(pkg, rootDir)
 			}
 		}
-		if info == nil {
+		if bpmpkg == nil {
 			log.Printf("Error: package (%s) is not installed\n", pkg)
 			exitCode = 1
 			return
@@ -244,7 +246,7 @@ func showPackageInfo() {
 			}
 			fmt.Println("File: " + abs)
 		}
-		fmt.Println(info.CreateReadableInfo(rootDir))
+		fmt.Println(bpmpkg.CreateReadableInfo(rootDir, showHumanReadableSize))
 	}
 }
 
@@ -257,6 +259,7 @@ func showPackageList() {
 	showManual, _ := currentFlagSet.GetBool("manual")
 	showDepends, _ := currentFlagSet.GetBool("depends")
 	showMakeDepends, _ := currentFlagSet.GetBool("make-depends")
+	showHumanReadableSize, _ := currentFlagSet.GetBool("human-readable")
 
 	if !isFlagSet(currentFlagSet, "manual") && !isFlagSet(currentFlagSet, "depends") && !isFlagSet(currentFlagSet, "make-depends") {
 		showManual = true
@@ -321,7 +324,7 @@ func showPackageList() {
 				if n != 0 {
 					fmt.Println()
 				}
-				fmt.Println(entry.CreateReadableInfo(rootDir))
+				fmt.Println(entry.CreateReadableInfo(rootDir, showHumanReadableSize))
 			}
 		} else {
 			if len(installedPackages) == 0 {
@@ -329,13 +332,13 @@ func showPackageList() {
 				return
 			}
 			for n, pkg := range installedPackages {
-				info := bpmlib.GetPackageInfo(pkg, rootDir)
-				if info == nil {
+				bpmpkg := bpmlib.GetPackage(pkg, rootDir)
+				if bpmpkg == nil {
 					fmt.Printf("Package (%s) could not be found\n", pkg)
 					continue
 				}
 
-				installationReason := bpmlib.GetInstallationReason(info.Name, rootDir)
+				installationReason := bpmlib.GetInstallationReason(bpmpkg.PkgInfo.Name, rootDir)
 				if installationReason == bpmlib.InstallationReasonManual && !showManual {
 					continue
 				} else if installationReason == bpmlib.InstallationReasonDependency && !showDepends {
@@ -349,7 +352,7 @@ func showPackageList() {
 				if n != 0 {
 					fmt.Println()
 				}
-				fmt.Println(info.CreateReadableInfo(rootDir))
+				fmt.Println(bpmpkg.CreateReadableInfo(rootDir, showHumanReadableSize))
 			}
 		}
 	}
