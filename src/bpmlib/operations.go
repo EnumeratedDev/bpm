@@ -478,7 +478,7 @@ func (operation *BPMOperation) FetchPackages() (err error) {
 			var bpmpkg *BPMPackage
 
 			// Check if package has already been fetched from download link
-			if _, ok := fetchedPackages[entry.Filepath]; !ok {
+			if fetchedFilepath, ok := fetchedPackages[entry.Filepath]; !ok {
 				// Fetch package from database
 				fetchedPackage, err := entry.Database.FetchPackage(entry.Info.Name)
 				if err != nil {
@@ -493,16 +493,22 @@ func (operation *BPMOperation) FetchPackages() (err error) {
 
 				// Add fetched package to map
 				fetchedPackages[entry.Filepath] = fetchedPackage
-
-				fmt.Printf("Package (%s) was successfully fetched!\n", entry.Info.Name)
 			} else {
 				// Read fetched package
-				bpmpkg, err = ReadPackage(fetchedPackages[entry.Filepath])
+				bpmpkg, err = ReadPackage(fetchedFilepath)
 				if err != nil {
 					return fmt.Errorf("could not read package (%s): %s\n", entry.Info.Name, err)
 				}
 
-				fmt.Printf("Package (%s) was successfully fetched!\n", entry.Info.Name)
+				// Get size of fetched archive
+				stat, err := os.Stat(fetchedFilepath)
+				if err != nil {
+					return err
+				}
+
+				bar := createProgressBar(stat.Size(), "Downloading "+entry.Info.Name, false)
+				bar.Set64(stat.Size())
+				bar.Close()
 			}
 
 			if bpmpkg.PkgInfo.IsSplitPackage() {
@@ -622,8 +628,6 @@ func (operation *BPMOperation) Execute(verbose, force bool) (err error) {
 			if err != nil {
 				return fmt.Errorf("could not set installation reason for package (%s): %s\n", value.BpmPackage.PkgInfo.Name, err)
 			}
-
-			fmt.Printf("Package (%s) was successfully installed\n", bpmpkg.PkgInfo.Name)
 		}
 	}
 	fmt.Println("Operation complete!")

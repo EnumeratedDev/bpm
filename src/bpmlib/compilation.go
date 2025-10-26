@@ -343,7 +343,7 @@ func CompileSourcePackage(archiveFilename, outputDirectory string, skipChecks, k
 }
 
 func downloadPackageFiles(pkgInfo *PackageInfo, tempDirectory string, verbose bool) error {
-	for _, download := range pkgInfo.Downloads {
+	for i, download := range pkgInfo.Downloads {
 		// Replace variables
 		replaceVars := func(s string) string {
 			switch s {
@@ -387,7 +387,7 @@ func downloadPackageFiles(pkgInfo *PackageInfo, tempDirectory string, verbose bo
 				filepath = path.Join(tempDirectory, download.Filepath)
 			}
 
-			err := downloadFile(downloadUrl, filepath, 0644)
+			err := downloadFile("Downloading file "+strconv.Itoa(i+1), downloadUrl, filepath, 0644)
 			if err != nil {
 				return err
 			}

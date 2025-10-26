@@ -601,6 +601,10 @@ func extractPackage(bpmpkg *BPMPackage, verbose bool, filename, rootDir string) 
 		return err
 	}
 
+	// Initialize progress bar
+	bar := createProgressBar(int64(bpmpkg.GetInstalledSize()), "Installing "+bpmpkg.PkgInfo.Name, verbose)
+	defer bar.Close()
+
 	tarballFile, err := readTarballFile(filename, "files.tar.gz")
 	if err != nil {
 		return err
@@ -612,6 +616,7 @@ func extractPackage(bpmpkg *BPMPackage, verbose bool, filename, rootDir string) 
 		return err
 	}
 	packageFilesReader := tar.NewReader(archive)
+
 	for {
 		header, err := packageFilesReader.Next()
 		if err == io.EOF {
@@ -648,6 +653,7 @@ func extractPackage(bpmpkg *BPMPackage, verbose bool, filename, rootDir string) 
 			if verbose {
 				fmt.Printf("Created directory %s (%o)\n", extractFilename, header.Mode)
 			}
+			bar.Add64(header.Size)
 		case tar.TypeReg:
 			skip := false
 			if _, err := os.Stat(extractFilename); err == nil {
@@ -704,6 +710,7 @@ func extractPackage(bpmpkg *BPMPackage, verbose bool, filename, rootDir string) 
 			if verbose {
 				fmt.Printf("Created File: %s (%o)\n", extractFilename, header.Mode)
 			}
+			bar.Add64(header.Size)
 		case tar.TypeSymlink:
 			err := os.Remove(extractFilename)
 			if err != nil && !os.IsNotExist(err) {
@@ -718,6 +725,7 @@ func extractPackage(bpmpkg *BPMPackage, verbose bool, filename, rootDir string) 
 			if verbose {
 				fmt.Println("Created Symlink: " + extractFilename + " -> " + header.Linkname)
 			}
+			bar.Add64(header.Size)
 		case tar.TypeLink:
 			if verbose {
 				fmt.Println("Detected Hard Link: " + extractFilename + " -> " + path.Join(rootDir, strings.TrimPrefix(header.Linkname, "files/")))
@@ -727,6 +735,7 @@ func extractPackage(bpmpkg *BPMPackage, verbose bool, filename, rootDir string) 
 			if err != nil && !os.IsNotExist(err) {
 				return err
 			}
+			bar.Add64(header.Size)
 		default:
 			return errors.New("unknown type (" + strconv.Itoa(int(header.Typeflag)) + ") in " + extractFilename)
 		}
@@ -979,8 +988,11 @@ func removePackage(pkg string, verbose bool, rootDir string) error {
 		log.Printf("Warning: %s\n", err)
 	}
 
+	// Get BPM package
+	bpmpkg := GetPackage(pkg, rootDir)
+
 	// Fetching and reversing package file entry list
-	fileEntries := GetPackage(pkg, rootDir).PkgFiles
+	fileEntries := bpmpkg.PkgFiles
 	sort.Slice(fileEntries, func(i, j int) bool {
 		return fileEntries[i].Path < fileEntries[j].Path
 	})
@@ -990,8 +1002,12 @@ func removePackage(pkg string, verbose bool, rootDir string) error {
 		return err
 	}
 
+	bar := createProgressBar(int64(bpmpkg.GetInstalledSize()), "Removing "+bpmpkg.PkgInfo.Name, verbose)
+	defer bar.Close()
+
 	// Removing package files
 	for _, entry := range fileEntries {
+		bar.Add64(int64(entry.SizeInBytes))
 		file := path.Join(rootDir, entry.Path)
 		lstat, err := os.Lstat(file)
 		if os.IsNotExist(err) {

@@ -1,9 +1,13 @@
 package bpmlib
 
 import (
+	"bufio"
+	"bytes"
 	"errors"
 	"fmt"
+	"io"
 	"maps"
+	"net/http"
 	"net/url"
 	"os"
 	"path"
@@ -135,13 +139,30 @@ func (db *configDatabase) SyncLocalDatabaseFile() error {
 	}
 
 	// Retrieve data from URL
-	buffer, err := retrieveUrlData(u)
+	req, err := http.NewRequest("GET", u, nil)
+	if err != nil {
+		return err
+	}
+
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		return err
+	}
+	defer resp.Body.Close()
+
+	// Create progress bar
+	bar := createProgressBar(resp.ContentLength, "Syncing "+db.Name, false)
+
+	// Copy data
+	var buffer bytes.Buffer
+	bufferWriter := bufio.NewWriter(&buffer)
+	_, err = io.Copy(io.MultiWriter(bufferWriter, bar), resp.Body)
 	if err != nil {
 		return err
 	}
 
 	// Unmarshal data to ensure it is a valid BPM database
-	err = yaml.Unmarshal(buffer, &BPMDatabase{})
+	err = yaml.Unmarshal(buffer.Bytes(), &BPMDatabase{})
 	if err != nil {
 		return fmt.Errorf("could not decode database: %s", err)
 	}
@@ -159,7 +180,7 @@ func (db *configDatabase) SyncLocalDatabaseFile() error {
 	}
 	defer out.Close()
 
-	_, err = out.Write(buffer)
+	_, err = out.Write(buffer.Bytes())
 
 	return nil
 }
@@ -244,7 +265,7 @@ func (db *BPMDatabase) FetchPackage(pkg string) (string, error) {
 	}
 
 	// Download package from url
-	err = downloadFile(u, path.Join("/var/cache/bpm/fetched/", path.Base(entry.Filepath)), 0644)
+	err = downloadFile("Downloading "+entry.Info.Name, u, path.Join("/var/cache/bpm/fetched/", path.Base(entry.Filepath)), 0644)
 	if err != nil {
 		return "", err
 	}

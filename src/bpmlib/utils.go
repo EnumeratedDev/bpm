@@ -2,10 +2,14 @@ package bpmlib
 
 import (
 	"fmt"
+	"io"
 	"math"
 	"os"
 	"path"
 	"syscall"
+	"time"
+
+	"github.com/schollz/progressbar/v3"
 )
 
 type BPMLock struct {
@@ -62,6 +66,30 @@ func GetArch() string {
 		byteString[indexLength] = uint8(uname.Machine[indexLength])
 	}
 	return string(byteString[:indexLength])
+}
+
+func createProgressBar(max int64, description string, hideBar bool) *progressbar.ProgressBar {
+	var output io.Writer
+	if hideBar {
+		output = io.Discard
+	} else {
+		output = os.Stderr
+	}
+
+	return progressbar.NewOptions64(max,
+		progressbar.OptionSetDescription(description),
+		progressbar.OptionSetWriter(output),
+		progressbar.OptionShowBytes(true),
+		progressbar.OptionShowTotalBytes(true),
+		progressbar.OptionSetWidth(20),
+		progressbar.OptionThrottle(65*time.Millisecond),
+		progressbar.OptionShowCount(),
+		progressbar.OptionOnCompletion(func() {
+			fmt.Fprint(output, "\n")
+		}),
+		progressbar.OptionSpinnerType(14),
+		progressbar.OptionSetRenderBlankState(true),
+		progressbar.OptionSetTheme(progressbar.ThemeASCII))
 }
 
 func stringSliceRemove(s []string, r string) []string {

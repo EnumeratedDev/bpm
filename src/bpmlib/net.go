@@ -9,28 +9,21 @@ import (
 	"strings"
 )
 
-func retrieveUrlData(u string) ([]byte, error) {
-	resp, err := http.Get(u)
-	if err != nil {
-		return nil, err
-	}
-	defer resp.Body.Close()
-
-	// Load data into byte buffer
-	buffer, err := io.ReadAll(resp.Body)
-
-	return buffer, nil
-}
-
-func downloadFile(u, filepath string, perm os.FileMode) error {
+func downloadFile(barText, u, filepath string, perm os.FileMode) error {
 	if strings.HasSuffix(filepath, "/") {
 		return fmt.Errorf("Filepath must not end in '/'")
 	}
 
-	data, err := retrieveUrlData(u)
+	req, err := http.NewRequest("GET", u, nil)
 	if err != nil {
 		return err
 	}
+
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		return err
+	}
+	defer resp.Body.Close()
 
 	// Create parent directories
 	err = os.MkdirAll(path.Dir(filepath), 0755)
@@ -45,8 +38,12 @@ func downloadFile(u, filepath string, perm os.FileMode) error {
 	}
 	defer file.Close()
 
+	// Create progress bar
+	bar := createProgressBar(resp.ContentLength, barText, false)
+	defer bar.Close()
+
 	// Copy data
-	_, err = file.Write(data)
+	_, err = io.Copy(io.MultiWriter(file, bar), resp.Body)
 	if err != nil {
 		return err
 	}
