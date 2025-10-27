@@ -6,9 +6,11 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"io/fs"
 	"os"
 	"os/exec"
 	"path"
+	"path/filepath"
 	"slices"
 	"strconv"
 	"strings"
@@ -143,8 +145,8 @@ func CompileSourcePackage(archiveFilename, outputDirectory string, skipChecks, k
 		"set -a\n"+ // Source and export functions and variables in source.sh script
 			". \"${BPM_WORKDIR}\"/source.sh\n"+
 			"set +a\n"+
-			"[[ $(type -t prepare) == \"function\" ]] && { echo \"Running prepare() function\"; bash -e -c 'cd \"$BPM_WORKDIR\" && prepare' || exit 1; }\n"+ // Run prepare() function if it exists
-			"[[ $(type -t build) == \"function\" ]] && { echo \"Running build() function\"; bash -e -c 'cd \"$BPM_SOURCE\" && build'  || exit 1; }\n"+ // Run build() function if it exists
+			"[[ $(type -t prepare) == \"function\" ]] && { echo \"Running prepare() function...\"; bash -e -c 'cd \"$BPM_WORKDIR\" && prepare' || exit 1; }\n"+ // Run prepare() function if it exists
+			"[[ $(type -t build) == \"function\" ]] && { echo \"Running build() function...\"; bash -e -c 'cd \"$BPM_SOURCE\" && build'  || exit 1; }\n"+ // Run build() function if it exists
 			"exit 0")
 	cmd.Dir = tempDirectory
 	cmd.Stdout = os.Stdout
@@ -165,7 +167,7 @@ func CompileSourcePackage(archiveFilename, outputDirectory string, skipChecks, k
 			"set -a\n"+ // Source and export functions and variables in source.sh script
 				". \"${BPM_WORKDIR}\"/source.sh\n"+
 				"set +a\n"+
-				"[[ $(type -t check) == \"function\" ]] && { echo \"Running check() function\"; bash -e -c 'cd \"$BPM_SOURCE\" && check' || exit 1; }\n"+ // Run check() function if it exists
+				"[[ $(type -t check) == \"function\" ]] && { echo \"Running check() function...\"; bash -e -c 'cd \"$BPM_SOURCE\" && check' || exit 1; }\n"+ // Run check() function if it exists
 				"exit 0")
 		cmd.Dir = tempDirectory
 		cmd.Stdout = os.Stdout
@@ -215,9 +217,8 @@ func CompileSourcePackage(archiveFilename, outputDirectory string, skipChecks, k
 			"set -a\n"+ // Source and export functions and variables in source.sh script
 				". \"${BPM_WORKDIR}\"/source.sh\n"+
 				"set +a\n"+
-				"echo \"Running "+packageFunctionName+"() function\"\n"+
-				"( cd \"$BPM_SOURCE\" && fakeroot -s \"$BPM_WORKDIR\"/fakeroot_file bash -e -c '"+packageFunctionName+"' ) || exit 1\n"+ // Run package() function
-				"fakeroot -i \"$BPM_WORKDIR\"/fakeroot_file find \"$BPM_OUTPUT\" -mindepth 1 -printf \"%P %#m %U %G %s\\n\" > \"$BPM_WORKDIR\"/pkg.files") // Create package file list
+				"echo \"Running "+packageFunctionName+"() function...\"\n"+
+				"( cd \"$BPM_SOURCE\" && fakeroot -s \"$BPM_WORKDIR\"/fakeroot_file bash -e -c '"+packageFunctionName+"' ) || exit 1\n") // Run package() function
 
 		cmd.Dir = tempDirectory
 		cmd.Stdout = os.Stdout
@@ -232,7 +233,77 @@ func CompileSourcePackage(archiveFilename, outputDirectory string, skipChecks, k
 			return nil, err
 		}
 
+		// Strip all ELF binaries
+		if !slices.Contains(pkg.Options, "nostrip") {
+			fmt.Println("Stripping ELF binaries...")
+
+			err = filepath.WalkDir(path.Join(tempDirectory, "output_"+pkg.Name), func(path string, d fs.DirEntry, err error) error {
+				cmd = exec.Command("file", "-bi", path)
+				cmd.Stderr = os.Stderr
+				output, err := cmd.Output()
+				if err != nil {
+					return err
+				}
+
+				mimetype := strings.Split(string(output), ";")[0]
+
+				if strings.HasPrefix(mimetype, "application/x-executable") {
+					cmd := exec.Command("strip", path)
+					cmd.Stderr = os.Stderr
+					err = cmd.Run()
+					if err != nil {
+						return err
+					}
+					if verbose {
+						fmt.Printf("Stripped %s (%s)\n", path, mimetype)
+					}
+				} else if strings.HasPrefix(mimetype, "application/x-pie-executable") || strings.HasPrefix(mimetype, "application/x-sharedlib") {
+					cmd := exec.Command("strip", "--strip-unneeded", path)
+					cmd.Stderr = os.Stderr
+					err = cmd.Run()
+					if err != nil {
+						return err
+					}
+					if verbose {
+						fmt.Printf("Stripped %s (%s)\n", path, mimetype)
+					}
+				} else if strings.HasPrefix(mimetype, "application/x-archive") {
+					cmd := exec.Command("strip", "--strip-debug", path)
+					cmd.Stderr = os.Stderr
+					err = cmd.Run()
+					if err != nil {
+						return err
+					}
+					if verbose {
+						fmt.Printf("Stripped %s (%s)\n", path, mimetype)
+					}
+				}
+
+				return nil
+			})
+			if err != nil {
+				return nil, err
+			}
+		}
+
+		// Generate package file list
+		fmt.Println("Generating package file list...")
+		cmd = exec.Command("bash", "-c", "fakeroot -i \"$BPM_WORKDIR\"/fakeroot_file find \"$BPM_OUTPUT\" -mindepth 1 -printf \"%P %#m %U %G %s\\n\" > \"$BPM_WORKDIR\"/pkg.files")
+		cmd.Dir = tempDirectory
+		cmd.Stdout = os.Stdout
+		cmd.Stderr = os.Stderr
+		cmd.Env = append(env, "BPM_OUTPUT="+path.Join(tempDirectory, "output_"+pkg.Name))
+		if os.Getuid() == 0 {
+			cmd.SysProcAttr = &syscall.SysProcAttr{}
+			cmd.SysProcAttr.Credential = &syscall.Credential{Uid: uint32(uid), Gid: uint32(gid)}
+		}
+		err = cmd.Run()
+		if err != nil {
+			return nil, err
+		}
+
 		// Create gzip-compressed archive for the package files
+		fmt.Println("Generating compressed file archive...")
 		cmd = exec.Command("bash", "-c", fmt.Sprintf("find %s -printf \"%%P\\n\" | fakeroot -i %s/fakeroot_file tar -czf files.tar.gz --no-recursion -C %s -T -", "output_"+pkg.Name, tempDirectory, "output_"+pkg.Name))
 		cmd.Dir = tempDirectory
 		cmd.Stdout = os.Stdout
@@ -286,6 +357,7 @@ func CompileSourcePackage(archiveFilename, outputDirectory string, skipChecks, k
 		bpmArchiveFiles = append(bpmArchiveFiles, packageScripts...)                       // Package scripts
 
 		// Create final BPM archive
+		fmt.Println("Generating final BPM archive...")
 		cmd = exec.Command("bash", "-c", "tar -cf final-archive.bpm --owner=0 --group=0 -C \"$BPM_WORKDIR\" "+strings.Join(bpmArchiveFiles, " "))
 		cmd.Dir = tempDirectory
 		cmd.Stdout = os.Stdout
