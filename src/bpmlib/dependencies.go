@@ -47,6 +47,12 @@ func (pkgInfo *PackageInfo) GetDependencies(includeMakeDepends, includeOptionalD
 			}
 		}
 	}
+
+	// Skip ignored packages
+	allDepends = slices.DeleteFunc(allDepends, func(depend pkgInstallationReason) bool {
+		return slices.Contains(MainBPMConfig.IgnorePackages, depend.PkgName)
+	})
+
 	return allDepends
 }
 

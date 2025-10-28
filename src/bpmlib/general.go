@@ -221,6 +221,11 @@ func RemovePackages(rootDir string, force, cleanupDependencies bool, packages ..
 		// Get packages and their dependants
 		packageDepndants := make(map[string][]string, 0)
 		for _, action := range operation.Actions {
+			// Skip package if ignored
+			if slices.Contains(MainBPMConfig.IgnorePackages, action.(*RemovePackageAction).BpmPackage.PkgInfo.Name) {
+				continue
+			}
+
 			dependants := action.(*RemovePackageAction).BpmPackage.PkgInfo.GetPackageDependants(rootDir)
 			packageDepndants[action.(*RemovePackageAction).BpmPackage.PkgInfo.Name] = dependants
 		}
@@ -230,6 +235,14 @@ func RemovePackages(rootDir string, force, cleanupDependencies bool, packages ..
 			required = slices.DeleteFunc(required, func(pkgName string) bool {
 				_, ok := packageDepndants[pkgName]
 				return ok
+			})
+			packageDepndants[pkg] = required
+		}
+
+		// Remove dependant packages if ignored
+		for pkg, required := range packageDepndants {
+			required = slices.DeleteFunc(required, func(pkgName string) bool {
+				return slices.Contains(MainBPMConfig.IgnorePackages, pkgName)
 			})
 			packageDepndants[pkg] = required
 		}
