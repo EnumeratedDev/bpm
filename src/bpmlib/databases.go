@@ -1,7 +1,6 @@
 package bpmlib
 
 import (
-	"bufio"
 	"bytes"
 	"errors"
 	"fmt"
@@ -155,8 +154,7 @@ func (db *configDatabase) SyncLocalDatabaseFile() error {
 
 	// Copy data
 	var buffer bytes.Buffer
-	bufferWriter := bufio.NewWriter(&buffer)
-	_, err = io.Copy(io.MultiWriter(bufferWriter, bar), resp.Body)
+	_, err = io.Copy(io.MultiWriter(&buffer, bar), resp.Body)
 	if err != nil {
 		return err
 	}
