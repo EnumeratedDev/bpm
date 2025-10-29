@@ -1141,7 +1141,7 @@ func compilePackage() {
 		} else {
 			// Ensure the required dependencies are installed
 			if len(unmetDepends) != 0 {
-				log.Printf("Error: could not resolve dependencies: the following dependencies were not found in any databases: " + strings.Join(unmetDepends, ", "))
+				log.Printf("Error: the following dependencies were not found in any databases: %s", strings.Join(unmetDepends, ", "))
 				exitCode = 1
 				return
 			}
