@@ -545,6 +545,10 @@ func (bpmpkg *BPMPackage) CreateReadableInfo(rootDir string, humanReadableSize b
 	if len(dependants) > 0 {
 		appendArray("Dependant packages", dependants)
 	}
+	optionalDependants := bpmpkg.PkgInfo.GetPackageOptionalDependants(rootDir)
+	if len(optionalDependants) > 0 {
+		appendArray("Optionally dependant packages", optionalDependants)
+	}
 	appendArray("Conflicting packages", bpmpkg.PkgInfo.Conflicts)
 	appendArray("Provided packages", bpmpkg.PkgInfo.Provides)
 	appendArray("Replaces packages", bpmpkg.PkgInfo.Replaces)

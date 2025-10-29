@@ -217,3 +217,46 @@ func (pkgInfo *PackageInfo) GetPackageDependants(rootDir string) (dependants []s
 
 	return dependants
 }
+
+func (pkgInfo *PackageInfo) GetPackageOptionalDependants(rootDir string) (dependants []string) {
+	// Get installed package names
+	pkgs, err := GetInstalledPackages(rootDir)
+	if err != nil {
+		return nil
+	}
+
+	// Loop through all installed packages
+	for _, installedPkgName := range pkgs {
+		// Get installed BPM package
+		installedPkg := GetPackage(installedPkgName, rootDir)
+		if installedPkg == nil {
+			return nil
+		}
+
+		// Skip iteration if comparing the same packages
+		if installedPkg.PkgInfo.Name == pkgInfo.Name {
+			continue
+		}
+
+		// Add installed package to list if its optional dependencies include pkgName
+		if slices.ContainsFunc(installedPkg.PkgInfo.OptionalDepends, func(n string) bool {
+			return n == pkgInfo.Name
+		}) {
+			dependants = append(dependants, installedPkgName)
+			continue
+		}
+
+		// Loop through each virtual package
+		for _, vpkg := range pkgInfo.Provides {
+			// Add installed package to list if its optional dependencies contain a provided virtual package
+			if slices.ContainsFunc(installedPkg.PkgInfo.OptionalDepends, func(n string) bool {
+				return n == vpkg
+			}) {
+				dependants = append(dependants, installedPkgName)
+				break
+			}
+		}
+	}
+
+	return dependants
+}
