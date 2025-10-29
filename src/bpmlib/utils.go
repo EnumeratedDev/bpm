@@ -76,6 +76,15 @@ func createProgressBar(max int64, description string, hideBar bool) *progressbar
 		output = os.Stderr
 	}
 
+	if len(description) < 40 {
+		for i := len(description); i < 40; i++ {
+			description += " "
+		}
+	}
+	if len(description) > 40 {
+		description = description[:len(description)-5] + "..."
+	}
+
 	return progressbar.NewOptions64(max,
 		progressbar.OptionSetDescription(description),
 		progressbar.OptionSetWriter(output),
