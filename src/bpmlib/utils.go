@@ -82,7 +82,8 @@ func createProgressBar(max int64, description string, hideBar bool) *progressbar
 		}
 	}
 	if len(description) > 40 {
-		description = description[:len(description)-5] + "..."
+		overflow := len(description) - 37
+		description = description[:len(description)-overflow] + "..."
 	}
 
 	return progressbar.NewOptions64(max,
