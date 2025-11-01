@@ -235,54 +235,58 @@ func CompileSourcePackage(archiveFilename, outputDirectory string, skipChecks, k
 
 		// Strip all ELF binaries
 		if !slices.Contains(pkg.Options, "nostrip") {
-			fmt.Println("Stripping ELF binaries...")
+			if _, err := exec.LookPath("strip"); err != nil {
+				fmt.Println("Skip stripping ELF binaries. 'strip' not in path")
+			} else {
+				fmt.Println("Stripping ELF binaries...")
 
-			err = filepath.WalkDir(path.Join(tempDirectory, "output_"+pkg.Name), func(path string, d fs.DirEntry, err error) error {
-				cmd = exec.Command("file", "-bi", path)
-				cmd.Stderr = os.Stderr
-				output, err := cmd.Output()
+				err = filepath.WalkDir(path.Join(tempDirectory, "output_"+pkg.Name), func(path string, d fs.DirEntry, err error) error {
+					cmd = exec.Command("file", "-bi", path)
+					cmd.Stderr = os.Stderr
+					output, err := cmd.Output()
+					if err != nil {
+						return err
+					}
+
+					mimetype := strings.Split(string(output), ";")[0]
+
+					if strings.HasPrefix(mimetype, "application/x-executable") {
+						cmd := exec.Command("strip", path)
+						cmd.Stderr = os.Stderr
+						err = cmd.Run()
+						if err != nil {
+							return err
+						}
+						if verbose {
+							fmt.Printf("Stripped %s (%s)\n", path, mimetype)
+						}
+					} else if strings.HasPrefix(mimetype, "application/x-pie-executable") || strings.HasPrefix(mimetype, "application/x-sharedlib") {
+						cmd := exec.Command("strip", "--strip-unneeded", path)
+						cmd.Stderr = os.Stderr
+						err = cmd.Run()
+						if err != nil {
+							return err
+						}
+						if verbose {
+							fmt.Printf("Stripped %s (%s)\n", path, mimetype)
+						}
+					} else if strings.HasPrefix(mimetype, "application/x-archive") {
+						cmd := exec.Command("strip", "--strip-debug", path)
+						cmd.Stderr = os.Stderr
+						err = cmd.Run()
+						if err != nil {
+							return err
+						}
+						if verbose {
+							fmt.Printf("Stripped %s (%s)\n", path, mimetype)
+						}
+					}
+
+					return nil
+				})
 				if err != nil {
-					return err
+					return nil, err
 				}
-
-				mimetype := strings.Split(string(output), ";")[0]
-
-				if strings.HasPrefix(mimetype, "application/x-executable") {
-					cmd := exec.Command("strip", path)
-					cmd.Stderr = os.Stderr
-					err = cmd.Run()
-					if err != nil {
-						return err
-					}
-					if verbose {
-						fmt.Printf("Stripped %s (%s)\n", path, mimetype)
-					}
-				} else if strings.HasPrefix(mimetype, "application/x-pie-executable") || strings.HasPrefix(mimetype, "application/x-sharedlib") {
-					cmd := exec.Command("strip", "--strip-unneeded", path)
-					cmd.Stderr = os.Stderr
-					err = cmd.Run()
-					if err != nil {
-						return err
-					}
-					if verbose {
-						fmt.Printf("Stripped %s (%s)\n", path, mimetype)
-					}
-				} else if strings.HasPrefix(mimetype, "application/x-archive") {
-					cmd := exec.Command("strip", "--strip-debug", path)
-					cmd.Stderr = os.Stderr
-					err = cmd.Run()
-					if err != nil {
-						return err
-					}
-					if verbose {
-						fmt.Printf("Stripped %s (%s)\n", path, mimetype)
-					}
-				}
-
-				return nil
-			})
-			if err != nil {
-				return nil, err
 			}
 		}
 
