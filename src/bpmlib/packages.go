@@ -51,7 +51,7 @@ type PackageInfo struct {
 type PackageDownload struct {
 	Url      string `yaml:"url"`
 	Type     string `yaml:"type,omitempty"`
-	Filepath string `yaml:"filepath,omitempty,omitempty"`
+	Filepath string `yaml:"filepath,omitempty"`
 
 	// Archive options
 	NoExtract              bool   `yaml:"no_extract,omitempty"`

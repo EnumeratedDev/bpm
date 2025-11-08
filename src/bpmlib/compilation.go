@@ -438,6 +438,10 @@ func downloadPackageFiles(pkgInfo *PackageInfo, tempDirectory string, verbose bo
 		if err != nil {
 			return err
 		}
+		filepath, err := envsubst.Eval(strings.TrimSpace(download.Filepath), replaceVars)
+		if err != nil {
+			return err
+		}
 		extractTo, err := envsubst.Eval(strings.TrimSpace(download.ExtractTo), replaceVars)
 		if err != nil {
 			return err
@@ -458,9 +462,11 @@ func downloadPackageFiles(pkgInfo *PackageInfo, tempDirectory string, verbose bo
 
 		switch download.Type {
 		case "", "file":
-			filepath := path.Join(tempDirectory, path.Base(downloadUrl))
-			if download.Filepath != "" && download.Filepath[0] != '/' {
-				filepath = path.Join(tempDirectory, download.Filepath)
+			if filepath == "" {
+				filepath = path.Join(tempDirectory, path.Base(downloadUrl))
+			}
+			if filepath[0] != '/' {
+				filepath = path.Join(tempDirectory, filepath)
 			}
 
 			err := downloadFile("Downloading file "+path.Base(filepath), downloadUrl, filepath, 0644)
