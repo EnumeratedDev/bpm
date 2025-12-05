@@ -376,9 +376,44 @@ func executePackageScript(pkg, rootDir string, verbose bool, packageScript strin
 	cmd := exec.Command("/bin/bash", "-c", content)
 	// Setup subprocess environment
 	cmd.Dir = "/"
-	// Run hook in chroot if using the -R flag
+	// Run package script in chroot if using the -R flag
 	if rootDir != "/" {
 		cmd.SysProcAttr = &syscall.SysProcAttr{Chroot: rootDir}
+
+		// Bind mount /etc/resolv.conf
+		mounted, err := func() (bool, error) {
+			if _, err := os.Stat("/etc/resolv.conf"); err != nil {
+				return false, nil
+			}
+
+			if _, err := os.Stat(path.Join(rootDir, "etc/resolv.conf")); os.IsNotExist(err) {
+				err = os.WriteFile(path.Join(rootDir, "/etc/resolv.conf"), nil, 0644)
+				if err != nil {
+					return false, nil
+				}
+			} else if err != nil {
+				return false, err
+			}
+
+			mntCmd := exec.Command("mount", "-o", "ro,bind", "/etc/resolv.conf", path.Join(rootDir, "/etc/resolv.conf"))
+			if verbose {
+				mntCmd.Stdout = os.Stdout
+				mntCmd.Stderr = os.Stderr
+			}
+			err = mntCmd.Run()
+			if err != nil {
+				return false, err
+			}
+
+			return true, nil
+		}()
+		if err != nil {
+			return err
+		}
+
+		if mounted {
+			defer exec.Command("umount", "-f", path.Join(rootDir, "/etc/resolv.conf")).Run()
+		}
 	}
 	// Show output if verbose
 	if verbose {
