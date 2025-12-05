@@ -261,6 +261,17 @@ func CompileSourcePackage(archiveFilename, outputDirectory string, skipChecks, k
 							fmt.Printf("Stripped %s (%s)\n", path, mimetype)
 						}
 					} else if strings.HasPrefix(mimetype, "application/x-pie-executable") || strings.HasPrefix(mimetype, "application/x-sharedlib") {
+						cmd = exec.Command("file", "-b", path)
+						cmd.Stderr = os.Stderr
+						output, err = cmd.Output()
+						if err != nil {
+							return err
+						}
+						// Skip files that use ELF as a container format
+						if strings.Contains(string(output), "no machine") {
+							return nil
+						}
+
 						cmd := exec.Command("strip", "--strip-unneeded", path)
 						cmd.Stderr = os.Stderr
 						err = cmd.Run()
