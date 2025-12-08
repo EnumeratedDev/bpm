@@ -617,17 +617,6 @@ func (bpmpkg *BPMPackage) CreateReadableInfo(rootDir string, humanReadableSize b
 }
 
 func extractPackage(bpmpkg *BPMPackage, verbose bool, filename, rootDir string) error {
-	if !IsPackageInstalled(bpmpkg.PkgInfo.Name, rootDir) {
-		err := executePackageScript(filename, rootDir, verbose, "pre_install.sh")
-		if err != nil {
-			log.Printf("Warning: %s\n", err)
-		}
-	} else {
-		err := executePackageScript(filename, rootDir, verbose, "pre_update.sh")
-		if err != nil {
-			log.Printf("Warning: %s\n", err)
-		}
-	}
 	seenHardlinks := make(map[string]string)
 	file, err := os.Open(filename)
 	if err != nil {
@@ -803,6 +792,20 @@ func installPackage(filename, rootDir string, verbose, force bool) error {
 	}
 
 	packageInstalled := IsPackageInstalled(bpmpkg.PkgInfo.Name, rootDir)
+
+	// Run pre-* package scripts
+	if !packageInstalled {
+		err := executePackageScript(filename, rootDir, verbose, "pre_install.sh")
+		if err != nil {
+			log.Printf("Warning: %s\n", err)
+		}
+	} else {
+		err := executePackageScript(filename, rootDir, verbose, "pre_update.sh")
+		if err != nil {
+			log.Printf("Warning: %s\n", err)
+		}
+	}
+
 	// Check if package is installed and remove current files
 	if packageInstalled {
 		// Fetching and reversing package file entry list
@@ -984,6 +987,7 @@ func installPackage(filename, rootDir string, verbose, force bool) error {
 		f.Close()
 	}
 
+	// Run post-* package scripts
 	if !packageInstalled {
 		err = executePackageScript(filename, rootDir, verbose, "post_install.sh")
 		if err != nil {
