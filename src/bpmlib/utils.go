@@ -9,6 +9,7 @@ import (
 	"syscall"
 	"time"
 
+	version "github.com/knqyf263/go-rpm-version"
 	"github.com/schollz/progressbar/v3"
 )
 
@@ -131,4 +132,11 @@ func bytesToHumanReadable(b int64) string {
 		bf /= 1024.0
 	}
 	return fmt.Sprintf("%.1fYiB", bf)
+}
+
+func CompareVersions(version1, version2 string) int {
+	v1 := version.NewVersion(version1)
+	v2 := version.NewVersion(version2)
+
+	return v1.Compare(v2)
 }

@@ -17,7 +17,6 @@ import (
 	"strings"
 	"syscall"
 
-	version "github.com/knqyf263/go-rpm-version"
 	"gopkg.in/yaml.v3"
 )
 
@@ -120,13 +119,6 @@ const (
 	InstallationReasonMakeDependency InstallationReason = "make_dependency"
 	InstallationReasonUnknown        InstallationReason = "unknown"
 )
-
-func ComparePackageVersions(info1, info2 PackageInfo) int {
-	v1 := version.NewVersion(info1.GetFullVersion())
-	v2 := version.NewVersion(info2.GetFullVersion())
-
-	return v1.Compare(v2)
-}
 
 func GetInstallationReason(pkg, rootDir string) InstallationReason {
 	installedDir := path.Join(rootDir, "var/lib/bpm/installed/")

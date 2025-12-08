@@ -370,7 +370,7 @@ func (operation *BPMOperation) ShowOperationSummary() {
 		if installedInfo == nil {
 			fmt.Fprintf(writer, "%s\t%s\t%s\t%s\t%t\n", pkgInfo.Name, pkgInfo.GetFullVersion(), "Install", installationReasonStr, pkgInfo.Type == "source")
 		} else {
-			comparison := ComparePackageVersions(*pkgInfo, *installedInfo)
+			comparison := CompareVersions(pkgInfo.GetFullVersion(), installedInfo.GetFullVersion())
 			if comparison < 0 {
 				fmt.Fprintf(writer, "%s\t%s -> %s\t%s\t%s\t%t\n", pkgInfo.Name, installedInfo.GetFullVersion(), pkgInfo.GetFullVersion(), "Downgrade", installationReasonStr, pkgInfo.Type == "source")
 			} else if comparison > 0 {

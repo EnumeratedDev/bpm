@@ -416,7 +416,7 @@ func UpdatePackages(rootDir string, syncDatabase bool, installOptionalDependenci
 		if installedInfo == nil {
 			return nil, fmt.Errorf("could not get package info for package (%s)", pkg)
 		} else {
-			comparison := ComparePackageVersions(*entry.Info, *installedInfo)
+			comparison := CompareVersions(entry.Info.GetFullVersion(), installedInfo.GetFullVersion())
 			if comparison > 0 {
 				operation.AppendAction(&FetchPackageAction{
 					InstallationReason: GetInstallationReason(pkg, rootDir),

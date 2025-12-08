@@ -162,6 +162,11 @@ func main() {
 		setupFlagsAndHelp(currentFlagSet, fmt.Sprintf("bpm %s <options>", subcommand), "Compile source packages and convert them to binary ones", os.Args[2:])
 
 		compilePackage()
+	case "p", "vercmp":
+		currentFlagSet = flag.NewFlagSet("compile", flag.ExitOnError)
+		setupFlagsAndHelp(currentFlagSet, fmt.Sprintf("bpm %s <options>", subcommand), "Compare two version numbers", os.Args[2:])
+
+		compareVersions()
 	default:
 		listSubcommands()
 	}
@@ -1268,6 +1273,19 @@ func compilePackage() {
 	}
 }
 
+func compareVersions() {
+	if currentFlagSet.NArg() < 2 {
+		log.Printf("Error: vercmp subcommand requires 2 arguments")
+		exitCode = 1
+		return
+	}
+
+	v1 := currentFlagSet.Arg(0)
+	v2 := currentFlagSet.Arg(1)
+
+	fmt.Println(bpmlib.CompareVersions(v1, v2))
+}
+
 func listSubcommands() {
 	fmt.Printf("Usage: %s <subcommand> [options]\n", os.Args[0])
 	fmt.Println("Description: Manage system packages")
@@ -1282,6 +1300,7 @@ func listSubcommands() {
 	fmt.Println("  u, update    Update installed packages")
 	fmt.Println("  o, owner     Show what packages own the specified paths")
 	fmt.Println("  c, compile   Compile source packages and convert them to binary ones")
+	fmt.Println("  p, vercmp    Compare package version numbers")
 }
 
 func setupFlagsAndHelp(flagset *flag.FlagSet, usage, desc string, args []string) {
