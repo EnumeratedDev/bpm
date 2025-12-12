@@ -36,11 +36,13 @@ func main() {
 		log.Fatalf("Error: could not read BPM config: %s", err)
 	}
 
-	// Execute subcommand
-	subcommand := "help"
-	if len(os.Args) >= 2 {
-		subcommand = os.Args[1]
+	// Show usage if no arguments specified
+	if len(os.Args) == 1 {
+		printUsage()
+		return
 	}
+
+	subcommand := os.Args[1]
 
 	switch subcommand {
 	case "v", "version":
@@ -167,7 +169,8 @@ func main() {
 
 		compareVersions()
 	default:
-		listSubcommands()
+		printUsage()
+		exitCode = 1
 	}
 
 	if exitCode != 0 {
@@ -1285,7 +1288,7 @@ func compareVersions() {
 	fmt.Println(bpmlib.CompareVersions(v1, v2))
 }
 
-func listSubcommands() {
+func printUsage() {
 	fmt.Printf("Usage: %s <subcommand> [options]\n", os.Args[0])
 	fmt.Println("Description: Manage system packages")
 	fmt.Println("Subcommands:")
