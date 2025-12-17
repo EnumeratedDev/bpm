@@ -145,12 +145,9 @@ func InstallPackages(rootDir string, forceInstallationReason InstallationReason,
 	operation.ReplaceObsoletePackages()
 
 	// Check for conflicts
-	conflicts, err := operation.CheckForConflicts()
-	if err != nil {
-		return nil, fmt.Errorf("could not complete package conflict check: %s", err)
-	}
+	conflicts := operation.CheckForConflicts()
 	if len(conflicts) > 0 {
-		err = nil
+		err = fmt.Errorf("conflicts detected")
 		for pkg, conflict := range conflicts {
 			err = errors.Join(err, PackageConflictErr{pkg, conflict})
 		}
@@ -441,6 +438,21 @@ func UpdatePackages(rootDir string, syncDatabase bool, installOptionalDependenci
 
 	// Replace obsolete packages
 	operation.ReplaceObsoletePackages()
+
+	// Check for conflicts
+	conflicts := operation.CheckForConflicts()
+	if len(conflicts) > 0 {
+		err = fmt.Errorf("conflicts detected")
+		for pkg, conflict := range conflicts {
+			err = errors.Join(err, PackageConflictErr{pkg, conflict})
+		}
+		if !forceInstallation {
+			return nil, err
+		} else {
+			log.Printf("Warning: %s", err)
+		}
+	}
+
 	return operation, nil
 }
 

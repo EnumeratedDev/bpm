@@ -277,54 +277,92 @@ func (operation *BPMOperation) ReplaceObsoletePackages() {
 	}
 }
 
-func (operation *BPMOperation) CheckForConflicts() (map[string][]string, error) {
+func (operation *BPMOperation) CheckForConflicts() map[string][]string {
 	conflicts := make(map[string][]string)
-	installedPackages, err := GetInstalledPackages(operation.RootDir)
-	if err != nil {
-		return nil, err
-	}
-	allPackages := make([]*PackageInfo, len(installedPackages))
-	for i, value := range installedPackages {
-		bpmpkg := GetPackage(value, operation.RootDir)
-		if bpmpkg == nil {
-			return nil, fmt.Errorf("could not find installed package (%s)", value)
+
+	// Get installed packages
+	installedPackages := localPackageInformation[operation.RootDir]
+
+	// Get packages to be removed
+	removedPackages := make([]string, 0)
+	for _, value := range slices.Clone(operation.Actions) {
+		if value.GetActionType() != "remove" {
+			continue
 		}
-		allPackages[i] = bpmpkg.PkgInfo
+
+		removedPackages = append(removedPackages, value.(*RemovePackageAction).BpmPackage.PkgInfo.Name)
 	}
 
-	// Add all new packages to the allPackages slice
+	// Check for conflicts
 	for _, value := range slices.Clone(operation.Actions) {
+		var pkgInfo *PackageInfo
 		if value.GetActionType() == "install" {
-			action := value.(*InstallPackageAction)
-			pkgInfo := action.BpmPackage.PkgInfo
-			allPackages = append(allPackages, pkgInfo)
+			pkgInfo = value.(*InstallPackageAction).BpmPackage.PkgInfo
 		} else if value.GetActionType() == "fetch" {
-			action := value.(*FetchPackageAction)
-			pkgInfo := action.DatabaseEntry.Info
-			allPackages = append(allPackages, pkgInfo)
-		} else if value.GetActionType() == "remove" {
-			action := value.(*RemovePackageAction)
-			pkgInfo := action.BpmPackage.PkgInfo
-			for i := len(allPackages) - 1; i >= 0; i-- {
-				info := allPackages[i]
-				if info.Name == pkgInfo.Name {
-					allPackages = append(allPackages[:i], allPackages[i+1:]...)
+			pkgInfo = value.(*FetchPackageAction).DatabaseEntry.Info
+		} else {
+			continue
+		}
+
+		// Check for conflicts with installed packages
+		for _, installedPkg := range installedPackages {
+			// Skip if package is to be removed
+			if slices.Contains(removedPackages, installedPkg.PkgInfo.Name) {
+				continue
+			}
+
+			// Skip if same package
+			if pkgInfo.Name == installedPkg.PkgInfo.Name {
+				continue
+			}
+
+			// Check for new package conflicts
+			if slices.Contains(pkgInfo.Conflicts, installedPkg.PkgInfo.Name) {
+				conflicts[pkgInfo.Name] = append(conflicts[pkgInfo.Name], installedPkg.PkgInfo.Name)
+			}
+			for _, vpkg := range installedPkg.PkgInfo.Provides {
+				if slices.Contains(pkgInfo.Conflicts, vpkg) {
+					conflicts[pkgInfo.Name] = append(conflicts[pkgInfo.Name], vpkg+" ("+installedPkg.PkgInfo.Name+")")
+				}
+			}
+
+			// Check for installed package conflicts
+			for _, vpkg := range pkgInfo.Provides {
+				if slices.Contains(installedPkg.PkgInfo.Conflicts, vpkg) {
+					conflicts[installedPkg.PkgInfo.Name] = append(conflicts[installedPkg.PkgInfo.Name], vpkg+" ("+pkgInfo.Name+")")
+				}
+			}
+		}
+
+		// Check for conflicts with other new packages
+		for _, value := range slices.Clone(operation.Actions) {
+			var pkgInfo2 *PackageInfo
+			if value.GetActionType() == "install" {
+				pkgInfo2 = value.(*InstallPackageAction).BpmPackage.PkgInfo
+			} else if value.GetActionType() == "fetch" {
+				pkgInfo2 = value.(*FetchPackageAction).DatabaseEntry.Info
+			} else {
+				continue
+			}
+
+			// Skip if same package
+			if pkgInfo.Name == pkgInfo2.Name {
+				continue
+			}
+
+			// Check for other package conflicts
+			if slices.Contains(pkgInfo.Conflicts, pkgInfo2.Name) {
+				conflicts[pkgInfo.Name] = append(conflicts[pkgInfo.Name], pkgInfo2.Name)
+			}
+			for _, vpkg := range pkgInfo2.Provides {
+				if slices.Contains(pkgInfo.Conflicts, vpkg) {
+					conflicts[pkgInfo.Name] = append(conflicts[pkgInfo.Name], vpkg+" ("+pkgInfo2.Name+")")
 				}
 			}
 		}
 	}
 
-	for _, value := range allPackages {
-		for _, conflict := range value.Conflicts {
-			if slices.ContainsFunc(allPackages, func(info *PackageInfo) bool {
-				return info.Name == conflict
-			}) {
-				conflicts[value.Name] = append(conflicts[value.Name], conflict)
-			}
-		}
-	}
-
-	return conflicts, nil
+	return conflicts
 }
 
 func (operation *BPMOperation) ShowOperationSummary() {
