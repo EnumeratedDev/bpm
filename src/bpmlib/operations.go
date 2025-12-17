@@ -466,6 +466,40 @@ func (operation *BPMOperation) ShowSourcePackageContent() (sourcePackagesShown i
 	return sourcePackagesShown, nil
 }
 
+func (operation *BPMOperation) GetOptionalDependencies() (optionalDepends map[string][]string) {
+	optionalDepends = make(map[string][]string)
+
+	// Find all optional dependencies
+	for _, value := range slices.Clone(operation.Actions) {
+		var pkgInfo *PackageInfo
+		if value.GetActionType() == "install" {
+			action := value.(*InstallPackageAction)
+			pkgInfo = action.BpmPackage.PkgInfo
+		} else if value.GetActionType() == "fetch" {
+			action := value.(*FetchPackageAction)
+			pkgInfo = action.DatabaseEntry.Info
+		} else {
+			continue
+		}
+
+		for _, depend := range pkgInfo.OptionalDepends {
+			// Skip if dependency is already installed
+			if IsPackageInstalled(depend, operation.RootDir) {
+				continue
+			}
+
+			// Skip if not a new dependency of the package
+			if installedPkg := GetPackage(pkgInfo.Name, operation.RootDir); installedPkg != nil && slices.Contains(installedPkg.PkgInfo.OptionalDepends, depend) {
+				continue
+			}
+
+			optionalDepends[pkgInfo.Name] = append(optionalDepends[pkgInfo.Name], depend)
+		}
+	}
+
+	return
+}
+
 func (operation *BPMOperation) RunHooks(verbose bool) error {
 	// Return if hooks directory does not exist
 	if stat, err := os.Stat(path.Join(operation.RootDir, "var/lib/bpm/hooks")); err != nil || !stat.IsDir() {

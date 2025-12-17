@@ -577,6 +577,9 @@ func installPackages() {
 		}
 	}
 
+	// Get optional dependencies
+	optionalDepends := operation.GetOptionalDependencies()
+
 	// Execute operation
 	err = operation.Execute(verbose, force)
 	if err != nil {
@@ -592,6 +595,18 @@ func installPackages() {
 		log.Printf("Error: could not run hooks: %s\n", err)
 		exitCode = 1
 		return
+	}
+
+	// Show optional dependencies
+	if !installOptional && len(optionalDepends) != 0 {
+		// List optional dependencies
+		fmt.Println("The following opitonal dependenices have been discovered:")
+		for dependant, depends := range optionalDepends {
+			fmt.Printf("%s: \n", dependant)
+			for _, depend := range depends {
+				fmt.Printf("  - %s\n", depend)
+			}
+		}
 	}
 }
 
@@ -942,6 +957,9 @@ func updatePackages() {
 		}
 	}
 
+	// Get optional dependencies
+	optionalDepends := operation.GetOptionalDependencies()
+
 	// Execute operation
 	err = operation.Execute(verbose, force)
 	if err != nil {
@@ -957,6 +975,18 @@ func updatePackages() {
 		log.Printf("Error: could not run hooks: %s\n", err)
 		exitCode = 1
 		return
+	}
+
+	// Show optional dependencies
+	if !installOptional && len(optionalDepends) != 0 {
+		// List optional dependencies
+		fmt.Println("The following opitonal dependenices have been discovered:")
+		for dependant, depends := range optionalDepends {
+			fmt.Printf("%s: \n", dependant)
+			for _, depend := range depends {
+				fmt.Printf("  - %s\n", depend)
+			}
+		}
 	}
 }
 
