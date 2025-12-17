@@ -18,20 +18,6 @@ type BPMLock struct {
 	path string
 }
 
-func (lock *BPMLock) Unlock() error {
-	err := lock.file.Close()
-	if err != nil {
-		return err
-	}
-
-	err = os.Remove(lock.path)
-	if err != nil {
-		return err
-	}
-
-	return nil
-}
-
 func LockBPM(rootDir string) (*BPMLock, error) {
 	// Create parent directories if they don't already exist
 	err := os.MkdirAll(path.Join(rootDir, "/var/lib/bpm"), 0755)
@@ -54,6 +40,20 @@ func LockBPM(rootDir string) (*BPMLock, error) {
 	return &BPMLock{f, path.Join(rootDir, "var/lib/bpm/bpm.lock")}, nil
 }
 
+func (lock *BPMLock) Unlock() error {
+	err := lock.file.Close()
+	if err != nil {
+		return err
+	}
+
+	err = os.Remove(lock.path)
+	if err != nil {
+		return err
+	}
+
+	return nil
+}
+
 func GetArch() string {
 	uname := syscall.Utsname{}
 	err := syscall.Uname(&uname)
@@ -67,6 +67,13 @@ func GetArch() string {
 		byteString[indexLength] = uint8(uname.Machine[indexLength])
 	}
 	return string(byteString[:indexLength])
+}
+
+func CompareVersions(version1, version2 string) int {
+	v1 := version.NewVersion(version1)
+	v2 := version.NewVersion(version2)
+
+	return v1.Compare(v2)
 }
 
 func createProgressBar(max int64, description string, hideBar bool) *progressbar.ProgressBar {
@@ -144,11 +151,4 @@ func removeDuplicates[T comparable](sliceList []T) []T {
 		}
 	}
 	return list
-}
-
-func CompareVersions(version1, version2 string) int {
-	v1 := version.NewVersion(version1)
-	v2 := version.NewVersion(version2)
-
-	return v1.Compare(v2)
 }
