@@ -87,8 +87,8 @@ func (operation *BPMOperation) RemoveAction(pkg, actionType string) {
 	})
 }
 
-func (operation *BPMOperation) GetTotalDownloadSize() uint64 {
-	var ret uint64 = 0
+func (operation *BPMOperation) GetTotalDownloadSize() int64 {
+	var ret int64 = 0
 	for _, action := range operation.Actions {
 		if action.GetActionType() == "fetch" {
 			ret += action.(*FetchPackageAction).DatabaseEntry.DownloadSize
@@ -97,8 +97,8 @@ func (operation *BPMOperation) GetTotalDownloadSize() uint64 {
 	return ret
 }
 
-func (operation *BPMOperation) GetTotalInstalledSize() uint64 {
-	var ret uint64 = 0
+func (operation *BPMOperation) GetTotalInstalledSize() int64 {
+	var ret int64 = 0
 	for _, action := range operation.Actions {
 		if action.GetActionType() == "install" {
 			ret += action.(*InstallPackageAction).BpmPackage.GetInstalledSize()
@@ -113,14 +113,17 @@ func (operation *BPMOperation) GetFinalActionSize(rootDir string) int64 {
 	var ret int64 = 0
 	for _, action := range operation.Actions {
 		if action.GetActionType() == "install" {
-			ret += int64(action.(*InstallPackageAction).BpmPackage.GetInstalledSize())
+			ret += action.(*InstallPackageAction).BpmPackage.GetInstalledSize()
 			if IsPackageInstalled(action.(*InstallPackageAction).BpmPackage.PkgInfo.Name, rootDir) {
-				ret -= int64(GetPackage(action.(*InstallPackageAction).BpmPackage.PkgInfo.Name, rootDir).GetInstalledSize())
+				ret -= GetPackage(action.(*InstallPackageAction).BpmPackage.PkgInfo.Name, rootDir).GetInstalledSize()
 			}
 		} else if action.GetActionType() == "fetch" {
-			ret += int64(action.(*FetchPackageAction).DatabaseEntry.InstalledSize)
+			ret += action.(*FetchPackageAction).DatabaseEntry.InstalledSize
+			if IsPackageInstalled(action.(*FetchPackageAction).DatabaseEntry.Info.Name, rootDir) {
+				ret -= action.(*FetchPackageAction).DatabaseEntry.InstalledSize
+			}
 		} else if action.GetActionType() == "remove" {
-			ret -= int64(action.(*RemovePackageAction).BpmPackage.GetInstalledSize())
+			ret -= action.(*RemovePackageAction).BpmPackage.GetInstalledSize()
 		}
 	}
 	return ret
@@ -426,7 +429,7 @@ func (operation *BPMOperation) ShowOperationSummary() {
 		fmt.Println("Warning: Operating in " + operation.RootDir)
 	}
 	if operation.GetTotalDownloadSize() > 0 {
-		fmt.Printf("%s will be downloaded to complete this operation\n", unsignedBytesToHumanReadable(operation.GetTotalDownloadSize()))
+		fmt.Printf("%s will be downloaded to complete this operation\n", bytesToHumanReadable(operation.GetTotalDownloadSize()))
 	}
 	if operation.GetFinalActionSize(operation.RootDir) > 0 {
 		fmt.Printf("A total of %s will be installed after the operation finishes\n", bytesToHumanReadable(operation.GetFinalActionSize(operation.RootDir)))

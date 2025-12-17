@@ -225,7 +225,7 @@ func getPackageFiles(pkg, rootDir string) []*PackageFileEntry {
 		if err != nil {
 			return nil
 		}
-		size, err := strconv.ParseUint(stringEntry[len(stringEntry)-1], 0, 64)
+		size, err := strconv.ParseInt(stringEntry[len(stringEntry)-1], 0, 64)
 		if err != nil {
 			return nil
 		}

@@ -28,8 +28,8 @@ type BPMDatabase struct {
 type BPMDatabaseEntry struct {
 	Info          *PackageInfo `yaml:"info"`
 	Filepath      string       `yaml:"filepath"`
-	DownloadSize  uint64       `yaml:"download_size"`
-	InstalledSize uint64       `yaml:"installed_size"`
+	DownloadSize  int64        `yaml:"download_size"`
+	InstalledSize int64        `yaml:"installed_size"`
 	Database      *BPMDatabase
 }
 
@@ -400,7 +400,7 @@ func (entry *BPMDatabaseEntry) CreateReadableInfo(rootDir string, humanReadableS
 		ret = append(ret, "Installation Reason: "+installationReasonString)
 	}
 	if entry.Info.Type == "binary" {
-		installedSize := int64(entry.InstalledSize)
+		installedSize := entry.InstalledSize
 		var installedSizeStr string
 		if humanReadableSize {
 			installedSizeStr = bytesToHumanReadable(installedSize)

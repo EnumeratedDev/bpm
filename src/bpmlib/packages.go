@@ -69,11 +69,11 @@ type PackageFileEntry struct {
 	OctalPerms  uint32
 	UserID      int
 	GroupID     int
-	SizeInBytes uint64
+	SizeInBytes int64
 }
 
-func (pkg *BPMPackage) GetInstalledSize() uint64 {
-	var totalSize uint64 = 0
+func (pkg *BPMPackage) GetInstalledSize() int64 {
+	var totalSize int64 = 0
 	for _, entry := range pkg.PkgFiles {
 		totalSize += entry.SizeInBytes
 	}
@@ -232,7 +232,7 @@ func ReadPackage(filename string) (*BPMPackage, error) {
 				if err != nil {
 					return nil, err
 				}
-				size, err := strconv.ParseUint(stringEntry[len(stringEntry)-1], 0, 64)
+				size, err := strconv.ParseInt(stringEntry[len(stringEntry)-1], 0, 64)
 				if err != nil {
 					return nil, err
 				}
@@ -604,7 +604,7 @@ func (bpmpkg *BPMPackage) CreateReadableInfo(rootDir string, humanReadableSize b
 		ret = append(ret, "Installation Reason: "+installationReasonString)
 	}
 	if bpmpkg.PkgInfo.Type == "binary" {
-		installedSize := int64(bpmpkg.GetInstalledSize())
+		installedSize := bpmpkg.GetInstalledSize()
 		var installedSizeStr string
 		if humanReadableSize {
 			installedSizeStr = bytesToHumanReadable(installedSize)
@@ -624,7 +624,7 @@ func extractPackage(bpmpkg *BPMPackage, verbose bool, filename, rootDir string) 
 	}
 
 	// Initialize progress bar
-	bar := createProgressBar(int64(bpmpkg.GetInstalledSize()), "Installing "+bpmpkg.PkgInfo.Name, verbose)
+	bar := createProgressBar(bpmpkg.GetInstalledSize(), "Installing "+bpmpkg.PkgInfo.Name, verbose)
 	defer bar.Close()
 
 	tarballFile, err := readTarballFile(filename, "files.tar.gz")
@@ -1039,12 +1039,12 @@ func removePackage(pkg string, verbose bool, rootDir string) error {
 		return err
 	}
 
-	bar := createProgressBar(int64(bpmpkg.GetInstalledSize()), "Removing "+bpmpkg.PkgInfo.Name, verbose)
+	bar := createProgressBar(bpmpkg.GetInstalledSize(), "Removing "+bpmpkg.PkgInfo.Name, verbose)
 	defer bar.Close()
 
 	// Removing package files
 	for _, entry := range fileEntries {
-		bar.Add64(int64(entry.SizeInBytes))
+		bar.Add64(entry.SizeInBytes)
 		file := path.Join(rootDir, entry.Path)
 		lstat, err := os.Lstat(file)
 		if os.IsNotExist(err) {
