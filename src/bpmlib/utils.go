@@ -134,6 +134,18 @@ func bytesToHumanReadable(b int64) string {
 	return fmt.Sprintf("%.1fYiB", bf)
 }
 
+func removeDuplicates[T comparable](sliceList []T) []T {
+	allKeys := make(map[T]bool)
+	list := []T{}
+	for _, item := range sliceList {
+		if _, value := allKeys[item]; !value {
+			allKeys[item] = true
+			list = append(list, item)
+		}
+	}
+	return list
+}
+
 func CompareVersions(version1, version2 string) int {
 	v1 := version.NewVersion(version1)
 	v2 := version.NewVersion(version2)

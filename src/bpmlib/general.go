@@ -21,7 +21,6 @@ const (
 
 // InstallPackages installs the specified packages into the given root directory by fetching them from databases or directly from local bpm archives
 func InstallPackages(rootDir string, forceInstallationReason InstallationReason, reinstallMethod ReinstallMethod, installOptionalDependencies, forceInstallation, verbose bool, packages ...string) (operation *BPMOperation, err error) {
-
 	// Setup operation struct
 	operation = &BPMOperation{
 		Actions:           make([]OperationAction, 0),
@@ -30,6 +29,9 @@ func InstallPackages(rootDir string, forceInstallationReason InstallationReason,
 		RootDir:           rootDir,
 		compiledPackages:  make(map[string]string),
 	}
+
+	// Remove duplicates from packages
+	packages = removeDuplicates(packages)
 
 	// Resolve packages
 	pkgsNotFound := make([]string, 0)
@@ -192,6 +194,9 @@ func RemovePackages(rootDir string, force, cleanupDependencies bool, packages ..
 		RootDir:           rootDir,
 		compiledPackages:  make(map[string]string),
 	}
+
+	// Remove duplicates from packages
+	packages = removeDuplicates(packages)
 
 	// Search for packages
 	for _, pkg := range packages {
