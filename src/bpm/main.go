@@ -922,6 +922,15 @@ func updatePackages() {
 		}
 	}
 
+	// Confirmation Prompt
+	if !noSync && !yesAll {
+		if !showConfirmationPrompt("Do you wish to sync all databases?", false) {
+			fmt.Println("Cancelling package update...")
+			exitCode = 1
+			return
+		}
+	}
+
 	// Create update operation
 	operation, err := bpmlib.UpdatePackages(rootDir, !noSync, installOptional, force, verbose)
 	if errors.As(err, &bpmlib.PackageNotFoundErr{}) || errors.As(err, &bpmlib.DependencyNotFoundErr{}) || errors.As(err, &bpmlib.PackageConflictErr{}) {
