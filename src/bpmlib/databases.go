@@ -403,7 +403,7 @@ func (entry *BPMDatabaseEntry) CreateReadableInfo(rootDir string, humanReadableS
 		installedSize := entry.InstalledSize
 		var installedSizeStr string
 		if humanReadableSize {
-			installedSizeStr = bytesToHumanReadable(installedSize)
+			installedSizeStr = BytesToHumanReadable(installedSize)
 		} else {
 			installedSizeStr = strconv.FormatInt(installedSize, 10)
 		}

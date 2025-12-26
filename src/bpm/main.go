@@ -254,7 +254,14 @@ func showPackageInfo() {
 			}
 			fmt.Println("File: " + abs)
 		}
-		fmt.Println(bpmpkg.CreateReadableInfo(rootDir, showHumanReadableSize))
+		fmt.Println(bpmpkg.PkgInfo.CreateReadableInfo(rootDir))
+		if bpmpkg.PkgInfo.Type == "binary" {
+			if !showHumanReadableSize {
+				fmt.Printf("Installed size: %d\n", bpmpkg.GetInstalledSize())
+			} else {
+				fmt.Printf("Installed size: %s\n", bpmlib.BytesToHumanReadable(bpmpkg.GetInstalledSize()))
+			}
+		}
 	}
 }
 
@@ -292,9 +299,21 @@ func showPackageList() {
 		return
 	}
 
-	installedPackages := make([]*bpmlib.BPMPackage, len(installedPackageNames))
+	installedPackages := make([]struct {
+		pkgInfo       bpmlib.PackageInfo
+		installedSize int64
+	}, len(installedPackageNames))
 	for i, pkgName := range installedPackageNames {
-		installedPackages[i] = bpmlib.GetPackage(pkgName, rootDir)
+		pkgInfo := *bpmlib.GetPackageInfo(pkgName, rootDir)
+		installedSize := bpmlib.GetPackage(pkgName, rootDir).GetInstalledSize()
+
+		installedPackages[i] = struct {
+			pkgInfo       bpmlib.PackageInfo
+			installedSize int64
+		}{
+			pkgInfo:       pkgInfo,
+			installedSize: installedSize,
+		}
 	}
 
 	databaseEntries := make([]*bpmlib.BPMDatabaseEntry, 0)
@@ -305,8 +324,11 @@ func showPackageList() {
 	switch sortPackages {
 	case "", "name":
 	case "size":
-		slices.SortFunc(installedPackages, func(a, b *bpmlib.BPMPackage) int {
-			return int(b.GetInstalledSize() - a.GetInstalledSize())
+		slices.SortFunc(installedPackages, func(a, b struct {
+			pkgInfo       bpmlib.PackageInfo
+			installedSize int64
+		}) int {
+			return int(b.installedSize - a.installedSize)
 		})
 		slices.SortFunc(databaseEntries, func(a, b *bpmlib.BPMDatabaseEntry) int {
 			return int(b.InstalledSize - a.InstalledSize)
@@ -335,7 +357,7 @@ func showPackageList() {
 			}
 		} else {
 			for _, pkg := range installedPackages {
-				installationReason := bpmlib.GetInstallationReason(pkg.PkgInfo.Name, rootDir)
+				installationReason := bpmlib.GetInstallationReason(pkg.pkgInfo.Name, rootDir)
 				if installationReason == bpmlib.InstallationReasonManual && !showManual {
 					continue
 				} else if installationReason == bpmlib.InstallationReasonDependency && !showDepends {
@@ -346,7 +368,7 @@ func showPackageList() {
 					continue
 				}
 
-				fmt.Println(pkg.PkgInfo.Name)
+				fmt.Println(pkg.pkgInfo.Name)
 			}
 		}
 	} else {
@@ -366,13 +388,8 @@ func showPackageList() {
 				fmt.Println("No packages have been installed")
 				return
 			}
-			for n, bpmpkg := range installedPackages {
-				if bpmpkg == nil {
-					fmt.Printf("Package (%s) could not be found\n", installedPackageNames[n])
-					continue
-				}
-
-				installationReason := bpmlib.GetInstallationReason(bpmpkg.PkgInfo.Name, rootDir)
+			for n, pkg := range installedPackages {
+				installationReason := bpmlib.GetInstallationReason(pkg.pkgInfo.Name, rootDir)
 				if installationReason == bpmlib.InstallationReasonManual && !showManual {
 					continue
 				} else if installationReason == bpmlib.InstallationReasonDependency && !showDepends {
@@ -386,7 +403,15 @@ func showPackageList() {
 				if n != 0 {
 					fmt.Println()
 				}
-				fmt.Println(bpmpkg.CreateReadableInfo(rootDir, showHumanReadableSize))
+
+				fmt.Println(pkg.pkgInfo.CreateReadableInfo(rootDir))
+				if pkg.pkgInfo.Type == "binary" {
+					if !showHumanReadableSize {
+						fmt.Printf("Installed size: %d\n", pkg.installedSize)
+					} else {
+						fmt.Printf("Installed size: %s\n", bpmlib.BytesToHumanReadable(pkg.installedSize))
+					}
+				}
 			}
 		}
 	}

@@ -177,39 +177,33 @@ func resolvePackageDependenciesFromDatabase(resolved *[]pkgInstallationReason, u
 
 func (pkgInfo *PackageInfo) GetPackageDependants(rootDir string) (dependants []string) {
 	// Get installed package names
-	pkgs, err := GetInstalledPackages(rootDir)
-	if err != nil {
+	pkgs, ok := localPackageInformation[rootDir]
+	if !ok {
 		return nil
 	}
 
 	// Loop through all installed packages
-	for _, installedPkgName := range pkgs {
-		// Get installed BPM package
-		installedPkg := GetPackage(installedPkgName, rootDir)
-		if installedPkg == nil {
-			return nil
-		}
-
+	for _, installedPkg := range pkgs {
 		// Skip iteration if comparing the same packages
-		if installedPkg.PkgInfo.Name == pkgInfo.Name {
+		if installedPkg.Name == pkgInfo.Name {
 			continue
 		}
 
 		// Add installed package to list if its dependencies include pkgName
-		if slices.ContainsFunc(installedPkg.PkgInfo.Depends, func(n string) bool {
+		if slices.ContainsFunc(installedPkg.Depends, func(n string) bool {
 			return n == pkgInfo.Name
 		}) {
-			dependants = append(dependants, installedPkgName)
+			dependants = append(dependants, installedPkg.Name)
 			continue
 		}
 
 		// Loop through each virtual package
 		for _, vpkg := range pkgInfo.Provides {
 			// Add installed package to list if its dependencies contain a provided virtual package
-			if slices.ContainsFunc(installedPkg.PkgInfo.Depends, func(n string) bool {
+			if slices.ContainsFunc(installedPkg.Depends, func(n string) bool {
 				return n == vpkg
 			}) {
-				dependants = append(dependants, installedPkgName)
+				dependants = append(dependants, installedPkg.Name)
 				break
 			}
 		}
@@ -220,39 +214,33 @@ func (pkgInfo *PackageInfo) GetPackageDependants(rootDir string) (dependants []s
 
 func (pkgInfo *PackageInfo) GetPackageOptionalDependants(rootDir string) (dependants []string) {
 	// Get installed package names
-	pkgs, err := GetInstalledPackages(rootDir)
-	if err != nil {
+	pkgs, ok := localPackageInformation[rootDir]
+	if !ok {
 		return nil
 	}
 
 	// Loop through all installed packages
-	for _, installedPkgName := range pkgs {
-		// Get installed BPM package
-		installedPkg := GetPackage(installedPkgName, rootDir)
-		if installedPkg == nil {
-			return nil
-		}
-
+	for _, installedPkg := range pkgs {
 		// Skip iteration if comparing the same packages
-		if installedPkg.PkgInfo.Name == pkgInfo.Name {
+		if installedPkg.Name == pkgInfo.Name {
 			continue
 		}
 
 		// Add installed package to list if its optional dependencies include pkgName
-		if slices.ContainsFunc(installedPkg.PkgInfo.OptionalDepends, func(n string) bool {
+		if slices.ContainsFunc(installedPkg.OptionalDepends, func(n string) bool {
 			return n == pkgInfo.Name
 		}) {
-			dependants = append(dependants, installedPkgName)
+			dependants = append(dependants, installedPkg.Name)
 			continue
 		}
 
 		// Loop through each virtual package
 		for _, vpkg := range pkgInfo.Provides {
 			// Add installed package to list if its optional dependencies contain a provided virtual package
-			if slices.ContainsFunc(installedPkg.PkgInfo.OptionalDepends, func(n string) bool {
+			if slices.ContainsFunc(installedPkg.OptionalDepends, func(n string) bool {
 				return n == vpkg
 			}) {
-				dependants = append(dependants, installedPkgName)
+				dependants = append(dependants, installedPkg.Name)
 				break
 			}
 		}

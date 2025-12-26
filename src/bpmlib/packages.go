@@ -536,60 +536,57 @@ func ReadPackageInfo(contents string) (*PackageInfo, error) {
 	return pkgInfo, nil
 }
 
-func (bpmpkg *BPMPackage) CreateReadableInfo(rootDir string, humanReadableSize bool) string {
+func (pkgInfo *PackageInfo) CreateReadableInfo(rootDir string) string {
 	ret := make([]string, 0)
 	appendArray := func(label string, array []string) {
 		if len(array) == 0 {
 			return
 		}
 
-		// Sort array
-		slices.Sort(array)
-
 		ret = append(ret, fmt.Sprintf("%s: %s", label, strings.Join(array, ", ")))
 	}
 
-	ret = append(ret, "Name: "+bpmpkg.PkgInfo.Name)
-	ret = append(ret, "Description: "+bpmpkg.PkgInfo.Description)
-	ret = append(ret, "Version: "+bpmpkg.PkgInfo.GetFullVersion())
-	if bpmpkg.PkgInfo.Url != "" {
-		ret = append(ret, "URL: "+bpmpkg.PkgInfo.Url)
+	ret = append(ret, "Name: "+pkgInfo.Name)
+	ret = append(ret, "Description: "+pkgInfo.Description)
+	ret = append(ret, "Version: "+pkgInfo.GetFullVersion())
+	if pkgInfo.Url != "" {
+		ret = append(ret, "URL: "+pkgInfo.Url)
 	}
-	if bpmpkg.PkgInfo.License != "" {
-		ret = append(ret, "License: "+bpmpkg.PkgInfo.License)
+	if pkgInfo.License != "" {
+		ret = append(ret, "License: "+pkgInfo.License)
 	}
-	ret = append(ret, "Architecture: "+bpmpkg.PkgInfo.Arch)
-	if bpmpkg.PkgInfo.Type == "source" && bpmpkg.PkgInfo.OutputArch != "" && bpmpkg.PkgInfo.OutputArch != GetArch() {
-		ret = append(ret, "Output architecture: "+bpmpkg.PkgInfo.Arch)
+	ret = append(ret, "Architecture: "+pkgInfo.Arch)
+	if pkgInfo.Type == "source" && pkgInfo.OutputArch != "" && pkgInfo.OutputArch != GetArch() {
+		ret = append(ret, "Output architecture: "+pkgInfo.Arch)
 	}
-	ret = append(ret, "Type: "+bpmpkg.PkgInfo.Type)
-	appendArray("Dependencies", bpmpkg.PkgInfo.Depends)
-	if bpmpkg.PkgInfo.Type == "source" {
-		appendArray("Make Dependencies", bpmpkg.PkgInfo.MakeDepends)
+	ret = append(ret, "Type: "+pkgInfo.Type)
+	appendArray("Dependencies", pkgInfo.Depends)
+	if pkgInfo.Type == "source" {
+		appendArray("Make Dependencies", pkgInfo.MakeDepends)
 	}
-	appendArray("Optional dependencies", bpmpkg.PkgInfo.OptionalDepends)
-	dependants := bpmpkg.PkgInfo.GetPackageDependants(rootDir)
+	appendArray("Optional dependencies", pkgInfo.OptionalDepends)
+	dependants := pkgInfo.GetPackageDependants(rootDir)
 	if len(dependants) > 0 {
 		appendArray("Dependant packages", dependants)
 	}
-	optionalDependants := bpmpkg.PkgInfo.GetPackageOptionalDependants(rootDir)
+	optionalDependants := pkgInfo.GetPackageOptionalDependants(rootDir)
 	if len(optionalDependants) > 0 {
 		appendArray("Optionally dependant packages", optionalDependants)
 	}
-	appendArray("Conflicting packages", bpmpkg.PkgInfo.Conflicts)
-	appendArray("Provided packages", bpmpkg.PkgInfo.Provides)
-	appendArray("Replaces packages", bpmpkg.PkgInfo.Replaces)
+	appendArray("Conflicting packages", pkgInfo.Conflicts)
+	appendArray("Provided packages", pkgInfo.Provides)
+	appendArray("Replaces packages", pkgInfo.Replaces)
 
-	if bpmpkg.PkgInfo.Type == "source" && len(bpmpkg.PkgInfo.SplitPackages) != 0 {
-		splitPkgs := make([]string, len(bpmpkg.PkgInfo.SplitPackages))
-		for i, splitPkgInfo := range bpmpkg.PkgInfo.SplitPackages {
+	if pkgInfo.Type == "source" && len(pkgInfo.SplitPackages) != 0 {
+		splitPkgs := make([]string, len(pkgInfo.SplitPackages))
+		for i, splitPkgInfo := range pkgInfo.SplitPackages {
 			splitPkgs[i] = splitPkgInfo.Name
 		}
 		appendArray("Split Packages", splitPkgs)
 	}
 
-	if rootDir != "" && IsPackageInstalled(bpmpkg.PkgInfo.Name, rootDir) {
-		installationReason := GetInstallationReason(bpmpkg.PkgInfo.Name, rootDir)
+	if rootDir != "" && IsPackageInstalled(pkgInfo.Name, rootDir) {
+		installationReason := GetInstallationReason(pkgInfo.Name, rootDir)
 		var installationReasonString string
 		switch installationReason {
 		case InstallationReasonManual:
@@ -603,16 +600,7 @@ func (bpmpkg *BPMPackage) CreateReadableInfo(rootDir string, humanReadableSize b
 		}
 		ret = append(ret, "Installation Reason: "+installationReasonString)
 	}
-	if bpmpkg.PkgInfo.Type == "binary" {
-		installedSize := bpmpkg.GetInstalledSize()
-		var installedSizeStr string
-		if humanReadableSize {
-			installedSizeStr = bytesToHumanReadable(installedSize)
-		} else {
-			installedSizeStr = strconv.FormatInt(installedSize, 10)
-		}
-		ret = append(ret, "Installed size: "+installedSizeStr)
-	}
+
 	return strings.Join(ret, "\n")
 }
 

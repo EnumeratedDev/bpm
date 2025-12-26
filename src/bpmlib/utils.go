@@ -119,7 +119,7 @@ func stringSliceRemove(s []string, r string) []string {
 	return s
 }
 
-func bytesToHumanReadable(b int64) string {
+func BytesToHumanReadable(b int64) string {
 	bf := float64(b)
 	for _, unit := range []string{"", "Ki", "Mi", "Gi", "Ti", "Pi", "Ei", "Zi"} {
 		if math.Abs(bf) < 1024.0 {

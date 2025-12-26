@@ -429,12 +429,12 @@ func (operation *BPMOperation) ShowOperationSummary() {
 		fmt.Println("Warning: Operating in " + operation.RootDir)
 	}
 	if operation.GetTotalDownloadSize() > 0 {
-		fmt.Printf("%s will be downloaded to complete this operation\n", bytesToHumanReadable(operation.GetTotalDownloadSize()))
+		fmt.Printf("%s will be downloaded to complete this operation\n", BytesToHumanReadable(operation.GetTotalDownloadSize()))
 	}
 	if operation.GetFinalActionSize(operation.RootDir) > 0 {
-		fmt.Printf("A total of %s will be installed after the operation finishes\n", bytesToHumanReadable(operation.GetFinalActionSize(operation.RootDir)))
+		fmt.Printf("A total of %s will be installed after the operation finishes\n", BytesToHumanReadable(operation.GetFinalActionSize(operation.RootDir)))
 	} else if operation.GetFinalActionSize(operation.RootDir) < 0 {
-		fmt.Printf("A total of %s will be freed after the operation finishes\n", strings.TrimPrefix(bytesToHumanReadable(operation.GetFinalActionSize(operation.RootDir)), "-"))
+		fmt.Printf("A total of %s will be freed after the operation finishes\n", strings.TrimPrefix(BytesToHumanReadable(operation.GetFinalActionSize(operation.RootDir)), "-"))
 	}
 }
 
