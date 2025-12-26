@@ -9,7 +9,7 @@ import (
 	"strings"
 )
 
-var localPackageInformation map[string]map[string]*BPMPackage = make(map[string]map[string]*BPMPackage)
+var localPackageInformation map[string]map[string]*PackageInfo = make(map[string]map[string]*PackageInfo)
 
 func initializeLocalPackageInformation(rootDir string) (err error) {
 	// Return if information is already initialized
@@ -17,7 +17,7 @@ func initializeLocalPackageInformation(rootDir string) (err error) {
 		return nil
 	}
 
-	tempPackageInformation := make(map[string]*BPMPackage)
+	tempPackageInformation := make(map[string]*PackageInfo)
 
 	// Get path to installed package information directory
 	installedDir := path.Join(rootDir, "var/lib/bpm/installed/")
@@ -25,7 +25,7 @@ func initializeLocalPackageInformation(rootDir string) (err error) {
 	// Get directory content
 	items, err := os.ReadDir(installedDir)
 	if os.IsNotExist(err) {
-		localPackageInformation[rootDir] = make(map[string]*BPMPackage)
+		localPackageInformation[rootDir] = make(map[string]*PackageInfo)
 		return nil
 	}
 	if err != nil {
@@ -49,14 +49,8 @@ func initializeLocalPackageInformation(rootDir string) (err error) {
 			return err
 		}
 
-		// Read package files
-		files := getPackageFiles(info.Name, rootDir)
-
 		// Add package to slice
-		tempPackageInformation[info.Name] = &BPMPackage{
-			PkgInfo:  info,
-			PkgFiles: files,
-		}
+		tempPackageInformation[info.Name] = info
 	}
 
 	localPackageInformation[rootDir] = tempPackageInformation
@@ -71,8 +65,8 @@ func GetInstalledPackages(rootDir string) (ret []string, err error) {
 	}
 
 	// Loop through each package and add it to slice
-	for _, bpmpkg := range localPackageInformation[rootDir] {
-		ret = append(ret, bpmpkg.PkgInfo.Name)
+	for _, pkgInfo := range localPackageInformation[rootDir] {
+		ret = append(ret, pkgInfo.Name)
 	}
 
 	// Sort packages
@@ -92,18 +86,6 @@ func IsPackageInstalled(pkg, rootDir string) bool {
 		return false
 	}
 	return true
-}
-
-func GetPackageInfo(pkg string, rootDir string) *PackageInfo {
-	// Get BPM package
-	bpmpkg := GetPackage(pkg, rootDir)
-
-	// Return nil if not found
-	if bpmpkg == nil {
-		return nil
-	}
-
-	return bpmpkg.PkgInfo
 }
 
 func IsVirtualPackage(pkg, rootDir string) (bool, string) {
@@ -146,15 +128,27 @@ func IsPackageProvided(pkg, rootDir string) bool {
 	return false
 }
 
-func GetPackage(pkg, rootDir string) *BPMPackage {
+func GetPackageInfo(pkg string, rootDir string) *PackageInfo {
 	err := initializeLocalPackageInformation(rootDir)
 	if err != nil {
 		return nil
 	}
 
-	bpmpkg := localPackageInformation[rootDir][pkg]
+	return localPackageInformation[rootDir][pkg]
+}
 
-	return bpmpkg
+func GetPackage(pkg, rootDir string) *BPMPackage {
+	pkgInfo := GetPackageInfo(pkg, rootDir)
+	if pkgInfo == nil {
+		return nil
+	}
+
+	files := getPackageFiles(pkgInfo.Name, rootDir)
+
+	return &BPMPackage{
+		PkgInfo:  pkgInfo,
+		PkgFiles: files,
+	}
 }
 
 func GetAllPackageFiles(rootDir string, excludePackages ...string) (map[string][]*BPMPackage, error) {

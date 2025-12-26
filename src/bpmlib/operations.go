@@ -310,29 +310,29 @@ func (operation *BPMOperation) CheckForConflicts() map[string][]string {
 		// Check for conflicts with installed packages
 		for _, installedPkg := range installedPackages {
 			// Skip if package is to be removed
-			if slices.Contains(removedPackages, installedPkg.PkgInfo.Name) {
+			if slices.Contains(removedPackages, installedPkg.Name) {
 				continue
 			}
 
 			// Skip if same package
-			if pkgInfo.Name == installedPkg.PkgInfo.Name {
+			if pkgInfo.Name == installedPkg.Name {
 				continue
 			}
 
 			// Check for new package conflicts
-			if slices.Contains(pkgInfo.Conflicts, installedPkg.PkgInfo.Name) {
-				conflicts[pkgInfo.Name] = append(conflicts[pkgInfo.Name], installedPkg.PkgInfo.Name)
+			if slices.Contains(pkgInfo.Conflicts, installedPkg.Name) {
+				conflicts[pkgInfo.Name] = append(conflicts[pkgInfo.Name], installedPkg.Name)
 			}
-			for _, vpkg := range installedPkg.PkgInfo.Provides {
+			for _, vpkg := range installedPkg.Provides {
 				if slices.Contains(pkgInfo.Conflicts, vpkg) {
-					conflicts[pkgInfo.Name] = append(conflicts[pkgInfo.Name], vpkg+" ("+installedPkg.PkgInfo.Name+")")
+					conflicts[pkgInfo.Name] = append(conflicts[pkgInfo.Name], vpkg+" ("+installedPkg.Name+")")
 				}
 			}
 
 			// Check for installed package conflicts
 			for _, vpkg := range pkgInfo.Provides {
-				if slices.Contains(installedPkg.PkgInfo.Conflicts, vpkg) {
-					conflicts[installedPkg.PkgInfo.Name] = append(conflicts[installedPkg.PkgInfo.Name], vpkg+" ("+pkgInfo.Name+")")
+				if slices.Contains(installedPkg.Conflicts, vpkg) {
+					conflicts[installedPkg.Name] = append(conflicts[installedPkg.Name], vpkg+" ("+pkgInfo.Name+")")
 				}
 			}
 		}

@@ -1007,7 +1007,7 @@ func installPackage(filename, rootDir string, verbose, force bool) error {
 	}
 
 	// Add or update package information for rootDir
-	localPackageInformation[rootDir][bpmpkg.PkgInfo.Name] = bpmpkg
+	localPackageInformation[rootDir][bpmpkg.PkgInfo.Name] = bpmpkg.PkgInfo
 
 	return nil
 }
