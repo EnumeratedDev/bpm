@@ -930,6 +930,8 @@ func updatePackages() {
 		return
 	} else if err != nil {
 		log.Printf("Error: could not setup operation: %s\n", err)
+		exitCode = 1
+		return
 	}
 
 	// Exit if operation contains no actions
