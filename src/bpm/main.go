@@ -137,6 +137,7 @@ func main() {
 		currentFlagSet.BoolP("force", "f", false, "Bypass warnings during package update")
 		currentFlagSet.BoolP("yes", "y", false, "Enter 'yes' in all prompts")
 		currentFlagSet.BoolP("no-sync", "n", false, "Do not sync databases")
+		currentFlagSet.Bool("allow-downgrades", false, "Allow package downgrades")
 		currentFlagSet.BoolP("optional", "o", false, "Install all optional dependencies")
 		setupFlagsAndHelp(currentFlagSet, fmt.Sprintf("bpm %s <options>", subcommand), "Update installed packages", os.Args[2:])
 
@@ -894,6 +895,7 @@ func updatePackages() {
 	force, _ := currentFlagSet.GetBool("force")
 	yesAll, _ := currentFlagSet.GetBool("yes")
 	noSync, _ := currentFlagSet.GetBool("no-sync")
+	allowDowngrades, _ := currentFlagSet.GetBool("allow-downgrades")
 	installOptional, _ := currentFlagSet.GetBool("optional")
 
 	// Check for required permissions
@@ -932,7 +934,7 @@ func updatePackages() {
 	}
 
 	// Create update operation
-	operation, err := bpmlib.UpdatePackages(rootDir, !noSync, installOptional, force, verbose)
+	operation, err := bpmlib.UpdatePackages(rootDir, !noSync, allowDowngrades, installOptional, force, verbose)
 	if errors.As(err, &bpmlib.PackageNotFoundErr{}) || errors.As(err, &bpmlib.DependencyNotFoundErr{}) || errors.As(err, &bpmlib.PackageConflictErr{}) {
 		log.Printf("Error: %s", err)
 		exitCode = 1

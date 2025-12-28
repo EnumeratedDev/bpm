@@ -365,7 +365,7 @@ func CleanupCache(rootDir string, cleanupCompilationFiles, cleanupCompiledPackag
 }
 
 // UpdatePackages fetches the newest versions of all installed packages from
-func UpdatePackages(rootDir string, syncDatabase bool, installOptionalDependencies, forceInstallation, verbose bool) (operation *BPMOperation, err error) {
+func UpdatePackages(rootDir string, syncDatabase bool, allowDowngrades bool, installOptionalDependencies, forceInstallation, verbose bool) (operation *BPMOperation, err error) {
 	// Sync databases
 	if syncDatabase {
 		err := SyncDatabase(verbose)
@@ -419,7 +419,7 @@ func UpdatePackages(rootDir string, syncDatabase bool, installOptionalDependenci
 			return nil, fmt.Errorf("could not get package info for package (%s)", pkg)
 		} else {
 			comparison := CompareVersions(entry.Info.GetFullVersion(), installedInfo.GetFullVersion())
-			if comparison > 0 {
+			if (!allowDowngrades && comparison > 0) || (allowDowngrades && comparison != 0) {
 				operation.AppendAction(&FetchPackageAction{
 					InstallationReason: GetInstallationReason(pkg, rootDir),
 					DatabaseEntry:      entry,
