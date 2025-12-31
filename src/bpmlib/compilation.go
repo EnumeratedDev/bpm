@@ -137,6 +137,7 @@ func CompileSourcePackage(archiveFilename, outputDirectory string, skipChecks, k
 	env = append(env, "BPM_PKG_NAME="+bpmpkg.PkgInfo.Name)
 	env = append(env, "BPM_PKG_VERSION="+bpmpkg.PkgInfo.Version)
 	env = append(env, "BPM_PKG_REVISION="+strconv.Itoa(bpmpkg.PkgInfo.Revision))
+	env = append(env, "BPM_PKG_URL="+bpmpkg.PkgInfo.Url)
 	env = append(env, "BPM_PKG_ARCH="+bpmpkg.PkgInfo.OutputArch)
 	env = append(env, CompilationBPMConfig.CompilationEnvironment...)
 
@@ -434,10 +435,12 @@ func downloadPackageFiles(pkgInfo *PackageInfo, tempDirectory string, verbose bo
 		// Replace variables
 		replaceVars := func(s string) string {
 			switch s {
-			case "BPM_PKG_VERSION":
-				return pkgInfo.Version
 			case "BPM_PKG_NAME":
 				return pkgInfo.Name
+			case "BPM_PKG_VERSION":
+				return pkgInfo.Version
+			case "BPM_PKG_URL":
+				return pkgInfo.Url
 			case "BPM_SOURCE":
 				return path.Join(tempDirectory, "source/")
 			default:
@@ -557,10 +560,12 @@ func downloadPackageFiles(pkgInfo *PackageInfo, tempDirectory string, verbose bo
 			gitBranch := download.GitBranch
 			gitBranch, err := envsubst.Eval(gitBranch, func(s string) string {
 				switch s {
-				case "BPM_PKG_VERSION":
-					return pkgInfo.Version
 				case "BPM_PKG_NAME":
 					return pkgInfo.Name
+				case "BPM_PKG_VERSION":
+					return pkgInfo.Version
+				case "BPM_PKG_URL":
+					return pkgInfo.Url
 				default:
 					return ""
 				}
