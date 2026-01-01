@@ -1,4 +1,4 @@
-module git.enumerated.dev/bubble-package-manager/bpm/src/bpmlib
+module github.com/EnumeratedDev/bpm/src/bpmlib
 
 go 1.24.0
 

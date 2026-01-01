@@ -14,7 +14,7 @@ import (
 	"sort"
 	"strings"
 
-	"git.enumerated.dev/bubble-package-manager/bpm/src/bpmlib"
+	"github.com/EnumeratedDev/bpm/src/bpmlib"
 
 	"github.com/lithammer/fuzzysearch/fuzzy"
 	flag "github.com/spf13/pflag"
