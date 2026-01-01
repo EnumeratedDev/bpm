@@ -14,7 +14,6 @@ import (
 	"sort"
 	"strings"
 
-	"git.enumerated.dev/bubble-package-manager/bpm/src/bpm/config"
 	"git.enumerated.dev/bubble-package-manager/bpm/src/bpmlib"
 
 	"github.com/lithammer/fuzzysearch/fuzzy"
@@ -25,6 +24,8 @@ import (
 /*        Made By EnumDev (Previously CapCreeperGR)        */
 /*             A simple-to-use package manager             */
 /* ------------------------------------------------------- */
+
+var BpmVersion = "dev"
 
 var currentFlagSet *flag.FlagSet
 
@@ -47,7 +48,7 @@ func main() {
 	switch subcommand {
 	case "v", "version":
 		fmt.Println("Bubble Package Manager (BPM)")
-		fmt.Println("Version: " + config.BpmVersion)
+		fmt.Println("Version: " + BpmVersion)
 	case "q", "query":
 		// Setup flags and help
 		currentFlagSet = flag.NewFlagSet("query", flag.ExitOnError)
