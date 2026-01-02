@@ -63,11 +63,12 @@ func (db *configDatabase) ReadLocalDatabase() error {
 	database.Name = db.Name
 	database.Source = db.Source
 
-	entriesToRemove := make([]string, 0)
 	for entryName, entry := range database.Entries {
 		entry.Database = database
 
 		if entry.Info.IsSplitPackage() {
+			delete(database.Entries, entryName)
+
 			// Handle split packages
 			for _, splitPkg := range entry.Info.SplitPackages {
 				// Turn split package into json data
@@ -106,9 +107,6 @@ func (db *configDatabase) ReadLocalDatabase() error {
 				for _, p := range splitPkg.Provides {
 					database.VirtualPackages[p] = append(database.VirtualPackages[p], splitPkg.Name)
 				}
-
-				// Add current entry to list for removal
-				entriesToRemove = append(entriesToRemove, entryName)
 			}
 		} else {
 			// Add virtual packages to database
@@ -116,11 +114,6 @@ func (db *configDatabase) ReadLocalDatabase() error {
 				database.VirtualPackages[p] = append(database.VirtualPackages[p], entry.Info.Name)
 			}
 		}
-	}
-
-	// Remove entries
-	for _, entryName := range entriesToRemove {
-		delete(database.Entries, entryName)
 	}
 
 	BPMDatabases[db.Name] = database
