@@ -1103,6 +1103,8 @@ func getFileOwner() {
 		// Print packages
 		if len(pkgList) == 0 {
 			fmt.Printf("%s (%s) is not owned by any packages!\n", absPath, pathType)
+			exitCode = 1
+			return
 		} else {
 			fmt.Printf("%s (%s) is owned by the following packages:\n", absPath, pathType)
 			for _, pkg := range pkgList {
