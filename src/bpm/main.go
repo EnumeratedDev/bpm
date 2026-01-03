@@ -627,7 +627,7 @@ func installPackages() {
 	// Show optional dependencies
 	if !installOptional && len(optionalDepends) != 0 {
 		// List optional dependencies
-		fmt.Println("The following opitonal dependenices have been discovered:")
+		fmt.Println("The following optional dependenices have been discovered:")
 		for dependant, depends := range optionalDepends {
 			fmt.Printf("%s: \n", dependant)
 			for _, depend := range depends {
@@ -1019,7 +1019,7 @@ func updatePackages() {
 	// Show optional dependencies
 	if !installOptional && len(optionalDepends) != 0 {
 		// List optional dependencies
-		fmt.Println("The following opitonal dependenices have been discovered:")
+		fmt.Println("The following optional dependenices have been discovered:")
 		for dependant, depends := range optionalDepends {
 			fmt.Printf("%s: \n", dependant)
 			for _, depend := range depends {
