@@ -37,6 +37,7 @@ type PackageInfo struct {
 	Type            string            `yaml:"type,omitempty"`
 	Keep            []string          `yaml:"keep,omitempty"`
 	Depends         []string          `yaml:"depends,omitempty"`
+	RuntimeDepends  []string          `yaml:"runtime_depends,omitempty"`
 	OptionalDepends []string          `yaml:"optional_depends,omitempty"`
 	MakeDepends     []string          `yaml:"make_depends,omitempty"`
 	Conflicts       []string          `yaml:"conflicts,omitempty"`
@@ -457,6 +458,7 @@ func ReadPackageInfo(contents string) (*PackageInfo, error) {
 		OutputArch:      GetArch(),
 		Keep:            make([]string, 0),
 		Depends:         make([]string, 0),
+		RuntimeDepends:  make([]string, 0),
 		MakeDepends:     make([]string, 0),
 		OptionalDepends: make([]string, 0),
 		Conflicts:       make([]string, 0),
@@ -562,6 +564,7 @@ func (pkgInfo *PackageInfo) CreateReadableInfo(rootDir string) string {
 	ret = append(ret, "Type: "+pkgInfo.Type)
 	appendArray("Dependencies", pkgInfo.Depends)
 	if pkgInfo.Type == "source" {
+		appendArray("Runtime Dependencies", pkgInfo.RuntimeDepends)
 		appendArray("Make Dependencies", pkgInfo.MakeDepends)
 	}
 	appendArray("Optional dependencies", pkgInfo.OptionalDepends)

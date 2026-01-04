@@ -344,6 +344,10 @@ func CompileSourcePackage(archiveFilename, outputDirectory string, skipChecks, k
 		pkgInfo.Arch = pkg.OutputArch
 		pkgInfo.OutputArch = ""
 
+		// Add runtime dependencies to common dependencies
+		pkgInfo.Depends = removeDuplicates(append(pkgInfo.Depends, pkgInfo.RuntimeDepends...))
+		pkgInfo.RuntimeDepends = nil
+
 		// Remove split package and downloads fields
 		pkgInfo.SplitPackages = nil
 		pkgInfo.Downloads = nil
