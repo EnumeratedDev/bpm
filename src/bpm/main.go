@@ -87,6 +87,7 @@ func main() {
 		currentFlagSet.BoolP("verbose", "v", false, "Show additional information about the current operation")
 		currentFlagSet.BoolP("force", "f", false, "Bypass warnings during package installation")
 		currentFlagSet.BoolP("yes", "y", false, "Enter 'yes' in all prompts")
+		currentFlagSet.Bool("runtime", true, "Install all runtime dependencies")
 		currentFlagSet.BoolP("optional", "o", false, "Install all optional dependencies")
 		currentFlagSet.String("installation-reason", "", "Specify the installation reason to use for the specified packages")
 		currentFlagSet.BoolP("reinstall", "r", false, "Reinstall the specified packages")
@@ -480,6 +481,7 @@ func installPackages() {
 	verbose, _ := currentFlagSet.GetBool("verbose")
 	force, _ := currentFlagSet.GetBool("force")
 	yesAll, _ := currentFlagSet.GetBool("yes")
+	installRuntime, _ := currentFlagSet.GetBool("runtime")
 	installOptional, _ := currentFlagSet.GetBool("optional")
 	installationReason, _ := currentFlagSet.GetString("installation-reason")
 	reinstall, _ := currentFlagSet.GetBool("reinstall")
@@ -543,7 +545,7 @@ func installPackages() {
 	}
 
 	// Create installation operation
-	operation, err := bpmlib.InstallPackages(rootDir, ir, reinstallMethod, installOptional, force, verbose, packages...)
+	operation, err := bpmlib.InstallPackages(rootDir, ir, reinstallMethod, installRuntime, installOptional, force, verbose, packages...)
 	if errors.As(err, &bpmlib.PackageNotFoundErr{}) || errors.As(err, &bpmlib.DependencyNotFoundErr{}) || errors.As(err, &bpmlib.PackageConflictErr{}) {
 		log.Printf("Error: %s", err)
 		exitCode = 1
@@ -1163,9 +1165,9 @@ func compilePackage() {
 			return
 		}
 
-		// Get direct runtime and make dependencies
+		// Get direct common and make dependencies
 		totalDepends := make([]string, 0)
-		for _, depend := range bpmpkg.PkgInfo.GetDependencies(true, false) {
+		for _, depend := range bpmpkg.PkgInfo.GetDependencies(true, false, false) {
 			if !slices.Contains(totalDepends, depend.PkgName) {
 				totalDepends = append(totalDepends, depend.PkgName)
 			}
@@ -1198,7 +1200,7 @@ func compilePackage() {
 			}
 
 			// Run 'bpm install' using the set privilege escalator command
-			args := []string{executable, "install", "--installation-reason=make-dependency"}
+			args := []string{executable, "install", "--runtime=false", "--installation-reason=make-dependency"}
 			args = append(args, unmetDepends...)
 			cmd := exec.Command(bpmlib.CompilationBPMConfig.PrivilegeEscalatorCmd, args...)
 			if yesAll {

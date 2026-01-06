@@ -20,7 +20,7 @@ const (
 )
 
 // InstallPackages installs the specified packages into the given root directory by fetching them from databases or directly from local bpm archives
-func InstallPackages(rootDir string, forceInstallationReason InstallationReason, reinstallMethod ReinstallMethod, installOptionalDependencies, forceInstallation, verbose bool, packages ...string) (operation *BPMOperation, err error) {
+func InstallPackages(rootDir string, forceInstallationReason InstallationReason, reinstallMethod ReinstallMethod, installRuntimeDependencies, installOptionalDependencies, forceInstallation, verbose bool, packages ...string) (operation *BPMOperation, err error) {
 	// Setup operation struct
 	operation = &BPMOperation{
 		Actions:           make([]OperationAction, 0),
@@ -131,7 +131,7 @@ func InstallPackages(rootDir string, forceInstallationReason InstallationReason,
 	}
 
 	// Resolve dependencies
-	err = operation.ResolveDependencies(reinstallMethod == ReinstallMethodAll, installOptionalDependencies, verbose)
+	err = operation.ResolveDependencies(reinstallMethod == ReinstallMethodAll, installRuntimeDependencies, installOptionalDependencies, verbose)
 	if err != nil {
 		return nil, fmt.Errorf("could not resolve dependencies: %s", err)
 	}
@@ -429,7 +429,7 @@ func UpdatePackages(rootDir string, syncDatabase bool, allowDowngrades bool, ins
 	}
 
 	// Check for new dependencies in updated packages
-	err = operation.ResolveDependencies(false, installOptionalDependencies, verbose)
+	err = operation.ResolveDependencies(false, true, installOptionalDependencies, verbose)
 	if err != nil {
 		return nil, fmt.Errorf("could not resolve dependencies: %s", err)
 	}

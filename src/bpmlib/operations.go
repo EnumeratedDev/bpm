@@ -129,7 +129,7 @@ func (operation *BPMOperation) GetFinalActionSize(rootDir string) int64 {
 	return ret
 }
 
-func (operation *BPMOperation) ResolveDependencies(reinstallDependencies, installOptionalDependencies, verbose bool) error {
+func (operation *BPMOperation) ResolveDependencies(reinstallDependencies, installRuntimeDependencies, installOptionalDependencies, verbose bool) error {
 	pos := 0
 	for _, value := range slices.Clone(operation.Actions) {
 		var pkgInfo *PackageInfo
@@ -144,7 +144,7 @@ func (operation *BPMOperation) ResolveDependencies(reinstallDependencies, instal
 			continue
 		}
 
-		resolved, unresolved := ResolveAllPackageDependenciesFromDatabases(pkgInfo, pkgInfo.Type == "source", installOptionalDependencies, !reinstallDependencies, verbose, operation.RootDir)
+		resolved, unresolved := ResolveAllPackageDependenciesFromDatabases(pkgInfo, pkgInfo.Type == "source", installRuntimeDependencies, installOptionalDependencies, !reinstallDependencies, verbose, operation.RootDir)
 
 		operation.UnresolvedDepends = append(operation.UnresolvedDepends, unresolved...)
 
@@ -230,7 +230,7 @@ func (operation *BPMOperation) Cleanup(cleanupMakeDepends bool) error {
 		}
 
 		keepPackages = append(keepPackages, pkg.Name)
-		resolved := pkg.GetDependenciesRecursive(!cleanupMakeDepends, operation.RootDir)
+		resolved := pkg.GetDependenciesRecursive(true, !cleanupMakeDepends, operation.RootDir)
 		for _, value := range resolved {
 			if !slices.Contains(keepPackages, value) && !slices.Contains(MainBPMConfig.IgnorePackages, value) {
 				keepPackages = append(keepPackages, value)

@@ -567,6 +567,7 @@ func (pkgInfo *PackageInfo) CreateReadableInfo(rootDir string) string {
 		appendArray("Runtime Dependencies", pkgInfo.RuntimeDepends)
 		appendArray("Make Dependencies", pkgInfo.MakeDepends)
 	}
+	appendArray("Runtime dependencies", pkgInfo.RuntimeDepends)
 	appendArray("Optional dependencies", pkgInfo.OptionalDepends)
 	dependants := pkgInfo.GetPackageDependants(rootDir)
 	if len(dependants) > 0 {
