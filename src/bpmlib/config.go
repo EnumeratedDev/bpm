@@ -21,6 +21,7 @@ type configDatabase struct {
 
 type CompilationBPMConfigStruct struct {
 	PrivilegeEscalatorCmd  string   `yaml:"privilege_escalator_cmd"`
+	CompilationJobs        int      `yaml:"compilation_jobs"`
 	CompilationEnvironment []string `yaml:"compilation_env"`
 }
 

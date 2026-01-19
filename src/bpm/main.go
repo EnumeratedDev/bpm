@@ -92,6 +92,7 @@ func main() {
 		currentFlagSet.String("installation-reason", "", "Specify the installation reason to use for the specified packages")
 		currentFlagSet.BoolP("reinstall", "r", false, "Reinstall the specified packages")
 		currentFlagSet.BoolP("reinstall-all", "a", false, "Reinstall the specified packages and their dependencies")
+		currentFlagSet.IntP("jobs", "j", bpmlib.CompilationBPMConfig.CompilationJobs, "Set the amount of concurrent processes to use for source package compilation")
 		setupFlagsAndHelp(currentFlagSet, fmt.Sprintf("bpm %s <options>", subcommand), "Install the specified packages", os.Args[2:])
 
 		installPackages()
@@ -141,6 +142,7 @@ func main() {
 		currentFlagSet.BoolP("no-sync", "n", false, "Do not sync databases")
 		currentFlagSet.Bool("allow-downgrades", false, "Allow package downgrades")
 		currentFlagSet.BoolP("optional", "o", false, "Install all optional dependencies")
+		currentFlagSet.IntP("jobs", "j", bpmlib.CompilationBPMConfig.CompilationJobs, "Set the amount of concurrent processes to use for source package compilation")
 		setupFlagsAndHelp(currentFlagSet, fmt.Sprintf("bpm %s <options>", subcommand), "Update installed packages", os.Args[2:])
 
 		updatePackages()
@@ -163,6 +165,7 @@ func main() {
 		currentFlagSet.BoolP("keep", "k", false, "Keep compilation files after successful package compilation")
 		currentFlagSet.BoolP("output-directory", "o", false, "Set the output directory for the binary packages")
 		currentFlagSet.Int("output-fd", -1, "Set the file descriptor output package names will be written to")
+		currentFlagSet.IntP("jobs", "j", bpmlib.CompilationBPMConfig.CompilationJobs, "Set the amount of concurrent processes to use for source package compilation")
 		setupFlagsAndHelp(currentFlagSet, fmt.Sprintf("bpm %s <options>", subcommand), "Compile source packages and convert them to binary ones", os.Args[2:])
 
 		compilePackage()
@@ -486,6 +489,7 @@ func installPackages() {
 	installationReason, _ := currentFlagSet.GetString("installation-reason")
 	reinstall, _ := currentFlagSet.GetBool("reinstall")
 	reinstallAll, _ := currentFlagSet.GetBool("reinstall-all")
+	compilationJobs, _ := currentFlagSet.GetInt("jobs")
 
 	// Get packages
 	packages := currentFlagSet.Args()
@@ -555,6 +559,9 @@ func installPackages() {
 		exitCode = 1
 		return
 	}
+
+	// Set compilation job count
+	operation.CompilationJobs = compilationJobs
 
 	// Exit if operation contains no actions
 	if len(operation.Actions) == 0 {
@@ -900,6 +907,7 @@ func updatePackages() {
 	noSync, _ := currentFlagSet.GetBool("no-sync")
 	allowDowngrades, _ := currentFlagSet.GetBool("allow-downgrades")
 	installOptional, _ := currentFlagSet.GetBool("optional")
+	compilationJobs, _ := currentFlagSet.GetInt("jobs")
 
 	// Check for required permissions
 	if os.Getuid() != 0 {
@@ -947,6 +955,9 @@ func updatePackages() {
 		exitCode = 1
 		return
 	}
+
+	// Set compilation job count
+	operation.CompilationJobs = compilationJobs
 
 	// Exit if operation contains no actions
 	if len(operation.Actions) == 0 {
@@ -1126,6 +1137,7 @@ func compilePackage() {
 	skipChecks, _ := currentFlagSet.GetBool("skip-checks")
 	outputDirectory, _ := currentFlagSet.GetString("output-directory")
 	outputFd, _ := currentFlagSet.GetInt("output-fd")
+	compilationJobs, _ := currentFlagSet.GetInt("jobs")
 
 	// Get files
 	sourcePackages := currentFlagSet.Args()
@@ -1319,7 +1331,7 @@ func compilePackage() {
 			return
 		}
 
-		outputBpmPackages, err := bpmlib.CompileSourcePackage(sourcePackage, outputDirectory, skipChecks, keepCompilationFiles, verbose)
+		outputBpmPackages, err := bpmlib.CompileSourcePackage(sourcePackage, outputDirectory, compilationJobs, skipChecks, keepCompilationFiles, verbose)
 		if err != nil {
 			// Remove unused packages
 			cleanupFunc()

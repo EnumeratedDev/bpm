@@ -11,6 +11,7 @@ import (
 	"os/exec"
 	"path"
 	"path/filepath"
+	"runtime"
 	"slices"
 	"strconv"
 	"strings"
@@ -23,7 +24,12 @@ import (
 var rootCompilationUID = "65534"
 var rootCompilationGID = "65534"
 
-func CompileSourcePackage(archiveFilename, outputDirectory string, skipChecks, keepCompilationFiles, verbose bool) (outputBpmPackages map[string]string, err error) {
+func CompileSourcePackage(archiveFilename, outputDirectory string, compilationJobs int, skipChecks, keepCompilationFiles, verbose bool) (outputBpmPackages map[string]string, err error) {
+	// Set compilation jobs
+	if compilationJobs <= 0 || compilationJobs > runtime.NumCPU() {
+		compilationJobs = runtime.NumCPU()
+	}
+
 	// Initialize map
 	outputBpmPackages = make(map[string]string)
 
@@ -139,7 +145,26 @@ func CompileSourcePackage(archiveFilename, outputDirectory string, skipChecks, k
 	env = append(env, "BPM_PKG_REVISION="+strconv.Itoa(bpmpkg.PkgInfo.Revision))
 	env = append(env, "BPM_PKG_URL="+bpmpkg.PkgInfo.Url)
 	env = append(env, "BPM_PKG_ARCH="+bpmpkg.PkgInfo.OutputArch)
+	env = append(env, "BPM_JOBS="+strconv.Itoa(compilationJobs))
 	env = append(env, CompilationBPMConfig.CompilationEnvironment...)
+
+	// Set common flags used for limiting job count
+	makeflags := ""
+	env = slices.DeleteFunc(env, func(s string) bool {
+		if strings.HasPrefix(s, "MAKEFLAGS=") {
+			makeflags = s + " "
+			return true
+		} else if strings.HasPrefix(s, "CMAKE_BUILD_PARALLEL_LEVEL=") {
+			return true
+		} else if strings.HasPrefix(s, "CARGO_BUILD_JOBS=") {
+			return true
+		}
+
+		return false
+	})
+	env = append(env, makeflags+"-j"+strconv.Itoa(compilationJobs))
+	env = append(env, "CMAKE_BUILD_PARALLEL_LEVEL="+strconv.Itoa(compilationJobs))
+	env = append(env, "CARGO_BUILD_JOBS="+strconv.Itoa(compilationJobs))
 
 	// Execute prepare and build functions in source.sh script
 	cmd := exec.Command("bash", "-c",
