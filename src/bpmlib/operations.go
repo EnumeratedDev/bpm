@@ -132,6 +132,7 @@ func (operation *BPMOperation) GetFinalActionSize(rootDir string) int64 {
 
 func (operation *BPMOperation) ResolveDependencies(reinstallDependencies, installRuntimeDependencies, installOptionalDependencies, verbose bool) error {
 	pos := 0
+	resolvedVirtualPkgs := make(map[string]string, 0)
 	for _, value := range slices.Clone(operation.Actions) {
 		var pkgInfo *PackageInfo
 		if value.GetActionType() == "install" {
@@ -145,7 +146,7 @@ func (operation *BPMOperation) ResolveDependencies(reinstallDependencies, instal
 			continue
 		}
 
-		resolved, unresolved := ResolveAllPackageDependenciesFromDatabases(pkgInfo, pkgInfo.Type == "source", installRuntimeDependencies, installOptionalDependencies, !reinstallDependencies, verbose, operation.RootDir)
+		resolved, unresolved := ResolveAllPackageDependenciesFromDatabases(pkgInfo, resolvedVirtualPkgs, pkgInfo.Type == "source", installRuntimeDependencies, installOptionalDependencies, !reinstallDependencies, verbose, operation.RootDir)
 
 		operation.UnresolvedDepends = append(operation.UnresolvedDepends, unresolved...)
 
