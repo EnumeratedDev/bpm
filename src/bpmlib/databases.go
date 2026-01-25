@@ -329,12 +329,15 @@ func (entry *BPMDatabaseEntry) CreateReadableInfo(rootDir string, humanReadableS
 			return
 		}
 
+		// Sort array
 		if sort {
-			// Sort array
 			slices.Sort(array)
 		}
 
-		ret = append(ret, fmt.Sprintf("%s: %s", label, strings.Join(array, ", ")))
+		ret = append(ret, label+":")
+		for _, val := range array {
+			ret = append(ret, "  - "+val)
+		}
 	}
 
 	ret = append(ret, "Name: "+entry.Info.Name)

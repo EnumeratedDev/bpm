@@ -546,7 +546,10 @@ func (pkgInfo *PackageInfo) CreateReadableInfo(rootDir string) string {
 			return
 		}
 
-		ret = append(ret, fmt.Sprintf("%s: %s", label, strings.Join(array, ", ")))
+		ret = append(ret, label+":")
+		for _, val := range array {
+			ret = append(ret, "  - "+val)
+		}
 	}
 
 	ret = append(ret, "Name: "+pkgInfo.Name)
