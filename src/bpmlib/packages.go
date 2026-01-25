@@ -32,6 +32,7 @@ type PackageInfo struct {
 	Revision        int               `yaml:"revision,omitempty"`
 	Url             string            `yaml:"url,omitempty"`
 	License         string            `yaml:"license,omitempty"`
+	Maintainers     []string          `yaml:"maintainers,omitempty"`
 	Arch            string            `yaml:"architecture,omitempty"`
 	OutputArch      string            `yaml:"output_architecture,omitempty"`
 	Type            string            `yaml:"type,omitempty"`
@@ -557,6 +558,7 @@ func (pkgInfo *PackageInfo) CreateReadableInfo(rootDir string) string {
 	if pkgInfo.License != "" {
 		ret = append(ret, "License: "+pkgInfo.License)
 	}
+	appendArray("Maintainers", pkgInfo.Maintainers)
 	ret = append(ret, "Architecture: "+pkgInfo.Arch)
 	if pkgInfo.Type == "source" && pkgInfo.OutputArch != "" && pkgInfo.OutputArch != GetArch() {
 		ret = append(ret, "Output architecture: "+pkgInfo.Arch)
