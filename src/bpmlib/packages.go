@@ -540,58 +540,63 @@ func ReadPackageInfo(contents string) (*PackageInfo, error) {
 }
 
 func (pkgInfo *PackageInfo) CreateReadableInfo(rootDir string) string {
-	ret := make([]string, 0)
-	appendArray := func(label string, array []string) {
+	builder := strings.Builder{}
+	builderWriteArray := func(label string, array []string, sort bool) {
 		if len(array) == 0 {
 			return
 		}
 
-		ret = append(ret, label+":")
+		// Sort array
+		if sort {
+			slices.Sort(array)
+		}
+
+		builder.WriteString(label + ":\n")
 		for _, val := range array {
-			ret = append(ret, "  - "+val)
+			builder.WriteString("  - " + val + "\n")
 		}
 	}
 
-	ret = append(ret, "Name: "+pkgInfo.Name)
-	ret = append(ret, "Description: "+pkgInfo.Description)
-	ret = append(ret, "Version: "+pkgInfo.GetFullVersion())
+	builder.WriteString("Name: " + pkgInfo.Name + "\n")
+	builder.WriteString("Description: " + pkgInfo.Description + "\n")
+	builder.WriteString("Version: " + pkgInfo.GetFullVersion() + "\n")
 	if pkgInfo.Url != "" {
-		ret = append(ret, "URL: "+pkgInfo.Url)
+		builder.WriteString("URL: " + pkgInfo.Url + "\n")
 	}
 	if pkgInfo.License != "" {
-		ret = append(ret, "License: "+pkgInfo.License)
+		builder.WriteString("License: " + pkgInfo.License + "\n")
 	}
-	appendArray("Maintainers", pkgInfo.Maintainers)
-	ret = append(ret, "Architecture: "+pkgInfo.Arch)
+	builderWriteArray("Maintainers", pkgInfo.Maintainers, false)
+	builder.WriteString("Architecture: " + pkgInfo.Arch + "\n")
 	if pkgInfo.Type == "source" && pkgInfo.OutputArch != "" && pkgInfo.OutputArch != GetArch() {
-		ret = append(ret, "Output architecture: "+pkgInfo.Arch)
+		builder.WriteString("Output architecture: " + pkgInfo.Arch + "\n")
 	}
-	ret = append(ret, "Type: "+pkgInfo.Type)
-	appendArray("Dependencies", pkgInfo.Depends)
+	builder.WriteString("Type: " + pkgInfo.Type + "\n")
+	builderWriteArray("Dependencies", pkgInfo.Depends, true)
 	if pkgInfo.Type == "source" {
-		appendArray("Runtime Dependencies", pkgInfo.RuntimeDepends)
-		appendArray("Make Dependencies", pkgInfo.MakeDepends)
+		builderWriteArray("Runtime Dependencies", pkgInfo.RuntimeDepends, true)
+		builderWriteArray("Make Dependencies", pkgInfo.MakeDepends, true)
 	}
-	appendArray("Runtime dependencies", pkgInfo.RuntimeDepends)
-	appendArray("Optional dependencies", pkgInfo.OptionalDepends)
+	builderWriteArray("Runtime dependencies", pkgInfo.RuntimeDepends, true)
+	builderWriteArray("Optional dependencies", pkgInfo.OptionalDepends, true)
 	dependants := pkgInfo.GetPackageDependants(rootDir)
 	if len(dependants) > 0 {
-		appendArray("Dependant packages", dependants)
+		builderWriteArray("Dependant packages", dependants, true)
 	}
 	optionalDependants := pkgInfo.GetPackageOptionalDependants(rootDir)
 	if len(optionalDependants) > 0 {
-		appendArray("Optionally dependant packages", optionalDependants)
+		builderWriteArray("Optionally dependant packages", optionalDependants, true)
 	}
-	appendArray("Conflicting packages", pkgInfo.Conflicts)
-	appendArray("Provided packages", pkgInfo.Provides)
-	appendArray("Replaces packages", pkgInfo.Replaces)
+	builderWriteArray("Conflicting packages", pkgInfo.Conflicts, true)
+	builderWriteArray("Provided packages", pkgInfo.Provides, true)
+	builderWriteArray("Replaces packages", pkgInfo.Replaces, true)
 
 	if pkgInfo.Type == "source" && len(pkgInfo.SplitPackages) != 0 {
 		splitPkgs := make([]string, len(pkgInfo.SplitPackages))
 		for i, splitPkgInfo := range pkgInfo.SplitPackages {
 			splitPkgs[i] = splitPkgInfo.Name
 		}
-		appendArray("Split Packages", splitPkgs)
+		builderWriteArray("Split Packages", splitPkgs, true)
 	}
 
 	if rootDir != "" && IsPackageInstalled(pkgInfo.Name, rootDir) {
@@ -607,10 +612,10 @@ func (pkgInfo *PackageInfo) CreateReadableInfo(rootDir string) string {
 		default:
 			installationReasonString = "Unknown"
 		}
-		ret = append(ret, "Installation Reason: "+installationReasonString)
+		builder.WriteString("Installation Reason: " + installationReasonString + "\n")
 	}
 
-	return strings.Join(ret, "\n")
+	return strings.TrimSpace(builder.String())
 }
 
 func extractPackage(bpmpkg *BPMPackage, verbose bool, filename, rootDir string) error {
