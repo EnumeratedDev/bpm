@@ -574,11 +574,21 @@ func (pkgInfo *PackageInfo) CreateReadableInfo(rootDir string) string {
 	builder.WriteString("Type: " + pkgInfo.Type + "\n")
 	builderWriteArray("Dependencies", pkgInfo.Depends, true)
 	if pkgInfo.Type == "source" {
-		builderWriteArray("Runtime Dependencies", pkgInfo.RuntimeDepends, true)
-		builderWriteArray("Make Dependencies", pkgInfo.MakeDepends, true)
+		builderWriteArray("Runtime dependencies", pkgInfo.RuntimeDepends, true)
+		builderWriteArray("Make dependencies", pkgInfo.MakeDepends, true)
 	}
 	builderWriteArray("Runtime dependencies", pkgInfo.RuntimeDepends, true)
-	builderWriteArray("Optional dependencies", pkgInfo.OptionalDepends, true)
+	if len(pkgInfo.OptionalDepends) > 0 {
+		builder.WriteString("Optional dependencies:\n")
+		for _, depend := range pkgInfo.OptionalDepends {
+			dependSplit := strings.SplitN(depend, ":", 2)
+			if len(dependSplit) == 2 {
+				builder.WriteString(fmt.Sprintf("  - %s (%s)\n", dependSplit[0], dependSplit[1]))
+			} else {
+				builder.WriteString("  - " + dependSplit[0] + "\n")
+			}
+		}
+	}
 	dependants := pkgInfo.GetPackageDependants(rootDir)
 	if len(dependants) > 0 {
 		builderWriteArray("Dependant packages", dependants, true)

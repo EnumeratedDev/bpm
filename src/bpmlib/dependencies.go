@@ -3,6 +3,7 @@ package bpmlib
 import (
 	"fmt"
 	"slices"
+	"strings"
 )
 
 type pkgInstallationReason struct {
@@ -25,6 +26,7 @@ func (pkgInfo *PackageInfo) GetDependencies(includeMakeDepends, includeRuntimeDe
 	}
 	if includeOptionalDepends {
 		for _, depend := range pkgInfo.OptionalDepends {
+			depend = strings.SplitN(depend, ":", 2)[0]
 			if !slices.ContainsFunc(allDepends, func(p pkgInstallationReason) bool {
 				return p.PkgName == depend
 			}) {
@@ -283,7 +285,7 @@ func (pkgInfo *PackageInfo) GetPackageOptionalDependants(rootDir string) (depend
 
 		// Add installed package to list if its optional dependencies include pkgName
 		if slices.ContainsFunc(installedPkg.OptionalDepends, func(n string) bool {
-			return n == pkgInfo.Name
+			return strings.SplitN(n, ":", 2)[0] == pkgInfo.Name
 		}) {
 			dependants = append(dependants, installedPkg.Name)
 			continue
@@ -293,7 +295,7 @@ func (pkgInfo *PackageInfo) GetPackageOptionalDependants(rootDir string) (depend
 		for _, vpkg := range pkgInfo.Provides {
 			// Add installed package to list if its optional dependencies contain a provided virtual package
 			if slices.ContainsFunc(installedPkg.OptionalDepends, func(n string) bool {
-				return n == vpkg
+				return strings.SplitN(n, ":", 2)[0] == vpkg
 			}) {
 				dependants = append(dependants, installedPkg.Name)
 				break

@@ -297,7 +297,9 @@ func (entry *BPMDatabaseEntry) GetEntryOptionalDependants() (dependants []string
 	dependantsMap := make(map[string][]string)
 	for _, db := range BPMDatabases {
 		for _, e := range db.Entries {
-			if slices.Contains(e.Info.OptionalDepends, entry.Info.Name) {
+			if slices.ContainsFunc(e.Info.OptionalDepends, func(n string) bool {
+				return strings.SplitN(n, ":", 2)[0] == entry.Info.Name
+			}) {
 				dependantsMap[e.Info.Name] = append(dependantsMap[e.Info.Name], e.Database.Name)
 			}
 		}
@@ -358,10 +360,20 @@ func (entry *BPMDatabaseEntry) CreateReadableInfo(rootDir string, humanReadableS
 	builder.WriteString("Type: " + entry.Info.Type + "\n")
 	builderWriteArray("Dependencies", entry.Info.Depends, true)
 	if entry.Info.Type == "source" {
-		builderWriteArray("Make Dependencies", entry.Info.MakeDepends, true)
+		builderWriteArray("Make dependencies", entry.Info.MakeDepends, true)
 	}
 	builderWriteArray("Runtime dependencies", entry.Info.RuntimeDepends, true)
-	builderWriteArray("Optional dependencies", entry.Info.OptionalDepends, true)
+	if len(entry.Info.OptionalDepends) > 0 {
+		builder.WriteString("Optional dependencies:\n")
+		for _, depend := range entry.Info.OptionalDepends {
+			dependSplit := strings.SplitN(depend, ":", 2)
+			if len(dependSplit) == 2 {
+				builder.WriteString(fmt.Sprintf("  - %s (%s)\n", dependSplit[0], dependSplit[1]))
+			} else {
+				builder.WriteString("  - " + dependSplit[0] + "\n")
+			}
+		}
+	}
 	dependants := entry.GetEntryDependants()
 	if len(dependants) > 0 {
 		builderWriteArray("Dependant packages", dependants, false)

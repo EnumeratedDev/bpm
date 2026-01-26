@@ -485,17 +485,25 @@ func (operation *BPMOperation) GetOptionalDependencies() (optionalDepends map[st
 		}
 
 		for _, depend := range pkgInfo.OptionalDepends {
+			dependSplit := strings.SplitN(depend, ":", 2)
+
 			// Skip if dependency is already installed
-			if IsPackageInstalled(depend, operation.RootDir) {
+			if IsPackageInstalled(dependSplit[0], operation.RootDir) {
 				continue
 			}
 
 			// Skip if not a new dependency of the package
-			if installedPkg := GetPackage(pkgInfo.Name, operation.RootDir); installedPkg != nil && slices.Contains(installedPkg.PkgInfo.OptionalDepends, depend) {
+			if installedPkg := GetPackage(pkgInfo.Name, operation.RootDir); installedPkg != nil && slices.ContainsFunc(installedPkg.PkgInfo.OptionalDepends, func(n string) bool {
+				return strings.SplitN(n, ":", 2)[0] == dependSplit[0]
+			}) {
 				continue
 			}
 
-			optionalDepends[pkgInfo.Name] = append(optionalDepends[pkgInfo.Name], depend)
+			if len(dependSplit) == 2 {
+				optionalDepends[pkgInfo.Name] = append(optionalDepends[pkgInfo.Name], fmt.Sprintf("%s (%s)", dependSplit[0], dependSplit[1]))
+			} else {
+				optionalDepends[pkgInfo.Name] = append(optionalDepends[pkgInfo.Name], dependSplit[0])
+			}
 		}
 	}
 
