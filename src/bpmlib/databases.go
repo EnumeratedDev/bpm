@@ -326,6 +326,11 @@ func (entry *BPMDatabaseEntry) GetEntryOptionalDependants() (dependants []string
 
 func (entry *BPMDatabaseEntry) CreateReadableInfo(rootDir string, humanReadableSize bool) string {
 	builder := strings.Builder{}
+	builderWriteStringNotEmpty := func(label string, value string) {
+		if value != "" {
+			builder.WriteString(label + ": " + value + "\n")
+		}
+	}
 	builderWriteArray := func(label string, array []string, sort bool) {
 		if len(array) == 0 {
 			return
@@ -342,22 +347,21 @@ func (entry *BPMDatabaseEntry) CreateReadableInfo(rootDir string, humanReadableS
 		}
 	}
 
+	// Main information
 	builder.WriteString("Name: " + entry.Info.Name + "\n")
 	builder.WriteString("Database: " + entry.Database.Name + "\n")
 	builder.WriteString("Description: " + entry.Info.Description + "\n")
 	builder.WriteString("Version: " + entry.Info.GetFullVersion() + "\n")
-	if entry.Info.Url != "" {
-		builder.WriteString("URL: " + entry.Info.Url + "\n")
-	}
-	if entry.Info.License != "" {
-		builder.WriteString("License: " + entry.Info.License + "\n")
-	}
+	builderWriteStringNotEmpty("URL", entry.Info.Url)
+	builderWriteStringNotEmpty("License", entry.Info.License)
 	builderWriteArray("Maintainers", entry.Info.Maintainers, false)
 	builder.WriteString("Architecture: " + entry.Info.Arch + "\n")
 	if entry.Info.Type == "source" && entry.Info.OutputArch != "" && entry.Info.OutputArch != GetArch() {
 		builder.WriteString("Output architecture: " + entry.Info.OutputArch + "\n")
 	}
 	builder.WriteString("Type: " + entry.Info.Type + "\n")
+
+	// Dependencies
 	builderWriteArray("Dependencies", entry.Info.Depends, true)
 	if entry.Info.Type == "source" {
 		builderWriteArray("Make dependencies", entry.Info.MakeDepends, true)
@@ -374,26 +378,24 @@ func (entry *BPMDatabaseEntry) CreateReadableInfo(rootDir string, humanReadableS
 			}
 		}
 	}
-	dependants := entry.GetEntryDependants()
-	if len(dependants) > 0 {
-		builderWriteArray("Dependant packages", dependants, false)
-	}
-	optionalDependants := entry.GetEntryOptionalDependants()
-	if len(optionalDependants) > 0 {
-		builderWriteArray("Optionally dependant packages", optionalDependants, false)
-	}
+	builderWriteArray("Dependant packages", entry.GetEntryDependants(), true)
+	builderWriteArray("Optionally dependant packages", entry.GetEntryOptionalDependants(), true)
+
+	// Other package relations
 	builderWriteArray("Conflicting packages", entry.Info.Conflicts, true)
 	builderWriteArray("Provided packages", entry.Info.Provides, true)
 	builderWriteArray("Replaces packages", entry.Info.Replaces, true)
 
+	// Split packages
 	if entry.Info.Type == "source" && len(entry.Info.SplitPackages) != 0 {
 		splitPkgs := make([]string, len(entry.Info.SplitPackages))
 		for i, splitPkgInfo := range entry.Info.SplitPackages {
 			splitPkgs[i] = splitPkgInfo.Name
 		}
-		builderWriteArray("Split Packages", splitPkgs, true)
+		builderWriteArray("Split packages", splitPkgs, true)
 	}
 
+	// Installation reason
 	if rootDir != "" && IsPackageInstalled(entry.Info.Name, rootDir) {
 		installationReason := GetInstallationReason(entry.Info.Name, rootDir)
 		var installationReasonString string
@@ -407,8 +409,10 @@ func (entry *BPMDatabaseEntry) CreateReadableInfo(rootDir string, humanReadableS
 		default:
 			installationReasonString = "Unknown"
 		}
-		builder.WriteString("Installation Reason: " + installationReasonString + "\n")
+		builder.WriteString("Installation reason: " + installationReasonString + "\n")
 	}
+
+	// Installed size
 	if entry.Info.Type == "binary" {
 		installedSize := entry.InstalledSize
 		var installedSizeStr string
@@ -419,5 +423,6 @@ func (entry *BPMDatabaseEntry) CreateReadableInfo(rootDir string, humanReadableS
 		}
 		builder.WriteString("Installed size: " + installedSizeStr + "\n")
 	}
+
 	return strings.TrimSpace(builder.String())
 }

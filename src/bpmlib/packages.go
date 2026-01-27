@@ -541,6 +541,11 @@ func ReadPackageInfo(contents string) (*PackageInfo, error) {
 
 func (pkgInfo *PackageInfo) CreateReadableInfo(rootDir string) string {
 	builder := strings.Builder{}
+	builderWriteStringNotEmpty := func(label string, value string) {
+		if value != "" {
+			builder.WriteString(label + ": " + value + "\n")
+		}
+	}
 	builderWriteArray := func(label string, array []string, sort bool) {
 		if len(array) == 0 {
 			return
@@ -557,24 +562,22 @@ func (pkgInfo *PackageInfo) CreateReadableInfo(rootDir string) string {
 		}
 	}
 
+	// Main information
 	builder.WriteString("Name: " + pkgInfo.Name + "\n")
 	builder.WriteString("Description: " + pkgInfo.Description + "\n")
 	builder.WriteString("Version: " + pkgInfo.GetFullVersion() + "\n")
-	if pkgInfo.Url != "" {
-		builder.WriteString("URL: " + pkgInfo.Url + "\n")
-	}
-	if pkgInfo.License != "" {
-		builder.WriteString("License: " + pkgInfo.License + "\n")
-	}
+	builderWriteStringNotEmpty("URL", pkgInfo.Url)
+	builderWriteStringNotEmpty("License", pkgInfo.License)
 	builderWriteArray("Maintainers", pkgInfo.Maintainers, false)
 	builder.WriteString("Architecture: " + pkgInfo.Arch + "\n")
 	if pkgInfo.Type == "source" && pkgInfo.OutputArch != "" && pkgInfo.OutputArch != GetArch() {
-		builder.WriteString("Output architecture: " + pkgInfo.Arch + "\n")
+		builder.WriteString("Output architecture: " + pkgInfo.OutputArch + "\n")
 	}
 	builder.WriteString("Type: " + pkgInfo.Type + "\n")
+
+	// Dependencies
 	builderWriteArray("Dependencies", pkgInfo.Depends, true)
 	if pkgInfo.Type == "source" {
-		builderWriteArray("Runtime dependencies", pkgInfo.RuntimeDepends, true)
 		builderWriteArray("Make dependencies", pkgInfo.MakeDepends, true)
 	}
 	builderWriteArray("Runtime dependencies", pkgInfo.RuntimeDepends, true)
@@ -589,26 +592,24 @@ func (pkgInfo *PackageInfo) CreateReadableInfo(rootDir string) string {
 			}
 		}
 	}
-	dependants := pkgInfo.GetPackageDependants(rootDir)
-	if len(dependants) > 0 {
-		builderWriteArray("Dependant packages", dependants, true)
-	}
-	optionalDependants := pkgInfo.GetPackageOptionalDependants(rootDir)
-	if len(optionalDependants) > 0 {
-		builderWriteArray("Optionally dependant packages", optionalDependants, true)
-	}
+	builderWriteArray("Dependant packages", pkgInfo.GetPackageDependants(rootDir), true)
+	builderWriteArray("Optionally dependant packages", pkgInfo.GetPackageOptionalDependants(rootDir), true)
+
+	// Other package relations
 	builderWriteArray("Conflicting packages", pkgInfo.Conflicts, true)
 	builderWriteArray("Provided packages", pkgInfo.Provides, true)
 	builderWriteArray("Replaces packages", pkgInfo.Replaces, true)
 
+	// Split packages
 	if pkgInfo.Type == "source" && len(pkgInfo.SplitPackages) != 0 {
 		splitPkgs := make([]string, len(pkgInfo.SplitPackages))
 		for i, splitPkgInfo := range pkgInfo.SplitPackages {
 			splitPkgs[i] = splitPkgInfo.Name
 		}
-		builderWriteArray("Split Packages", splitPkgs, true)
+		builderWriteArray("Split packages", splitPkgs, true)
 	}
 
+	// Installation reason
 	if rootDir != "" && IsPackageInstalled(pkgInfo.Name, rootDir) {
 		installationReason := GetInstallationReason(pkgInfo.Name, rootDir)
 		var installationReasonString string
@@ -622,7 +623,7 @@ func (pkgInfo *PackageInfo) CreateReadableInfo(rootDir string) string {
 		default:
 			installationReasonString = "Unknown"
 		}
-		builder.WriteString("Installation Reason: " + installationReasonString + "\n")
+		builder.WriteString("Installation reason: " + installationReasonString + "\n")
 	}
 
 	return strings.TrimSpace(builder.String())
