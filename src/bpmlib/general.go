@@ -20,12 +20,13 @@ const (
 )
 
 // InstallPackages installs the specified packages into the given root directory by fetching them from databases or directly from local bpm archives
-func InstallPackages(rootDir string, forceInstallationReason InstallationReason, reinstallMethod ReinstallMethod, installRuntimeDependencies, installOptionalDependencies, forceInstallation, verbose bool, packages ...string) (operation *BPMOperation, err error) {
+func InstallPackages(rootDir string, forceInstallationReason InstallationReason, reinstallMethod ReinstallMethod, installRuntimeDependencies, installOptionalDependencies, forceInstallation, runChecks bool, verbose bool, packages ...string) (operation *BPMOperation, err error) {
 	// Setup operation struct
 	operation = &BPMOperation{
 		Actions:           make([]OperationAction, 0),
 		UnresolvedDepends: make([]string, 0),
 		Changes:           make(map[string]string),
+		RunChecks:         runChecks,
 		RootDir:           rootDir,
 		compiledPackages:  make(map[string]string),
 	}
@@ -365,7 +366,7 @@ func CleanupCache(rootDir string, cleanupCompilationFiles, cleanupCompiledPackag
 }
 
 // UpdatePackages fetches the newest versions of all installed packages from
-func UpdatePackages(rootDir string, syncDatabase bool, allowDowngrades bool, installOptionalDependencies, forceInstallation, verbose bool) (operation *BPMOperation, err error) {
+func UpdatePackages(rootDir string, syncDatabase bool, allowDowngrades bool, installOptionalDependencies, forceInstallation, runChecks, verbose bool) (operation *BPMOperation, err error) {
 	// Sync databases
 	if syncDatabase {
 		err := SyncDatabase(verbose)
@@ -397,6 +398,7 @@ func UpdatePackages(rootDir string, syncDatabase bool, allowDowngrades bool, ins
 		Actions:           make([]OperationAction, 0),
 		UnresolvedDepends: make([]string, 0),
 		Changes:           make(map[string]string),
+		RunChecks:         runChecks,
 		RootDir:           rootDir,
 		compiledPackages:  make(map[string]string),
 	}

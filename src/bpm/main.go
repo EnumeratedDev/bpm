@@ -93,6 +93,7 @@ func main() {
 		currentFlagSet.BoolP("reinstall", "r", false, "Reinstall the specified packages")
 		currentFlagSet.BoolP("reinstall-all", "a", false, "Reinstall the specified packages and their dependencies")
 		currentFlagSet.IntP("jobs", "j", bpmlib.CompilationBPMConfig.CompilationJobs, "Set the amount of concurrent processes to use for source package compilation")
+		currentFlagSet.BoolP("skip-checks", "s", false, "Skip the check function in source.sh scripts")
 		setupFlagsAndHelp(currentFlagSet, fmt.Sprintf("bpm %s <options>", subcommand), "Install the specified packages", os.Args[2:])
 
 		installPackages()
@@ -142,6 +143,7 @@ func main() {
 		currentFlagSet.BoolP("no-sync", "n", false, "Do not sync databases")
 		currentFlagSet.Bool("allow-downgrades", false, "Allow package downgrades")
 		currentFlagSet.BoolP("optional", "o", false, "Install all optional dependencies")
+		currentFlagSet.BoolP("skip-checks", "s", false, "Skip the check function in source.sh scripts")
 		currentFlagSet.IntP("jobs", "j", bpmlib.CompilationBPMConfig.CompilationJobs, "Set the amount of concurrent processes to use for source package compilation")
 		setupFlagsAndHelp(currentFlagSet, fmt.Sprintf("bpm %s <options>", subcommand), "Update installed packages", os.Args[2:])
 
@@ -489,6 +491,7 @@ func installPackages() {
 	installationReason, _ := currentFlagSet.GetString("installation-reason")
 	reinstall, _ := currentFlagSet.GetBool("reinstall")
 	reinstallAll, _ := currentFlagSet.GetBool("reinstall-all")
+	skipChecks, _ := currentFlagSet.GetBool("skip-checks")
 	compilationJobs, _ := currentFlagSet.GetInt("jobs")
 
 	// Get packages
@@ -549,7 +552,7 @@ func installPackages() {
 	}
 
 	// Create installation operation
-	operation, err := bpmlib.InstallPackages(rootDir, ir, reinstallMethod, installRuntime, installOptional, force, verbose, packages...)
+	operation, err := bpmlib.InstallPackages(rootDir, ir, reinstallMethod, installRuntime, installOptional, force, !skipChecks, verbose, packages...)
 	if errors.As(err, &bpmlib.PackageNotFoundErr{}) || errors.As(err, &bpmlib.DependencyNotFoundErr{}) || errors.As(err, &bpmlib.PackageConflictErr{}) {
 		log.Printf("Error: %s", err)
 		exitCode = 1
@@ -907,6 +910,7 @@ func updatePackages() {
 	noSync, _ := currentFlagSet.GetBool("no-sync")
 	allowDowngrades, _ := currentFlagSet.GetBool("allow-downgrades")
 	installOptional, _ := currentFlagSet.GetBool("optional")
+	skipChecks, _ := currentFlagSet.GetBool("skip-checks")
 	compilationJobs, _ := currentFlagSet.GetInt("jobs")
 
 	// Check for required permissions
@@ -945,7 +949,7 @@ func updatePackages() {
 	}
 
 	// Create update operation
-	operation, err := bpmlib.UpdatePackages(rootDir, !noSync, allowDowngrades, installOptional, force, verbose)
+	operation, err := bpmlib.UpdatePackages(rootDir, !noSync, allowDowngrades, installOptional, force, !skipChecks, verbose)
 	if errors.As(err, &bpmlib.PackageNotFoundErr{}) || errors.As(err, &bpmlib.DependencyNotFoundErr{}) || errors.As(err, &bpmlib.PackageConflictErr{}) {
 		log.Printf("Error: %s", err)
 		exitCode = 1
