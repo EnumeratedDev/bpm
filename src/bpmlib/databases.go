@@ -365,6 +365,7 @@ func (entry *BPMDatabaseEntry) CreateReadableInfo(rootDir string, humanReadableS
 	builderWriteArray("Dependencies", entry.Info.Depends, true)
 	if entry.Info.Type == "source" {
 		builderWriteArray("Make dependencies", entry.Info.MakeDepends, true)
+		builderWriteArray("Check dependencies", entry.Info.CheckDepends, true)
 	}
 	builderWriteArray("Runtime dependencies", entry.Info.RuntimeDepends, true)
 	if len(entry.Info.OptionalDepends) > 0 {

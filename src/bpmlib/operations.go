@@ -147,7 +147,7 @@ func (operation *BPMOperation) ResolveDependencies(reinstallDependencies, instal
 			continue
 		}
 
-		resolved, unresolved := ResolveAllPackageDependenciesFromDatabases(pkgInfo, resolvedVirtualPkgs, pkgInfo.Type == "source", installRuntimeDependencies, installOptionalDependencies, !reinstallDependencies, verbose, operation.RootDir)
+		resolved, unresolved := ResolveAllPackageDependenciesFromDatabases(pkgInfo, resolvedVirtualPkgs, pkgInfo.Type == "source", pkgInfo.Type == "source" && operation.RunChecks, installRuntimeDependencies, installOptionalDependencies, !reinstallDependencies, verbose, operation.RootDir)
 
 		operation.UnresolvedDepends = append(operation.UnresolvedDepends, unresolved...)
 
@@ -233,7 +233,7 @@ func (operation *BPMOperation) Cleanup(cleanupMakeDepends bool) error {
 		}
 
 		keepPackages = append(keepPackages, pkg.Name)
-		resolved := pkg.GetDependenciesRecursive(true, !cleanupMakeDepends, operation.RootDir)
+		resolved := pkg.GetDependenciesRecursive(true, !cleanupMakeDepends, !cleanupMakeDepends, operation.RootDir)
 		for _, value := range resolved {
 			if !slices.Contains(keepPackages, value) && !slices.Contains(MainBPMConfig.IgnorePackages, value) {
 				keepPackages = append(keepPackages, value)

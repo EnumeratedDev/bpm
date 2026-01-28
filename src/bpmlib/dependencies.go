@@ -11,7 +11,7 @@ type pkgInstallationReason struct {
 	InstallationReason InstallationReason
 }
 
-func (pkgInfo *PackageInfo) GetDependencies(includeMakeDepends, includeRuntimeDepends, includeOptionalDepends bool) []pkgInstallationReason {
+func (pkgInfo *PackageInfo) GetDependencies(includeMakeDepends, includeCheckDepends, includeRuntimeDepends, includeOptionalDepends bool) []pkgInstallationReason {
 	allDepends := make([]pkgInstallationReason, 0)
 
 	for _, depend := range pkgInfo.Depends {
@@ -61,6 +61,18 @@ func (pkgInfo *PackageInfo) GetDependencies(includeMakeDepends, includeRuntimeDe
 			}
 		}
 	}
+	if includeCheckDepends {
+		for _, depend := range pkgInfo.CheckDepends {
+			if !slices.ContainsFunc(allDepends, func(p pkgInstallationReason) bool {
+				return p.PkgName == depend
+			}) {
+				allDepends = append(allDepends, pkgInstallationReason{
+					PkgName:            depend,
+					InstallationReason: InstallationReasonMakeDependency,
+				})
+			}
+		}
+	}
 
 	// Skip ignored packages
 	allDepends = slices.DeleteFunc(allDepends, func(depend pkgInstallationReason) bool {
@@ -70,23 +82,23 @@ func (pkgInfo *PackageInfo) GetDependencies(includeMakeDepends, includeRuntimeDe
 	return allDepends
 }
 
-func (pkgInfo *PackageInfo) GetDependenciesRecursive(includeRuntimeDepends, includeMakeDepends bool, rootDir string) (resolved []string) {
+func (pkgInfo *PackageInfo) GetDependenciesRecursive(includeRuntimeDepends, includeCheckDepends, includeMakeDepends bool, rootDir string) (resolved []string) {
 	// Initialize slices
 	resolved = make([]string, 0)
 	unresolved := make([]string, 0)
 
 	// Call unexported function
-	pkgInfo.getDependenciesRecursive(&resolved, &unresolved, includeRuntimeDepends, includeMakeDepends, rootDir)
+	pkgInfo.getDependenciesRecursive(&resolved, &unresolved, includeRuntimeDepends, includeMakeDepends, includeCheckDepends, rootDir)
 
 	return resolved
 }
 
-func (pkgInfo *PackageInfo) getDependenciesRecursive(resolved *[]string, unresolved *[]string, includeRuntimeDepends, includeMakeDepends bool, rootDir string) {
+func (pkgInfo *PackageInfo) getDependenciesRecursive(resolved *[]string, unresolved *[]string, includeRuntimeDepends, includeMakeDepends, includeCheckDepends bool, rootDir string) {
 	// Add current package name to unresolved slice
 	*unresolved = append(*unresolved, pkgInfo.Name)
 
 	// Loop through all dependencies
-	for _, pkgIR := range pkgInfo.GetDependencies(includeMakeDepends, includeRuntimeDepends, false) {
+	for _, pkgIR := range pkgInfo.GetDependencies(includeMakeDepends, includeCheckDepends, includeRuntimeDepends, false) {
 		depend := pkgIR.PkgName
 
 		if isVirtual, p := IsVirtualPackage(depend, rootDir); isVirtual {
@@ -105,7 +117,7 @@ func (pkgInfo *PackageInfo) getDependenciesRecursive(resolved *[]string, unresol
 			dependInfo := GetPackageInfo(depend, rootDir)
 
 			if dependInfo != nil {
-				dependInfo.getDependenciesRecursive(resolved, unresolved, includeRuntimeDepends, includeMakeDepends, rootDir)
+				dependInfo.getDependenciesRecursive(resolved, unresolved, includeRuntimeDepends, includeMakeDepends, includeCheckDepends, rootDir)
 			}
 		}
 	}
@@ -115,7 +127,7 @@ func (pkgInfo *PackageInfo) getDependenciesRecursive(resolved *[]string, unresol
 	*unresolved = stringSliceRemove(*unresolved, pkgInfo.Name)
 }
 
-func ResolveAllPackageDependenciesFromDatabases(pkgInfo *PackageInfo, resolvedVirtualPkgs map[string]string, checkMake, checkRuntime, checkOptional, ignoreInstalled, verbose bool, rootDir string) (resolved []pkgInstallationReason, unresolved []string) {
+func ResolveAllPackageDependenciesFromDatabases(pkgInfo *PackageInfo, resolvedVirtualPkgs map[string]string, checkMake, checkCheck, checkRuntime, checkOptional, ignoreInstalled, verbose bool, rootDir string) (resolved []pkgInstallationReason, unresolved []string) {
 	// Initialize slices and maps
 	resolved = make([]pkgInstallationReason, 0)
 	unresolved = make([]string, 0)
@@ -124,7 +136,7 @@ func ResolveAllPackageDependenciesFromDatabases(pkgInfo *PackageInfo, resolvedVi
 	}
 
 	// Call unexported function
-	resolvePackageDependenciesFromDatabase(&resolved, &unresolved, resolvedVirtualPkgs, pkgInfo, checkMake, checkRuntime, checkOptional, ignoreInstalled, verbose, rootDir)
+	resolvePackageDependenciesFromDatabase(&resolved, &unresolved, resolvedVirtualPkgs, pkgInfo, checkMake, checkCheck, checkRuntime, checkOptional, ignoreInstalled, verbose, rootDir)
 
 	// Remove main package from unresolved slice
 	unresolved = stringSliceRemove(unresolved, pkgInfo.Name)
@@ -132,7 +144,7 @@ func ResolveAllPackageDependenciesFromDatabases(pkgInfo *PackageInfo, resolvedVi
 	return resolved, unresolved
 }
 
-func resolvePackageDependenciesFromDatabase(resolved *[]pkgInstallationReason, unresolved *[]string, resolvedVirtualPkgs map[string]string, pkgInfo *PackageInfo, checkMake, checkRuntime, checkOptional, ignoreInstalled, verbose bool, rootDir string) {
+func resolvePackageDependenciesFromDatabase(resolved *[]pkgInstallationReason, unresolved *[]string, resolvedVirtualPkgs map[string]string, pkgInfo *PackageInfo, checkMake, checkCheck, checkRuntime, checkOptional, ignoreInstalled, verbose bool, rootDir string) {
 	// Add current package name to unresolved slice
 	*unresolved = append(*unresolved, pkgInfo.Name)
 
@@ -143,7 +155,7 @@ func resolvePackageDependenciesFromDatabase(resolved *[]pkgInstallationReason, u
 	}
 
 	// Loop through all dependencies
-	for _, pkgIR := range pkgInfo.GetDependencies(pkgInfo.Type == "source", checkRuntime, checkOptional) {
+	for _, pkgIR := range pkgInfo.GetDependencies(pkgInfo.Type == "source", pkgInfo.Type == "source" && checkCheck, checkRuntime, checkOptional) {
 		// Skip dependency if it has already been resolved
 		if slices.ContainsFunc(*resolved, func(p pkgInstallationReason) bool {
 			return p.PkgName == pkgIR.PkgName
@@ -201,7 +213,7 @@ func resolvePackageDependenciesFromDatabase(resolved *[]pkgInstallationReason, u
 		}
 
 		// Resolve the dependencies of this dependency
-		resolvePackageDependenciesFromDatabase(resolved, unresolved, resolvedVirtualPkgs, entry.Info, checkMake, checkRuntime, false, ignoreInstalled, verbose, rootDir)
+		resolvePackageDependenciesFromDatabase(resolved, unresolved, resolvedVirtualPkgs, entry.Info, checkMake, checkCheck, checkRuntime, false, ignoreInstalled, verbose, rootDir)
 
 		// Move dependency from the unresolved slice to the resolved slice
 		if !slices.ContainsFunc(*resolved, func(p pkgInstallationReason) bool {

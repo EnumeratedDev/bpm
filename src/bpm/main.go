@@ -1183,7 +1183,7 @@ func compilePackage() {
 
 		// Get direct common and make dependencies
 		totalDepends := make([]string, 0)
-		for _, depend := range bpmpkg.PkgInfo.GetDependencies(true, false, false) {
+		for _, depend := range bpmpkg.PkgInfo.GetDependencies(true, !skipChecks, false, false) {
 			if !slices.Contains(totalDepends, depend.PkgName) {
 				totalDepends = append(totalDepends, depend.PkgName)
 			}

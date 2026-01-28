@@ -41,6 +41,7 @@ type PackageInfo struct {
 	RuntimeDepends  []string          `yaml:"runtime_depends,omitempty"`
 	OptionalDepends []string          `yaml:"optional_depends,omitempty"`
 	MakeDepends     []string          `yaml:"make_depends,omitempty"`
+	CheckDepends    []string          `yaml:"check_depends,omitempty"`
 	Conflicts       []string          `yaml:"conflicts,omitempty"`
 	Replaces        []string          `yaml:"replaces,omitempty"`
 	Provides        []string          `yaml:"provides,omitempty"`
@@ -133,14 +134,17 @@ func GetInstallationReason(pkg, rootDir string) InstallationReason {
 		return InstallationReasonUnknown
 	}
 	reason := strings.TrimSpace(string(b))
-	if reason == "manual" {
+
+	switch reason {
+	case "manual":
 		return InstallationReasonManual
-	} else if reason == "dependency" {
+	case "dependency":
 		return InstallationReasonDependency
-	} else if reason == "make_dependency" {
+	case "make_dependency":
 		return InstallationReasonMakeDependency
+	default:
+		return InstallationReasonUnknown
 	}
-	return InstallationReasonUnknown
 }
 
 func SetInstallationReason(pkg string, reason InstallationReason, rootDir string) error {
@@ -579,6 +583,7 @@ func (pkgInfo *PackageInfo) CreateReadableInfo(rootDir string) string {
 	builderWriteArray("Dependencies", pkgInfo.Depends, true)
 	if pkgInfo.Type == "source" {
 		builderWriteArray("Make dependencies", pkgInfo.MakeDepends, true)
+		builderWriteArray("Check dependencies", pkgInfo.CheckDepends, true)
 	}
 	builderWriteArray("Runtime dependencies", pkgInfo.RuntimeDepends, true)
 	if len(pkgInfo.OptionalDepends) > 0 {
