@@ -456,6 +456,24 @@ func CompileSourcePackage(archiveFilename, outputDirectory string, compilationJo
 }
 
 func downloadPackageFiles(pkgInfo *PackageInfo, tempDirectory string, verbose bool) error {
+	// Get UID and GID to use for compilation
+	var uid, gid int
+	if os.Getuid() == 0 {
+		_uid, err := strconv.ParseInt(rootCompilationUID, 10, 32)
+		if err != nil {
+			return fmt.Errorf("could not convert UID '%s' to int", rootCompilationUID)
+		}
+		_gid, err := strconv.ParseInt(rootCompilationGID, 10, 32)
+		if err != nil {
+			return fmt.Errorf("could not convert GID '%s' to int", rootCompilationGID)
+		}
+		uid = int(_uid)
+		gid = int(_gid)
+	} else {
+		uid = os.Getuid()
+		gid = os.Getgid()
+	}
+
 	for _, download := range pkgInfo.Downloads {
 		// Replace variables
 		replaceVars := func(s string) string {
@@ -534,12 +552,22 @@ func downloadPackageFiles(pkgInfo *PackageInfo, tempDirectory string, verbose bo
 				fmt.Println("Skipping checksum checking...")
 			}
 
+			// Change downloaded file ownership
+			err = os.Chown(filepath, uid, gid)
+			if err != nil {
+				return err
+			}
+
 			if !download.NoExtract && (strings.Contains(filepath, ".tar") || strings.HasSuffix(filepath, ".tgz")) {
 				cmd := exec.Command("tar", "xf", filepath, "--strip-components="+strconv.Itoa(download.ExtractStripComponents))
 				if verbose {
 					cmd.Args[1] = "xvf"
 				}
 				cmd.Dir = tempDirectory
+				if os.Getuid() == 0 {
+					cmd.SysProcAttr = &syscall.SysProcAttr{}
+					cmd.SysProcAttr.Credential = &syscall.Credential{Uid: uint32(uid), Gid: uint32(gid)}
+				}
 				if extractTo != "" {
 					err := os.MkdirAll(extractTo, 0755)
 					if err != nil {
@@ -557,6 +585,11 @@ func downloadPackageFiles(pkgInfo *PackageInfo, tempDirectory string, verbose bo
 				}
 			} else if !download.NoExtract && strings.HasSuffix(filepath, ".zip") {
 				cmd := exec.Command("unzip", filepath)
+				cmd.Dir = tempDirectory
+				if os.Getuid() == 0 {
+					cmd.SysProcAttr = &syscall.SysProcAttr{}
+					cmd.SysProcAttr.Credential = &syscall.Credential{Uid: uint32(uid), Gid: uint32(gid)}
+				}
 				if extractTo != "" {
 					err := os.MkdirAll(extractTo, 0755)
 					if err != nil {
@@ -601,6 +634,10 @@ func downloadPackageFiles(pkgInfo *PackageInfo, tempDirectory string, verbose bo
 
 			cmd := exec.Command("git", "clone", "--depth=1", downloadUrl)
 			cmd.Dir = tempDirectory
+			if os.Getuid() == 0 {
+				cmd.SysProcAttr = &syscall.SysProcAttr{}
+				cmd.SysProcAttr.Credential = &syscall.Credential{Uid: uint32(uid), Gid: uint32(gid)}
+			}
 			if gitBranch != "" {
 				cmd.Args = slices.Insert(cmd.Args, len(cmd.Args)-1, "--branch="+gitBranch)
 			}
