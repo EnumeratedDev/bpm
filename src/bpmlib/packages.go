@@ -16,13 +16,15 @@ import (
 	"strconv"
 	"strings"
 	"syscall"
+	"time"
 
 	"gopkg.in/yaml.v3"
 )
 
 type BPMPackage struct {
-	PkgInfo  *PackageInfo
-	PkgFiles []*PackageFileEntry
+	PkgInfo   *PackageInfo
+	PkgFiles  []*PackageFileEntry
+	LocalInfo PackageLocalInfo
 }
 
 type PackageInfo struct {
@@ -73,6 +75,11 @@ type PackageFileEntry struct {
 	UserID      int
 	GroupID     int
 	SizeInBytes int64
+}
+
+type PackageLocalInfo struct {
+	InstalledOn   int64 `yaml:"installed_on"`
+	LastUpdatedOn int64 `yaml:"last_updated_on"`
 }
 
 func (pkg *BPMPackage) GetInstalledSize() int64 {
@@ -975,6 +982,24 @@ func installPackage(filename, rootDir string, verbose, force bool) error {
 		return err
 	}
 	err = f.Close()
+	if err != nil {
+		return err
+	}
+
+	// Write local package information
+	localInfo := getPackageLocalInfo(bpmpkg.PkgInfo.Name, rootDir)
+	if !packageInstalled {
+		localInfo.InstalledOn = time.Now().Unix()
+	}
+	localInfo.LastUpdatedOn = time.Now().Unix()
+
+	localFile, err := os.OpenFile(path.Join(pkgDir, "local"), os.O_WRONLY|os.O_CREATE, 0644)
+	if err != nil {
+		return err
+	}
+	defer localFile.Close()
+
+	err = yaml.NewEncoder(localFile).Encode(localInfo)
 	if err != nil {
 		return err
 	}

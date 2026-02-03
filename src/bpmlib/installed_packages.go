@@ -7,6 +7,8 @@ import (
 	"slices"
 	"strconv"
 	"strings"
+
+	"gopkg.in/yaml.v3"
 )
 
 var localPackageInformation map[string]map[string]*PackageInfo = make(map[string]map[string]*PackageInfo)
@@ -144,10 +146,12 @@ func GetPackage(pkg, rootDir string) *BPMPackage {
 	}
 
 	files := getPackageFiles(pkgInfo.Name, rootDir)
+	localInfo := getPackageLocalInfo(pkgInfo.Name, rootDir)
 
 	return &BPMPackage{
-		PkgInfo:  pkgInfo,
-		PkgFiles: files,
+		PkgInfo:   pkgInfo,
+		PkgFiles:  files,
+		LocalInfo: localInfo,
 	}
 }
 
@@ -233,4 +237,29 @@ func getPackageFiles(pkg, rootDir string) []*PackageFileEntry {
 	}
 
 	return pkgFiles
+}
+
+func getPackageLocalInfo(pkg, rootDir string) PackageLocalInfo {
+	localInfo := PackageLocalInfo{}
+
+	installedDir := path.Join(rootDir, "var/lib/bpm/installed/")
+	pkgDir := path.Join(installedDir, pkg)
+	files := path.Join(pkgDir, "local")
+
+	if _, err := os.Stat(files); os.IsNotExist(err) {
+		return localInfo
+	}
+
+	file, err := os.Open(files)
+	if err != nil {
+		return localInfo
+	}
+	defer file.Close()
+
+	err = yaml.NewDecoder(file).Decode(&localInfo)
+	if err != nil {
+		return localInfo
+	}
+
+	return localInfo
 }

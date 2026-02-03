@@ -13,6 +13,7 @@ import (
 	"slices"
 	"sort"
 	"strings"
+	"time"
 
 	"github.com/EnumeratedDev/bpm/src/bpmlib"
 
@@ -270,6 +271,14 @@ func showPackageInfo() {
 				fmt.Printf("Installed size: %s\n", bpmlib.BytesToHumanReadable(bpmpkg.GetInstalledSize()))
 			}
 		}
+
+		if bpmlib.IsPackageInstalled(bpmpkg.PkgInfo.Name, rootDir) {
+			format := "02/01/2006 15:04"
+			installedOnDate := time.Unix(bpmpkg.LocalInfo.InstalledOn, 0).Format(format)
+			lastUpdatedOn := time.Unix(bpmpkg.LocalInfo.LastUpdatedOn, 0).Format(format)
+			fmt.Printf("Installed on: %s\n", installedOnDate)
+			fmt.Printf("Last updated on: %s\n", lastUpdatedOn)
+		}
 	}
 }
 
@@ -420,6 +429,14 @@ func showPackageList() {
 						fmt.Printf("Installed size: %s\n", bpmlib.BytesToHumanReadable(pkg.installedSize))
 					}
 				}
+
+				localInfo := bpmlib.GetPackage(pkg.pkgInfo.Name, rootDir).LocalInfo
+				format := "02/01/2006 15:04"
+				installedOnDate := time.Unix(localInfo.InstalledOn, 0).Format(format)
+				lastUpdatedOn := time.Unix(localInfo.LastUpdatedOn, 0).Format(format)
+				fmt.Printf("Installed on: %s\n", installedOnDate)
+				fmt.Printf("Last updated on: %s\n", lastUpdatedOn)
+
 			}
 		}
 	}
