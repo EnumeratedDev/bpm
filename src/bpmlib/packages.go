@@ -78,8 +78,9 @@ type PackageFileEntry struct {
 }
 
 type PackageLocalInfo struct {
-	InstalledOn   int64 `yaml:"installed_on"`
-	LastUpdatedOn int64 `yaml:"last_updated_on"`
+	InstallationReason string `yaml:"installation_reason"`
+	InstalledOn        int64  `yaml:"installed_on"`
+	LastUpdatedOn      int64  `yaml:"last_updated_on"`
 }
 
 func (pkg *BPMPackage) GetInstalledSize() int64 {
@@ -130,19 +131,8 @@ const (
 	InstallationReasonUnknown        InstallationReason = "unknown"
 )
 
-func GetInstallationReason(pkg, rootDir string) InstallationReason {
-	installedDir := path.Join(rootDir, "var/lib/bpm/installed/")
-	pkgDir := path.Join(installedDir, pkg)
-	if stat, err := os.Stat(path.Join(pkgDir, "installation_reason")); err != nil || stat.IsDir() {
-		return InstallationReasonManual
-	}
-	b, err := os.ReadFile(path.Join(pkgDir, "installation_reason"))
-	if err != nil {
-		return InstallationReasonUnknown
-	}
-	reason := strings.TrimSpace(string(b))
-
-	switch reason {
+func (localInfo PackageLocalInfo) GetInstallationReason() InstallationReason {
+	switch localInfo.InstallationReason {
 	case "manual":
 		return InstallationReasonManual
 	case "dependency":
@@ -152,16 +142,6 @@ func GetInstallationReason(pkg, rootDir string) InstallationReason {
 	default:
 		return InstallationReasonUnknown
 	}
-}
-
-func SetInstallationReason(pkg string, reason InstallationReason, rootDir string) error {
-	installedDir := path.Join(rootDir, "var/lib/bpm/installed/")
-	pkgDir := path.Join(installedDir, pkg)
-	err := os.WriteFile(path.Join(pkgDir, "installation_reason"), []byte(reason), 0644)
-	if err != nil {
-		return err
-	}
-	return nil
 }
 
 func GetPackageInfoRaw(filename string) (string, error) {
@@ -623,7 +603,7 @@ func (pkgInfo *PackageInfo) CreateReadableInfo(rootDir string) string {
 
 	// Installation reason
 	if rootDir != "" && IsPackageInstalled(pkgInfo.Name, rootDir) {
-		installationReason := GetInstallationReason(pkgInfo.Name, rootDir)
+		installationReason := GetPackage(pkgInfo.Name, rootDir).LocalInfo.GetInstallationReason()
 		var installationReasonString string
 		switch installationReason {
 		case InstallationReasonManual:
@@ -802,7 +782,7 @@ func extractPackage(bpmpkg *BPMPackage, verbose bool, filename, rootDir string) 
 	return nil
 }
 
-func installPackage(filename, rootDir string, verbose, force bool) error {
+func installPackage(filename string, installationReason InstallationReason, rootDir string, verbose, force bool) error {
 	if _, err := os.Stat(filename); os.IsNotExist(err) {
 		return err
 	}
@@ -992,17 +972,9 @@ func installPackage(filename, rootDir string, verbose, force bool) error {
 		localInfo.InstalledOn = time.Now().Unix()
 	}
 	localInfo.LastUpdatedOn = time.Now().Unix()
+	localInfo.InstallationReason = string(installationReason)
 
-	localFile, err := os.OpenFile(path.Join(pkgDir, "local"), os.O_WRONLY|os.O_CREATE, 0644)
-	if err != nil {
-		return err
-	}
-	defer localFile.Close()
-
-	err = yaml.NewEncoder(localFile).Encode(localInfo)
-	if err != nil {
-		return err
-	}
+	SetPackageLocalInfo(bpmpkg.PkgInfo.Name, localInfo, rootDir)
 
 	// Save remove package scripts
 	packageScripts, err := ReadPackageScripts(filename)
@@ -1043,8 +1015,16 @@ func installPackage(filename, rootDir string, verbose, force bool) error {
 		}
 	}
 
+	// Write persistent data version number
+	if _, err := os.Stat(path.Join(rootDir, "var/lib/bpm/.version")); err != nil {
+		err = os.WriteFile(path.Join(rootDir, "var/lib/bpm/.version"), []byte(strconv.Itoa(persistentDataVersion)), 0644)
+		if err != nil {
+			return err
+		}
+	}
+
 	// Ensure local package information has been initialized for rootDir
-	err = initializeLocalPackageInformation(rootDir)
+	err = InitializeLocalPackageInformation(rootDir)
 	if err != nil {
 		return err
 	}
@@ -1164,7 +1144,7 @@ func removePackage(pkg string, verbose bool, rootDir string) error {
 	}
 
 	// Ensure local package information has been initialized for rootDir
-	err = initializeLocalPackageInformation(rootDir)
+	err = InitializeLocalPackageInformation(rootDir)
 	if err != nil {
 		return err
 	}

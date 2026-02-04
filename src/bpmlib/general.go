@@ -53,7 +53,7 @@ func InstallPackages(rootDir string, forceInstallationReason InstallationReason,
 					installationReason := forceInstallationReason
 					if installationReason == InstallationReasonUnknown {
 						if IsPackageInstalled(splitPkg.Name, rootDir) {
-							installationReason = GetInstallationReason(splitPkg.Name, rootDir)
+							installationReason = GetPackage(splitPkg.Name, rootDir).LocalInfo.GetInstallationReason()
 						} else {
 							installationReason = InstallationReasonManual
 						}
@@ -77,7 +77,7 @@ func InstallPackages(rootDir string, forceInstallationReason InstallationReason,
 			installationReason := forceInstallationReason
 			if installationReason == InstallationReasonUnknown {
 				if IsPackageInstalled(bpmpkg.PkgInfo.Name, rootDir) {
-					installationReason = GetInstallationReason(bpmpkg.PkgInfo.Name, rootDir)
+					installationReason = GetPackage(bpmpkg.PkgInfo.Name, rootDir).LocalInfo.GetInstallationReason()
 				} else {
 					installationReason = InstallationReasonManual
 				}
@@ -113,7 +113,7 @@ func InstallPackages(rootDir string, forceInstallationReason InstallationReason,
 			installationReason := forceInstallationReason
 			if installationReason == InstallationReasonUnknown {
 				if IsPackageInstalled(entry.Info.Name, rootDir) {
-					installationReason = GetInstallationReason(entry.Info.Name, rootDir)
+					installationReason = GetPackage(entry.Info.Name, rootDir).LocalInfo.GetInstallationReason()
 				} else {
 					installationReason = InstallationReasonManual
 				}
@@ -423,7 +423,7 @@ func UpdatePackages(rootDir string, syncDatabase bool, allowDowngrades bool, ins
 			comparison := CompareVersions(entry.Info.GetFullVersion(), installedInfo.GetFullVersion())
 			if (!allowDowngrades && comparison > 0) || (allowDowngrades && comparison != 0) {
 				operation.AppendAction(&FetchPackageAction{
-					InstallationReason: GetInstallationReason(pkg, rootDir),
+					InstallationReason: GetPackage(pkg, rootDir).LocalInfo.GetInstallationReason(),
 					DatabaseEntry:      entry,
 				})
 			}

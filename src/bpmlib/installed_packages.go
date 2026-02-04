@@ -11,9 +11,11 @@ import (
 	"gopkg.in/yaml.v3"
 )
 
+var persistentDataVersion int = 1
+
 var localPackageInformation map[string]map[string]*PackageInfo = make(map[string]map[string]*PackageInfo)
 
-func initializeLocalPackageInformation(rootDir string) (err error) {
+func InitializeLocalPackageInformation(rootDir string) (err error) {
 	// Return if information is already initialized
 	if _, ok := localPackageInformation[rootDir]; ok {
 		return nil
@@ -21,8 +23,24 @@ func initializeLocalPackageInformation(rootDir string) (err error) {
 
 	tempPackageInformation := make(map[string]*PackageInfo)
 
-	// Get path to installed package information directory
-	installedDir := path.Join(rootDir, "var/lib/bpm/installed/")
+	// Get paths
+	persistentDataDir := path.Join(rootDir, "var/lib/bpm")
+	installedDir := path.Join(persistentDataDir, "installed")
+
+	// Ensure persistent data directory is up-to-date
+	if _, err := os.Stat(persistentDataDir); err == nil {
+		data, err := os.ReadFile(path.Join(persistentDataDir, ".version"))
+		if err != nil {
+			return fmt.Errorf("persistent data is not up-to-date! Please run 'bpm upgrade-persistent-data' first")
+		}
+		currentPersistentDataVersion, err := strconv.Atoi(strings.TrimSpace(string(data)))
+		if err != nil {
+			return fmt.Errorf("persistent data is not up-to-date! Please run 'bpm upgrade-persistent-data' first")
+		}
+		if currentPersistentDataVersion != persistentDataVersion {
+			return fmt.Errorf("persistent data is not up-to-date! Please run 'bpm upgrade-persistent-data' first")
+		}
+	}
 
 	// Get directory content
 	items, err := os.ReadDir(installedDir)
@@ -61,7 +79,7 @@ func initializeLocalPackageInformation(rootDir string) (err error) {
 
 func GetInstalledPackages(rootDir string) (ret []string, err error) {
 	// Initialize local package information
-	err = initializeLocalPackageInformation(rootDir)
+	err = InitializeLocalPackageInformation(rootDir)
 	if err != nil {
 		return nil, err
 	}
@@ -79,7 +97,7 @@ func GetInstalledPackages(rootDir string) (ret []string, err error) {
 
 func IsPackageInstalled(pkg, rootDir string) bool {
 	// Initialize local package information
-	err := initializeLocalPackageInformation(rootDir)
+	err := InitializeLocalPackageInformation(rootDir)
 	if err != nil {
 		return false
 	}
@@ -131,7 +149,7 @@ func IsPackageProvided(pkg, rootDir string) bool {
 }
 
 func GetPackageInfo(pkg string, rootDir string) *PackageInfo {
-	err := initializeLocalPackageInformation(rootDir)
+	err := InitializeLocalPackageInformation(rootDir)
 	if err != nil {
 		return nil
 	}
@@ -244,13 +262,13 @@ func getPackageLocalInfo(pkg, rootDir string) PackageLocalInfo {
 
 	installedDir := path.Join(rootDir, "var/lib/bpm/installed/")
 	pkgDir := path.Join(installedDir, pkg)
-	files := path.Join(pkgDir, "local")
+	localInfoFile := path.Join(path.Join(pkgDir, "local"))
 
-	if _, err := os.Stat(files); os.IsNotExist(err) {
+	if _, err := os.Stat(localInfoFile); os.IsNotExist(err) {
 		return localInfo
 	}
 
-	file, err := os.Open(files)
+	file, err := os.Open(localInfoFile)
 	if err != nil {
 		return localInfo
 	}
@@ -262,4 +280,103 @@ func getPackageLocalInfo(pkg, rootDir string) PackageLocalInfo {
 	}
 
 	return localInfo
+}
+
+func SetPackageLocalInfo(pkg string, localInfo PackageLocalInfo, rootDir string) error {
+	installedDir := path.Join(rootDir, "var/lib/bpm/installed/")
+	pkgDir := path.Join(installedDir, pkg)
+
+	localFile, err := os.OpenFile(path.Join(pkgDir, "local"), os.O_WRONLY|os.O_CREATE, 0644)
+	if err != nil {
+		return err
+	}
+	defer localFile.Close()
+
+	err = yaml.NewEncoder(localFile).Encode(localInfo)
+	if err != nil {
+		return err
+	}
+
+	return nil
+}
+
+func UpgradePersistentData(rootDir string) error {
+	persistentDataDir := path.Join(rootDir, "var/lib/bpm")
+
+	// Create persistent data directory
+	os.MkdirAll(persistentDataDir, 0755)
+
+	// Upgrade installed package directories
+	dirEntries, err := os.ReadDir(path.Join(persistentDataDir, "installed"))
+	if err != nil && !os.IsNotExist(err) {
+		return err
+	} else if err == nil {
+		for _, entry := range dirEntries {
+			pkgDir := path.Join(persistentDataDir, "installed", entry.Name())
+
+			// Generate default local package information file
+			if _, err := os.Stat(path.Join(pkgDir, "local")); err != nil && !os.IsNotExist(err) {
+				return err
+			} else if os.IsNotExist(err) {
+				fmt.Printf("Generating local package information for package (%s)\n", entry.Name())
+
+				out, err := yaml.Marshal(PackageLocalInfo{
+					InstallationReason: "unknown",
+					InstalledOn:        0,
+					LastUpdatedOn:      0,
+				})
+				if err != nil {
+					return err
+				}
+
+				err = os.WriteFile(path.Join(pkgDir, "local"), out, 0644)
+				if err != nil {
+					return err
+				}
+			}
+
+			// Move installation reason to local package information file
+			if installationReason, err := os.ReadFile(path.Join(pkgDir, "installation_reason")); err != nil && !os.IsNotExist(err) {
+				return err
+			} else if err == nil {
+				fmt.Printf("Moving installation reason to local package information for package (%s)\n", entry.Name())
+
+				data, err := os.ReadFile(path.Join(pkgDir, "local"))
+				if err != nil {
+					return err
+				}
+
+				localInfo := &PackageLocalInfo{}
+				err = yaml.Unmarshal(data, localInfo)
+				if err != nil {
+					return err
+				}
+
+				localInfo.InstallationReason = strings.TrimSpace(string(installationReason))
+
+				out, err := yaml.Marshal(localInfo)
+				if err != nil {
+					return err
+				}
+
+				err = os.WriteFile(path.Join(pkgDir, "local"), out, 0644)
+				if err != nil {
+					return err
+				}
+
+				err = os.Remove(path.Join(pkgDir, "installation_reason"))
+				if err != nil {
+					return err
+				}
+			}
+		}
+	}
+
+	// Set persistent data version number
+	err = os.WriteFile(path.Join(persistentDataDir, ".version"), []byte(strconv.Itoa(persistentDataVersion)), 0644)
+	if err != nil {
+		return err
+	}
+
+	return nil
 }

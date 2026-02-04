@@ -177,6 +177,18 @@ func main() {
 		setupFlagsAndHelp(currentFlagSet, fmt.Sprintf("bpm %s <options>", subcommand), "Compare two version numbers", os.Args[2:])
 
 		compareVersions()
+	case "upgrade-persistent-data":
+		currentFlagSet = flag.NewFlagSet("upgrade-persistent-data", flag.ExitOnError)
+		currentFlagSet.StringP("root", "R", "/", "Operate on specified root directory")
+		setupFlagsAndHelp(currentFlagSet, fmt.Sprintf("bpm %s <options>", subcommand), "Upgrade BPM's persistent data directory contents", os.Args[2:])
+
+		rootDir, _ := currentFlagSet.GetString("root")
+		err = bpmlib.UpgradePersistentData(rootDir)
+		if err != nil {
+			log.Printf("Error: could not upgrade persistent data directory: %s", err)
+			exitCode = 1
+			return
+		}
 	default:
 		printUsage()
 		exitCode = 1
@@ -193,6 +205,14 @@ func showPackageInfo() {
 	showDatabaseInfo, _ := currentFlagSet.GetBool("database")
 	showHumanReadableSize, _ := currentFlagSet.GetBool("human-readable")
 
+	// Initialize installed packages map
+	err := bpmlib.InitializeLocalPackageInformation(rootDir)
+	if err != nil {
+		log.Printf("Error: %s", err)
+		exitCode = 1
+		return
+	}
+
 	// Get packages
 	packages := currentFlagSet.Args()
 	if len(packages) == 0 {
@@ -201,7 +221,7 @@ func showPackageInfo() {
 	}
 
 	// Read local databases
-	err := bpmlib.ReadLocalDatabaseFiles()
+	err = bpmlib.ReadLocalDatabaseFiles()
 	if err != nil {
 		log.Printf("Error: could not read local databases: %s", err)
 		exitCode = 1
@@ -301,8 +321,16 @@ func showPackageList() {
 		showMakeDepends = true
 	}
 
+	// Initialize installed packages map
+	err := bpmlib.InitializeLocalPackageInformation(rootDir)
+	if err != nil {
+		log.Printf("Error: %s", err)
+		exitCode = 1
+		return
+	}
+
 	// Read local databases
-	err := bpmlib.ReadLocalDatabaseFiles()
+	err = bpmlib.ReadLocalDatabaseFiles()
 	if err != nil {
 		log.Printf("Error: could not read local databases: %s", err)
 		exitCode = 1
@@ -374,7 +402,7 @@ func showPackageList() {
 			}
 		} else {
 			for _, pkg := range installedPackages {
-				installationReason := bpmlib.GetInstallationReason(pkg.pkgInfo.Name, rootDir)
+				installationReason := bpmlib.GetPackage(pkg.pkgInfo.Name, rootDir).LocalInfo.GetInstallationReason()
 				if installationReason == bpmlib.InstallationReasonManual && !showManual {
 					continue
 				} else if installationReason == bpmlib.InstallationReasonDependency && !showDepends {
@@ -406,7 +434,7 @@ func showPackageList() {
 				return
 			}
 			for n, pkg := range installedPackages {
-				installationReason := bpmlib.GetInstallationReason(pkg.pkgInfo.Name, rootDir)
+				installationReason := bpmlib.GetPackage(pkg.pkgInfo.Name, rootDir).LocalInfo.GetInstallationReason()
 				if installationReason == bpmlib.InstallationReasonManual && !showManual {
 					continue
 				} else if installationReason == bpmlib.InstallationReasonDependency && !showDepends {
@@ -560,6 +588,14 @@ func installPackages() {
 	}
 	defer fileLock.Unlock()
 
+	// Initialize installed packages map
+	err = bpmlib.InitializeLocalPackageInformation(rootDir)
+	if err != nil {
+		log.Printf("Error: %s", err)
+		exitCode = 1
+		return
+	}
+
 	// Read local databases
 	err = bpmlib.ReadLocalDatabaseFiles()
 	if err != nil {
@@ -693,6 +729,14 @@ func removePackages() {
 	}
 	defer fileLock.Unlock()
 
+	// Initialize installed packages map
+	err = bpmlib.InitializeLocalPackageInformation(rootDir)
+	if err != nil {
+		log.Printf("Error: %s", err)
+		exitCode = 1
+		return
+	}
+
 	// Read local databases
 	err = bpmlib.ReadLocalDatabaseFiles()
 	if err != nil {
@@ -805,6 +849,14 @@ func doCleanup() {
 		return
 	}
 	defer fileLock.Unlock()
+
+	// Initialize installed packages map
+	err = bpmlib.InitializeLocalPackageInformation(rootDir)
+	if err != nil {
+		log.Printf("Error: %s", err)
+		exitCode = 1
+		return
+	}
 
 	err = bpmlib.CleanupCache(rootDir, cleanupCompilationFiles, cleanupBinaryPackages, cleanupFetchedPackages, verbose)
 	if err != nil {
@@ -946,6 +998,14 @@ func updatePackages() {
 	}
 	defer fileLock.Unlock()
 
+	// Initialize installed packages map
+	err = bpmlib.InitializeLocalPackageInformation(rootDir)
+	if err != nil {
+		log.Printf("Error: %s", err)
+		exitCode = 1
+		return
+	}
+
 	// Read local databases if no sync
 	if noSync {
 		err := bpmlib.ReadLocalDatabaseFiles()
@@ -1067,6 +1127,14 @@ func getFileOwner() {
 	// Get flags
 	rootDir, _ := currentFlagSet.GetString("root")
 
+	// Initialize installed packages map
+	err := bpmlib.InitializeLocalPackageInformation(rootDir)
+	if err != nil {
+		log.Printf("Error: %s", err)
+		exitCode = 1
+		return
+	}
+
 	// Get files
 	files := currentFlagSet.Args()
 	if len(files) == 0 {
@@ -1160,6 +1228,14 @@ func compilePackage() {
 	outputFd, _ := currentFlagSet.GetInt("output-fd")
 	compilationJobs, _ := currentFlagSet.GetInt("jobs")
 
+	// Initialize installed packages map
+	err := bpmlib.InitializeLocalPackageInformation(rootDir)
+	if err != nil {
+		log.Printf("Error: %s", err)
+		exitCode = 1
+		return
+	}
+
 	// Get files
 	sourcePackages := currentFlagSet.Args()
 	if len(sourcePackages) == 0 {
@@ -1168,7 +1244,7 @@ func compilePackage() {
 	}
 
 	// Read local databases
-	err := bpmlib.ReadLocalDatabaseFiles()
+	err = bpmlib.ReadLocalDatabaseFiles()
 	if err != nil {
 		log.Printf("Error: could not read local databases: %s", err)
 		exitCode = 1
@@ -1409,6 +1485,7 @@ func printUsage() {
 	fmt.Println("  o, owner     Show what packages own the specified paths")
 	fmt.Println("  c, compile   Compile source packages and convert them to binary ones")
 	fmt.Println("  p, vercmp    Compare package version numbers")
+
 }
 
 func setupFlagsAndHelp(flagset *flag.FlagSet, usage, desc string, args []string) {

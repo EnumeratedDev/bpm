@@ -398,7 +398,7 @@ func (entry *BPMDatabaseEntry) CreateReadableInfo(rootDir string, humanReadableS
 
 	// Installation reason
 	if rootDir != "" && IsPackageInstalled(entry.Info.Name, rootDir) {
-		installationReason := GetInstallationReason(entry.Info.Name, rootDir)
+		installationReason := GetPackage(entry.Info.Name, rootDir).LocalInfo.GetInstallationReason()
 		var installationReasonString string
 		switch installationReason {
 		case InstallationReasonManual:
