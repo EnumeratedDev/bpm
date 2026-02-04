@@ -205,11 +205,11 @@ func (operation *BPMOperation) Cleanup(cleanupMakeDepends bool) error {
 	}
 	installedPackages := make([]*PackageInfo, len(installedPackageNames))
 	for i, value := range installedPackageNames {
-		bpmpkg := GetPackage(value, operation.RootDir)
-		if bpmpkg == nil {
+		pkgInfo := GetPackageInfo(value, operation.RootDir)
+		if pkgInfo == nil {
 			return errors.New("could not find installed package (" + value + ")")
 		}
-		installedPackages[i] = bpmpkg.PkgInfo
+		installedPackages[i] = pkgInfo
 	}
 
 	// Get packages to remove
