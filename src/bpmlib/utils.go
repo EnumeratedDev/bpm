@@ -19,14 +19,14 @@ type BPMLock struct {
 }
 
 func LockBPM(rootDir string) (*BPMLock, error) {
-	// Create parent directories if they don't already exist
-	err := os.MkdirAll(path.Join(rootDir, "/var/lib/bpm"), 0755)
+	// Create cache directory if it doesn't already exist
+	err := os.MkdirAll(path.Join(rootDir, "/var/cache/bpm"), 0755)
 	if err != nil {
 		return nil, err
 	}
 
 	// Create file
-	f, err := os.Create(path.Join(rootDir, "var/lib/bpm/bpm.lock"))
+	f, err := os.Create(path.Join(rootDir, "var/cache/bpm/bpm.lock"))
 	if err != nil {
 		return nil, err
 	}
@@ -37,7 +37,7 @@ func LockBPM(rootDir string) (*BPMLock, error) {
 		return nil, err
 	}
 
-	return &BPMLock{f, path.Join(rootDir, "var/lib/bpm/bpm.lock")}, nil
+	return &BPMLock{f, path.Join(rootDir, "var/cache/bpm/bpm.lock")}, nil
 }
 
 func (lock *BPMLock) Unlock() error {
