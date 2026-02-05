@@ -220,34 +220,67 @@ func (operation *BPMOperation) Cleanup(cleanupMakeDepends bool) error {
 		}
 	}
 
-	// Get manually installed packages, resolve all their dependencies and add them to the keepPackages slice
-	keepPackages := make([]string, 0)
-	for _, pkg := range slices.Clone(installedPackages) {
+	// Run BFS on all manually installed packages
+	visited := make([]string, 0)
+	for _, pkg := range installedPackages {
 		if getPackageLocalInfo(pkg.Name, operation.RootDir).GetInstallationReason() != InstallationReasonManual {
 			continue
 		}
 
-		// Do not resolve dependencies or add package to keepPackages slice if package removal action exists for it
-		if _, ok := removeActions[pkg.Name]; ok {
-			continue
-		}
+		queue := make([]*PackageInfo, 0)
 
-		keepPackages = append(keepPackages, pkg.Name)
-		resolved := pkg.GetDependenciesRecursive(true, !cleanupMakeDepends, !cleanupMakeDepends, operation.RootDir)
-		for _, value := range resolved {
-			if !slices.Contains(keepPackages, value) && !slices.Contains(MainBPMConfig.IgnorePackages, value) {
-				keepPackages = append(keepPackages, value)
+		queue = append(queue, pkg)
+
+		for len(queue) > 0 {
+			v := queue[len(queue)-1]
+			queue = queue[:len(queue)-1]
+
+			// Skip package if it's to be removed
+			if _, ok := removeActions[v.Name]; ok {
+				continue
+			}
+
+			// Mark package as visited
+			visited = append(visited, v.Name)
+
+			// Get all package dependencies
+			depends := v.Depends
+			depends = append(depends, v.RuntimeDepends...)
+			if cleanupMakeDepends {
+				depends = append(depends, v.MakeDepends...)
+				depends = append(depends, v.CheckDepends...)
+			}
+
+			// Loop through all dependencies
+			for _, depend := range depends {
+				// Resolve dependency
+				var dependPkgInfo *PackageInfo
+				if providers := GetVirtualPackageInfo(depend, operation.RootDir); len(providers) > 0 {
+					dependPkgInfo = providers[0]
+				} else {
+					dependPkgInfo = GetPackageInfo(depend, operation.RootDir)
+				}
+				if dependPkgInfo == nil {
+					continue
+				}
+
+				// Mark dependency as visited and add it to the queue
+				if !slices.Contains(visited, dependPkgInfo.Name) {
+					visited = append(visited, dependPkgInfo.Name)
+					queue = append(queue, dependPkgInfo)
+				}
 			}
 		}
 	}
 
-	// Get all installed packages that are not in the keepPackages slice and add them to the BPM operation
+	// Remove all packages that were not discovered after running BFS
 	for _, pkg := range installedPackageNames {
 		// Do not add package removal action if there already is one
 		if _, ok := removeActions[pkg]; ok {
 			continue
 		}
-		if !slices.Contains(keepPackages, pkg) {
+
+		if !slices.Contains(visited, pkg) {
 			bpmpkg := GetPackage(pkg, operation.RootDir)
 			if bpmpkg == nil {
 				return errors.New("Error: could not find installed package (" + pkg + ")")
