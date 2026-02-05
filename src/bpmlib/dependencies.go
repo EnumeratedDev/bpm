@@ -101,8 +101,8 @@ func (pkgInfo *PackageInfo) getDependenciesRecursive(resolved *[]string, unresol
 	for _, pkgIR := range pkgInfo.GetDependencies(includeMakeDepends, includeCheckDepends, includeRuntimeDepends, false) {
 		depend := pkgIR.PkgName
 
-		if isVirtual, p := IsVirtualPackage(depend, rootDir); isVirtual {
-			depend = p
+		if providers := GetVirtualPackageInfo(depend, rootDir); len(providers) > 0 {
+			depend = providers[0].Name
 		}
 
 		if !slices.Contains(*resolved, depend) {
@@ -177,7 +177,7 @@ func resolvePackageDependenciesFromDatabase(resolved *[]pkgInstallationReason, u
 		}
 
 		// Skip dependency if it is already installed or provided
-		if ignoreInstalled && IsPackageProvided(pkgIR.PkgName, rootDir) {
+		if providers := GetVirtualPackageInfo(pkgIR.PkgName, rootDir); ignoreInstalled && len(providers) > 0 {
 			continue
 		}
 

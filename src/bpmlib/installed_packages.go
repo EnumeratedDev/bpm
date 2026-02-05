@@ -14,6 +14,7 @@ import (
 var persistentDataVersion int = 1
 
 var localPackageInformation map[string]map[string]*PackageInfo = make(map[string]map[string]*PackageInfo)
+var installedVirtualPackages map[string]map[string][]*PackageInfo = make(map[string]map[string][]*PackageInfo)
 
 func InitializeLocalPackageInformation(rootDir string) (err error) {
 	// Return if information is already initialized
@@ -22,6 +23,7 @@ func InitializeLocalPackageInformation(rootDir string) (err error) {
 	}
 
 	tempPackageInformation := make(map[string]*PackageInfo)
+	tempInstalledVirtualPackages := make(map[string][]*PackageInfo)
 
 	// Get paths
 	persistentDataDir := path.Join(rootDir, "var/lib/bpm")
@@ -71,9 +73,15 @@ func InitializeLocalPackageInformation(rootDir string) (err error) {
 
 		// Add package to slice
 		tempPackageInformation[info.Name] = info
+
+		// Add virtual packages
+		for _, vpkg := range info.Provides {
+			tempInstalledVirtualPackages[vpkg] = append(tempInstalledVirtualPackages[vpkg], info)
+		}
 	}
 
 	localPackageInformation[rootDir] = tempPackageInformation
+	installedVirtualPackages[rootDir] = tempInstalledVirtualPackages
 	return nil
 }
 
@@ -108,44 +116,13 @@ func IsPackageInstalled(pkg, rootDir string) bool {
 	return true
 }
 
-func IsVirtualPackage(pkg, rootDir string) (bool, string) {
-	pkgs, err := GetInstalledPackages(rootDir)
+func GetVirtualPackageInfo(vpkg, rootDir string) []*PackageInfo {
+	err := InitializeLocalPackageInformation(rootDir)
 	if err != nil {
-		return false, ""
+		return nil
 	}
-	for _, p := range pkgs {
-		if p == pkg {
-			return false, ""
-		}
-		i := GetPackageInfo(p, rootDir)
-		if i == nil {
-			continue
-		}
-		if slices.Contains(i.Provides, pkg) {
-			return true, p
-		}
-	}
-	return false, ""
-}
 
-func IsPackageProvided(pkg, rootDir string) bool {
-	pkgs, err := GetInstalledPackages(rootDir)
-	if err != nil {
-		return false
-	}
-	for _, p := range pkgs {
-		if p == pkg {
-			return true
-		}
-		i := GetPackageInfo(p, rootDir)
-		if i == nil {
-			continue
-		}
-		if slices.Contains(i.Provides, pkg) {
-			return true
-		}
-	}
-	return false
+	return installedVirtualPackages[rootDir][vpkg]
 }
 
 func GetPackageInfo(pkg string, rootDir string) *PackageInfo {

@@ -260,8 +260,8 @@ func showPackageInfo() {
 			}
 			isFile = true
 		} else {
-			if isVirtual, p := bpmlib.IsVirtualPackage(pkg, rootDir); isVirtual {
-				bpmpkg = bpmlib.GetPackage(p, rootDir)
+			if providers := bpmlib.GetVirtualPackageInfo(pkg, rootDir); len(providers) > 0 {
+				bpmpkg = bpmlib.GetPackage(providers[0].Name, rootDir)
 			} else {
 				bpmpkg = bpmlib.GetPackage(pkg, rootDir)
 			}
@@ -1293,7 +1293,7 @@ func compilePackage() {
 		for i := len(unmetDepends) - 1; i >= 0; i-- {
 			if slices.Contains(installedPackages, unmetDepends[i]) {
 				unmetDepends = append(unmetDepends[:i], unmetDepends[i+1:]...)
-			} else if ok, _ := bpmlib.IsVirtualPackage(unmetDepends[i], rootDir); ok {
+			} else if providers := bpmlib.GetVirtualPackageInfo(unmetDepends[i], rootDir); len(providers) > 0 {
 				unmetDepends = append(unmetDepends[:i], unmetDepends[i+1:]...)
 			}
 		}

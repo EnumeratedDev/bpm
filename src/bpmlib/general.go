@@ -93,8 +93,8 @@ func InstallPackages(rootDir string, forceInstallationReason InstallationReason,
 
 			if e, _, err := GetDatabaseEntry(pkg); err == nil {
 				entry = e
-			} else if isVirtual, p := IsVirtualPackage(pkg, rootDir); isVirtual {
-				entry, _, err = GetDatabaseEntry(p)
+			} else if providers := GetVirtualPackageInfo(pkg, rootDir); len(providers) > 0 {
+				entry, _, err = GetDatabaseEntry(providers[0].Name)
 				if err != nil {
 					pkgsNotFound = append(pkgsNotFound, pkg)
 					continue
@@ -202,8 +202,8 @@ func RemovePackages(rootDir string, force, cleanupDependencies bool, packages ..
 	// Search for packages
 	for _, pkg := range packages {
 		bpmpkg := GetPackage(pkg, rootDir)
-		if isVirutal, vpkg := IsVirtualPackage(pkg, rootDir); isVirutal {
-			bpmpkg = GetPackage(vpkg, rootDir)
+		if providers := GetVirtualPackageInfo(pkg, rootDir); len(providers) > 0 {
+			bpmpkg = GetPackage(providers[0].Name, rootDir)
 		}
 		if bpmpkg == nil {
 			continue
