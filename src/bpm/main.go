@@ -55,7 +55,7 @@ func main() {
 		currentFlagSet = flag.NewFlagSet("query", flag.ExitOnError)
 		currentFlagSet.StringP("root", "R", "/", "Operate on specified root directory")
 		currentFlagSet.BoolP("database", "d", false, "Show package information from remote databases")
-		currentFlagSet.BoolP("human-readable", "h", false, "Show package installed size in a human readable format")
+		currentFlagSet.BoolP("show-bytes", "b", false, "Show package installed size in bytes")
 		setupFlagsAndHelp(currentFlagSet, fmt.Sprintf("bpm %s <options>", subcommand), "Show information on the specified packages", os.Args[2:])
 
 		showPackageInfo()
@@ -71,7 +71,7 @@ func main() {
 		currentFlagSet.Bool("make-depends", false, "Show packages installed as make dependencies")
 		currentFlagSet.String("sort", "", "Sort listed packages by 'name' or 'size")
 		currentFlagSet.Bool("reverse", false, "Reverse the order in which packages are listed")
-		currentFlagSet.BoolP("human-readable", "h", false, "Show package installed size in a human readable format")
+		currentFlagSet.BoolP("show-bytes", "b", false, "Show package installed size in bytes")
 		setupFlagsAndHelp(currentFlagSet, fmt.Sprintf("bpm %s <options>", subcommand), "List packages", os.Args[2:])
 
 		showPackageList()
@@ -203,7 +203,7 @@ func showPackageInfo() {
 	// Get flags
 	rootDir, _ := currentFlagSet.GetString("root")
 	showDatabaseInfo, _ := currentFlagSet.GetBool("database")
-	showHumanReadableSize, _ := currentFlagSet.GetBool("human-readable")
+	showBytes, _ := currentFlagSet.GetBool("show-bytes")
 
 	// Initialize installed packages map
 	err := bpmlib.InitializeLocalPackageInformation(rootDir)
@@ -246,7 +246,7 @@ func showPackageInfo() {
 			if n != 0 {
 				fmt.Println()
 			}
-			fmt.Println(entry.CreateReadableInfo(rootDir, showHumanReadableSize))
+			fmt.Println(entry.CreateReadableInfo(rootDir, showBytes))
 
 			return
 		}
@@ -287,7 +287,7 @@ func showPackageInfo() {
 		}
 		fmt.Println(bpmpkg.PkgInfo.CreateReadableInfo(rootDir))
 		if bpmpkg.PkgInfo.Type == "binary" {
-			if !showHumanReadableSize {
+			if showBytes {
 				fmt.Printf("Installed size: %d\n", bpmpkg.GetInstalledSize())
 			} else {
 				fmt.Printf("Installed size: %s\n", bpmlib.BytesToHumanReadable(bpmpkg.GetInstalledSize()))
@@ -315,7 +315,7 @@ func showPackageList() {
 	showMakeDepends, _ := currentFlagSet.GetBool("make-depends")
 	sortPackages, _ := currentFlagSet.GetString("sort")
 	reversePackages, _ := currentFlagSet.GetBool("reverse")
-	showHumanReadableSize, _ := currentFlagSet.GetBool("human-readable")
+	showBytes, _ := currentFlagSet.GetBool("show-bytes")
 
 	if !isFlagSet(currentFlagSet, "manual") && !isFlagSet(currentFlagSet, "depends") && !isFlagSet(currentFlagSet, "make-depends") {
 		showManual = true
@@ -428,7 +428,7 @@ func showPackageList() {
 				if n != 0 {
 					fmt.Println()
 				}
-				fmt.Println(entry.CreateReadableInfo(rootDir, showHumanReadableSize))
+				fmt.Println(entry.CreateReadableInfo(rootDir, showBytes))
 			}
 		} else {
 			if len(installedPackages) == 0 {
@@ -453,7 +453,7 @@ func showPackageList() {
 
 				fmt.Println(pkg.pkgInfo.CreateReadableInfo(rootDir))
 				if pkg.pkgInfo.Type == "binary" {
-					if !showHumanReadableSize {
+					if showBytes {
 						fmt.Printf("Installed size: %d\n", pkg.installedSize)
 					} else {
 						fmt.Printf("Installed size: %s\n", bpmlib.BytesToHumanReadable(pkg.installedSize))

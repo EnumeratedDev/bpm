@@ -321,7 +321,7 @@ func (entry *BPMDatabaseEntry) GetEntryOptionalDependants() (dependants []string
 	return dependants
 }
 
-func (entry *BPMDatabaseEntry) CreateReadableInfo(rootDir string, humanReadableSize bool) string {
+func (entry *BPMDatabaseEntry) CreateReadableInfo(rootDir string, showBytes bool) string {
 	builder := strings.Builder{}
 	builderWriteStringNotEmpty := func(label string, value string) {
 		if value != "" {
@@ -457,10 +457,10 @@ func (entry *BPMDatabaseEntry) CreateReadableInfo(rootDir string, humanReadableS
 	if entry.Info.Type == "binary" {
 		installedSize := entry.InstalledSize
 		var installedSizeStr string
-		if humanReadableSize {
-			installedSizeStr = BytesToHumanReadable(installedSize)
-		} else {
+		if showBytes {
 			installedSizeStr = strconv.FormatInt(installedSize, 10)
+		} else {
+			installedSizeStr = BytesToHumanReadable(installedSize)
 		}
 		builder.WriteString("Installed size: " + installedSizeStr + "\n")
 	}
