@@ -99,8 +99,8 @@ func InstallPackages(rootDir string, forceInstallationReason InstallationReason,
 					pkgsNotFound = append(pkgsNotFound, pkg)
 					continue
 				}
-			} else if e := ResolveVirtualPackage(pkg); e != nil {
-				entry = e
+			} else if providers := GetDatabaseVirtualPackageEntry(pkg); len(providers) > 0 {
+				entry = providers[0]
 			} else {
 				pkgsNotFound = append(pkgsNotFound, pkg)
 				continue

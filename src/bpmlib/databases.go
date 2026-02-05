@@ -20,7 +20,7 @@ import (
 type BPMDatabase struct {
 	DatabaseVersion int                          `yaml:"database_version"`
 	Entries         map[string]*BPMDatabaseEntry `yaml:"entries"`
-	VirtualPackages map[string][]string
+	VirtualPackages map[string][]*BPMDatabaseEntry
 	Name            string
 	Source          string
 }
@@ -59,7 +59,7 @@ func (db *configDatabase) ReadLocalDatabase() error {
 	}
 
 	// Initialize struct values
-	database.VirtualPackages = make(map[string][]string)
+	database.VirtualPackages = make(map[string][]*BPMDatabaseEntry)
 	database.Name = db.Name
 	database.Source = db.Source
 
@@ -105,13 +105,13 @@ func (db *configDatabase) ReadLocalDatabase() error {
 
 				// Add virtual packages to database
 				for _, p := range splitPkg.Provides {
-					database.VirtualPackages[p] = append(database.VirtualPackages[p], splitPkg.Name)
+					database.VirtualPackages[p] = append(database.VirtualPackages[p], database.Entries[splitPkg.Name])
 				}
 			}
 		} else {
 			// Add virtual packages to database
 			for _, p := range entry.Info.Provides {
-				database.VirtualPackages[p] = append(database.VirtualPackages[p], entry.Info.Name)
+				database.VirtualPackages[p] = append(database.VirtualPackages[p], entry)
 			}
 		}
 	}
@@ -231,15 +231,12 @@ func FindReplacement(pkg string) *BPMDatabaseEntry {
 	return nil
 }
 
-func ResolveVirtualPackage(vpkg string) *BPMDatabaseEntry {
+func GetDatabaseVirtualPackageEntry(vpkg string) (providers []*BPMDatabaseEntry) {
 	for _, db := range BPMDatabases {
-		if v, ok := db.VirtualPackages[vpkg]; ok {
-			slices.Sort(v)
-			return db.Entries[v[0]]
-		}
+		providers = append(providers, db.VirtualPackages[vpkg]...)
 	}
 
-	return nil
+	return providers
 }
 
 func (db *BPMDatabase) FetchPackage(pkg string) (string, error) {

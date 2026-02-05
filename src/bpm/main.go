@@ -234,7 +234,9 @@ func showPackageInfo() {
 			var entry *bpmlib.BPMDatabaseEntry
 			entry, _, err = bpmlib.GetDatabaseEntry(pkg)
 			if err != nil {
-				if entry = bpmlib.ResolveVirtualPackage(pkg); entry == nil {
+				if providers := bpmlib.GetDatabaseVirtualPackageEntry(pkg); len(providers) > 0 {
+					entry = providers[0]
+				} else {
 					log.Printf("Error: could not find package (%s) in any database\n", pkg)
 					exitCode = 1
 					return

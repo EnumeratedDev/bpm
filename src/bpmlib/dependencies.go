@@ -201,8 +201,9 @@ func resolvePackageDependenciesFromDatabase(resolved *[]pkgInstallationReason, u
 				*unresolved = stringSliceRemove(*unresolved, resolvedVirtualPkg)
 
 				continue
-			} else if entry = ResolveVirtualPackage(pkgIR.PkgName); entry != nil {
+			} else if providers := GetDatabaseVirtualPackageEntry(pkgIR.PkgName); len(providers) > 0 {
 				// Virtual package found in database
+				entry = providers[0]
 			} else {
 				// Virtual package not found
 				if !slices.Contains(*unresolved, pkgIR.PkgName) {
