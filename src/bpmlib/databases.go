@@ -338,7 +338,7 @@ func (entry *BPMDatabaseEntry) CreateReadableInfo(rootDir string, humanReadableS
 			slices.Sort(array)
 		}
 
-		builder.WriteString(label + ":\n")
+		builder.WriteString(label + " (" + strconv.Itoa(len(array)) + "):\n")
 		for _, val := range array {
 			builder.WriteString("  - " + val + "\n")
 		}
@@ -351,7 +351,7 @@ func (entry *BPMDatabaseEntry) CreateReadableInfo(rootDir string, humanReadableS
 		// Sort array
 		slices.Sort(depends)
 
-		builder.WriteString(label + ":\n")
+		builder.WriteString(label + " (" + strconv.Itoa(len(depends)) + "):\n")
 		for _, val := range depends {
 			builder.WriteString("  - " + val)
 
@@ -394,7 +394,7 @@ func (entry *BPMDatabaseEntry) CreateReadableInfo(rootDir string, humanReadableS
 	}
 	builderWriteDependencyArray("Runtime dependencies", entry.Info.RuntimeDepends)
 	if len(entry.Info.OptionalDepends) > 0 {
-		builder.WriteString("Optional dependencies:\n")
+		builder.WriteString("Optional dependencies: (" + strconv.Itoa(len(entry.Info.OptionalDepends)) + ")\n")
 		for _, depend := range entry.Info.OptionalDepends {
 			dependSplit := strings.SplitN(depend, ":", 2)
 			if len(dependSplit) == 2 {

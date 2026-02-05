@@ -547,7 +547,7 @@ func (pkgInfo *PackageInfo) CreateReadableInfo(rootDir string) string {
 			slices.Sort(array)
 		}
 
-		builder.WriteString(label + ":\n")
+		builder.WriteString(label + " (" + strconv.Itoa(len(array)) + "):\n")
 		for _, val := range array {
 			builder.WriteString("  - " + val + "\n")
 		}
@@ -560,7 +560,7 @@ func (pkgInfo *PackageInfo) CreateReadableInfo(rootDir string) string {
 		// Sort array
 		slices.Sort(depends)
 
-		builder.WriteString(label + ":\n")
+		builder.WriteString(label + " (" + strconv.Itoa(len(depends)) + "):\n")
 		for _, val := range depends {
 			builder.WriteString("  - " + val)
 
@@ -602,7 +602,7 @@ func (pkgInfo *PackageInfo) CreateReadableInfo(rootDir string) string {
 	}
 	builderWriteDependencyArray("Runtime dependencies", pkgInfo.RuntimeDepends)
 	if len(pkgInfo.OptionalDepends) > 0 {
-		builder.WriteString("Optional dependencies:\n")
+		builder.WriteString("Optional dependencies (" + strconv.Itoa(len(pkgInfo.OptionalDepends)) + "):\n")
 		for _, depend := range pkgInfo.OptionalDepends {
 			dependSplit := strings.SplitN(depend, ":", 2)
 			if len(dependSplit) == 2 {
