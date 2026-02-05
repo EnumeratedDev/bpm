@@ -370,6 +370,15 @@ func showPackageList() {
 
 	switch sortPackages {
 	case "", "name":
+		slices.SortFunc(installedPackages, func(a, b struct {
+			pkgInfo       bpmlib.PackageInfo
+			installedSize int64
+		}) int {
+			return strings.Compare(a.pkgInfo.Name, b.pkgInfo.Name)
+		})
+		slices.SortFunc(databaseEntries, func(a, b *bpmlib.BPMDatabaseEntry) int {
+			return strings.Compare(a.Info.Name, b.Info.Name)
+		})
 	case "size":
 		slices.SortFunc(installedPackages, func(a, b struct {
 			pkgInfo       bpmlib.PackageInfo
