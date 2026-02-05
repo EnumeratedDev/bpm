@@ -552,6 +552,34 @@ func (pkgInfo *PackageInfo) CreateReadableInfo(rootDir string) string {
 			builder.WriteString("  - " + val + "\n")
 		}
 	}
+	builderWriteDependencyArray := func(label string, depends []string) {
+		if len(depends) == 0 {
+			return
+		}
+
+		// Sort array
+		slices.Sort(depends)
+
+		builder.WriteString(label + ":\n")
+		for _, val := range depends {
+			builder.WriteString("  - " + val)
+
+			// Show virtual package providers
+			if providers := GetVirtualPackageInfo(val, rootDir); len(providers) > 0 {
+				builder.WriteString(" (")
+				for i, vpkg := range providers {
+					if i == len(providers)-1 {
+						builder.WriteString(vpkg.Name)
+					} else {
+						builder.WriteString(vpkg.Name + ", ")
+					}
+				}
+				builder.WriteString(")")
+			}
+
+			builder.WriteString("\n")
+		}
+	}
 
 	// Main information
 	builder.WriteString("Name: " + pkgInfo.Name + "\n")
@@ -567,21 +595,36 @@ func (pkgInfo *PackageInfo) CreateReadableInfo(rootDir string) string {
 	builder.WriteString("Type: " + pkgInfo.Type + "\n")
 
 	// Dependencies
-	builderWriteArray("Dependencies", pkgInfo.Depends, true)
+	builderWriteDependencyArray("Dependencies", pkgInfo.Depends)
 	if pkgInfo.Type == "source" {
-		builderWriteArray("Make dependencies", pkgInfo.MakeDepends, true)
-		builderWriteArray("Check dependencies", pkgInfo.CheckDepends, true)
+		builderWriteDependencyArray("Make dependencies", pkgInfo.MakeDepends)
+		builderWriteDependencyArray("Check dependencies", pkgInfo.CheckDepends)
 	}
-	builderWriteArray("Runtime dependencies", pkgInfo.RuntimeDepends, true)
+	builderWriteDependencyArray("Runtime dependencies", pkgInfo.RuntimeDepends)
 	if len(pkgInfo.OptionalDepends) > 0 {
 		builder.WriteString("Optional dependencies:\n")
 		for _, depend := range pkgInfo.OptionalDepends {
 			dependSplit := strings.SplitN(depend, ":", 2)
 			if len(dependSplit) == 2 {
-				builder.WriteString(fmt.Sprintf("  - %s (%s)\n", dependSplit[0], dependSplit[1]))
+				builder.WriteString(fmt.Sprintf("  - %s (%s)", dependSplit[0], dependSplit[1]))
 			} else {
-				builder.WriteString("  - " + dependSplit[0] + "\n")
+				builder.WriteString("  - " + dependSplit[0])
 			}
+
+			// Show virtual package providers
+			if providers := GetVirtualPackageInfo(dependSplit[0], rootDir); len(providers) > 0 {
+				builder.WriteString(" (")
+				for i, vpkg := range providers {
+					if i == len(providers)-1 {
+						builder.WriteString(vpkg.Name)
+					} else {
+						builder.WriteString(vpkg.Name + ", ")
+					}
+				}
+				builder.WriteString(")")
+			}
+
+			builder.WriteString("\n")
 		}
 	}
 	builderWriteArray("Dependant packages", pkgInfo.GetPackageDependants(rootDir), true)

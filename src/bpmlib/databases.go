@@ -343,6 +343,34 @@ func (entry *BPMDatabaseEntry) CreateReadableInfo(rootDir string, humanReadableS
 			builder.WriteString("  - " + val + "\n")
 		}
 	}
+	builderWriteDependencyArray := func(label string, depends []string) {
+		if len(depends) == 0 {
+			return
+		}
+
+		// Sort array
+		slices.Sort(depends)
+
+		builder.WriteString(label + ":\n")
+		for _, val := range depends {
+			builder.WriteString("  - " + val)
+
+			// Show virtual package providers
+			if providers := GetDatabaseVirtualPackageEntry(val); len(providers) > 0 {
+				builder.WriteString(" (")
+				for i, vpkg := range providers {
+					if i == len(providers)-1 {
+						builder.WriteString(vpkg.Info.Name)
+					} else {
+						builder.WriteString(vpkg.Info.Name + ", ")
+					}
+				}
+				builder.WriteString(")")
+			}
+
+			builder.WriteString("\n")
+		}
+	}
 
 	// Main information
 	builder.WriteString("Name: " + entry.Info.Name + "\n")
@@ -359,21 +387,36 @@ func (entry *BPMDatabaseEntry) CreateReadableInfo(rootDir string, humanReadableS
 	builder.WriteString("Type: " + entry.Info.Type + "\n")
 
 	// Dependencies
-	builderWriteArray("Dependencies", entry.Info.Depends, true)
+	builderWriteDependencyArray("Dependencies", entry.Info.Depends)
 	if entry.Info.Type == "source" {
-		builderWriteArray("Make dependencies", entry.Info.MakeDepends, true)
-		builderWriteArray("Check dependencies", entry.Info.CheckDepends, true)
+		builderWriteDependencyArray("Make dependencies", entry.Info.MakeDepends)
+		builderWriteDependencyArray("Check dependencies", entry.Info.CheckDepends)
 	}
-	builderWriteArray("Runtime dependencies", entry.Info.RuntimeDepends, true)
+	builderWriteDependencyArray("Runtime dependencies", entry.Info.RuntimeDepends)
 	if len(entry.Info.OptionalDepends) > 0 {
 		builder.WriteString("Optional dependencies:\n")
 		for _, depend := range entry.Info.OptionalDepends {
 			dependSplit := strings.SplitN(depend, ":", 2)
 			if len(dependSplit) == 2 {
-				builder.WriteString(fmt.Sprintf("  - %s (%s)\n", dependSplit[0], dependSplit[1]))
+				builder.WriteString(fmt.Sprintf("  - %s (%s)", dependSplit[0], dependSplit[1]))
 			} else {
-				builder.WriteString("  - " + dependSplit[0] + "\n")
+				builder.WriteString("  - " + dependSplit[0])
 			}
+
+			// Show virtual package providers
+			if providers := GetDatabaseVirtualPackageEntry(dependSplit[0]); len(providers) > 0 {
+				builder.WriteString(" (")
+				for i, vpkg := range providers {
+					if i == len(providers)-1 {
+						builder.WriteString(vpkg.Info.Name)
+					} else {
+						builder.WriteString(vpkg.Info.Name + ", ")
+					}
+				}
+				builder.WriteString(")")
+			}
+
+			builder.WriteString("\n")
 		}
 	}
 	builderWriteArray("Dependant packages", entry.GetEntryDependants(), true)
