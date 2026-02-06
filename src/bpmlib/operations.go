@@ -246,7 +246,7 @@ func (operation *BPMOperation) Cleanup(cleanupMakeDepends bool) error {
 			// Get all package dependencies
 			depends := v.Depends
 			depends = append(depends, v.RuntimeDepends...)
-			if cleanupMakeDepends {
+			if cleanupMakeDepends && v.Type == "source" {
 				depends = append(depends, v.MakeDepends...)
 				depends = append(depends, v.CheckDepends...)
 			}
