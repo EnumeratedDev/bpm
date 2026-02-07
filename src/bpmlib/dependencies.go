@@ -100,7 +100,7 @@ type ResolvedPackage struct {
 	InstallationReason InstallationReason
 }
 
-func ResolveDependencies(pkgInfo *PackageInfo, resolvedVirtualPackages map[string]string, includeOptionalDepends bool, rootDir string) (resolved []ResolvedPackage, unresolved []string) {
+func ResolveDependencies(pkgInfo *PackageInfo, resolvedVirtualPackages map[string]string, includeRuntimeDepends, includeOptionalDepends bool, rootDir string) (resolved []ResolvedPackage, unresolved []string) {
 	visited := make([]string, 0)
 
 	var dfs func(resolvedPkg *PackageInfo)
@@ -139,9 +139,10 @@ func ResolveDependencies(pkgInfo *PackageInfo, resolvedVirtualPackages map[strin
 		visited = append(visited, pkgInfo.Name)
 
 		checkDependencies(pkgInfo.Depends, InstallationReasonDependency)
-		if pkgInfo.Type == "binary" {
+		if includeRuntimeDepends {
 			checkDependencies(pkgInfo.RuntimeDepends, InstallationReasonDependency)
-		} else if pkgInfo.Type == "source" {
+		}
+		if pkgInfo.Type == "source" {
 			checkDependencies(pkgInfo.MakeDepends, InstallationReasonMakeDependency)
 			checkDependencies(pkgInfo.CheckDepends, InstallationReasonMakeDependency)
 		}

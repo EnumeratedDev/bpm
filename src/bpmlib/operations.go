@@ -131,7 +131,7 @@ func (operation *BPMOperation) GetFinalActionSize(rootDir string) int64 {
 	return ret
 }
 
-func (operation *BPMOperation) ResolveDependencies(reinstallDependencies, installOptionalDependencies bool) {
+func (operation *BPMOperation) ResolveDependencies(reinstallDependencies, installRuntimeDepends, installOptionalDependencies bool) {
 	// Discover resolved virtual packages
 	resolvedVirtualPackages := make(map[string]string)
 	for _, value := range slices.Clone(operation.Actions) {
@@ -167,7 +167,7 @@ func (operation *BPMOperation) ResolveDependencies(reinstallDependencies, instal
 			continue
 		}
 
-		resolved, unresolved := ResolveDependencies(pkgInfo, resolvedVirtualPackages, installOptionalDependencies, operation.RootDir)
+		resolved, unresolved := ResolveDependencies(pkgInfo, resolvedVirtualPackages, installRuntimeDepends, installOptionalDependencies, operation.RootDir)
 
 		// Append unresolved dependencies
 		operation.UnresolvedDepends = append(operation.UnresolvedDepends, unresolved...)
