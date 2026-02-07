@@ -92,7 +92,6 @@ func main() {
 		currentFlagSet.BoolP("optional", "o", false, "Install all optional dependencies")
 		currentFlagSet.String("installation-reason", "", "Specify the installation reason to use for the specified packages")
 		currentFlagSet.BoolP("reinstall", "r", false, "Reinstall the specified packages")
-		currentFlagSet.BoolP("reinstall-all", "a", false, "Reinstall the specified packages and their dependencies")
 		currentFlagSet.IntP("jobs", "j", bpmlib.CompilationBPMConfig.CompilationJobs, "Set the amount of concurrent processes to use for source package compilation")
 		currentFlagSet.BoolP("skip-checks", "s", false, "Skip the check function in source.sh scripts")
 		setupFlagsAndHelp(currentFlagSet, fmt.Sprintf("bpm %s <options>", subcommand), "Install the specified packages", os.Args[2:])
@@ -545,8 +544,7 @@ func installPackages() {
 	installRuntime, _ := currentFlagSet.GetBool("runtime")
 	installOptional, _ := currentFlagSet.GetBool("optional")
 	installationReason, _ := currentFlagSet.GetString("installation-reason")
-	reinstall, _ := currentFlagSet.GetBool("reinstall")
-	reinstallAll, _ := currentFlagSet.GetBool("reinstall-all")
+	reinstallPackages, _ := currentFlagSet.GetBool("reinstall")
 	skipChecks, _ := currentFlagSet.GetBool("skip-checks")
 	compilationJobs, _ := currentFlagSet.GetInt("jobs")
 
@@ -580,16 +578,6 @@ func installPackages() {
 		return
 	}
 
-	// Get reinstall method
-	var reinstallMethod bpmlib.ReinstallMethod
-	if reinstallAll {
-		reinstallMethod = bpmlib.ReinstallMethodAll
-	} else if reinstall {
-		reinstallMethod = bpmlib.ReinstallMethodSpecified
-	} else {
-		reinstallMethod = bpmlib.ReinstallMethodNone
-	}
-
 	// Create BPM Lock file
 	fileLock, err := bpmlib.LockBPM(rootDir)
 	if err != nil {
@@ -616,7 +604,7 @@ func installPackages() {
 	}
 
 	// Create installation operation
-	operation, err := bpmlib.InstallPackages(rootDir, ir, reinstallMethod, installRuntime, installOptional, force, !skipChecks, verbose, packages...)
+	operation, err := bpmlib.InstallPackages(rootDir, ir, reinstallPackages, installRuntime, installOptional, force, !skipChecks, verbose, packages...)
 	if errors.As(err, &bpmlib.PackageNotFoundErr{}) || errors.As(err, &bpmlib.DependencyNotFoundErr{}) || errors.As(err, &bpmlib.PackageConflictErr{}) {
 		log.Printf("Error: %s", err)
 		exitCode = 1

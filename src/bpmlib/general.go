@@ -11,16 +11,8 @@ import (
 	"strings"
 )
 
-type ReinstallMethod uint8
-
-const (
-	ReinstallMethodNone      ReinstallMethod = iota
-	ReinstallMethodSpecified ReinstallMethod = iota
-	ReinstallMethodAll       ReinstallMethod = iota
-)
-
 // InstallPackages installs the specified packages into the given root directory by fetching them from databases or directly from local bpm archives
-func InstallPackages(rootDir string, forceInstallationReason InstallationReason, reinstallMethod ReinstallMethod, installRuntimeDependencies, installOptionalDependencies, forceInstallation, runChecks bool, verbose bool, packages ...string) (operation *BPMOperation, err error) {
+func InstallPackages(rootDir string, forceInstallationReason InstallationReason, reinstallPackages bool, installRuntimeDependencies, installOptionalDependencies, forceInstallation, runChecks bool, verbose bool, packages ...string) (operation *BPMOperation, err error) {
 	// Setup operation struct
 	operation = &BPMOperation{
 		Actions:           make([]OperationAction, 0),
@@ -45,7 +37,7 @@ func InstallPackages(rootDir string, forceInstallationReason InstallationReason,
 
 			if bpmpkg.PkgInfo.Type == "source" && bpmpkg.PkgInfo.IsSplitPackage() {
 				for _, splitPkg := range bpmpkg.PkgInfo.SplitPackages {
-					if reinstallMethod == ReinstallMethodNone && IsPackageInstalled(splitPkg.Name, rootDir) && GetPackageInfo(splitPkg.Name, rootDir).GetFullVersion() == splitPkg.GetFullVersion() {
+					if !reinstallPackages && IsPackageInstalled(splitPkg.Name, rootDir) && GetPackageInfo(splitPkg.Name, rootDir).GetFullVersion() == splitPkg.GetFullVersion() {
 						continue
 					}
 
@@ -69,7 +61,7 @@ func InstallPackages(rootDir string, forceInstallationReason InstallationReason,
 				continue
 			}
 
-			if reinstallMethod == ReinstallMethodNone && IsPackageInstalled(bpmpkg.PkgInfo.Name, rootDir) && GetPackageInfo(bpmpkg.PkgInfo.Name, rootDir).GetFullVersion() == bpmpkg.PkgInfo.GetFullVersion() {
+			if !reinstallPackages && IsPackageInstalled(bpmpkg.PkgInfo.Name, rootDir) && GetPackageInfo(bpmpkg.PkgInfo.Name, rootDir).GetFullVersion() == bpmpkg.PkgInfo.GetFullVersion() {
 				continue
 			}
 
@@ -105,7 +97,7 @@ func InstallPackages(rootDir string, forceInstallationReason InstallationReason,
 				pkgsNotFound = append(pkgsNotFound, pkg)
 				continue
 			}
-			if reinstallMethod == ReinstallMethodNone && IsPackageInstalled(entry.Info.Name, rootDir) && GetPackageInfo(entry.Info.Name, rootDir).GetFullVersion() == entry.Info.GetFullVersion() {
+			if !reinstallPackages && IsPackageInstalled(entry.Info.Name, rootDir) && GetPackageInfo(entry.Info.Name, rootDir).GetFullVersion() == entry.Info.GetFullVersion() {
 				continue
 			}
 
@@ -132,7 +124,7 @@ func InstallPackages(rootDir string, forceInstallationReason InstallationReason,
 	}
 
 	// Resolve dependencies
-	operation.ResolveDependencies(reinstallMethod == ReinstallMethodAll, installRuntimeDependencies, installOptionalDependencies)
+	operation.ResolveDependencies(installRuntimeDependencies, installOptionalDependencies)
 	if len(operation.UnresolvedDepends) != 0 {
 		if !forceInstallation {
 			return nil, DependencyNotFoundErr{operation.UnresolvedDepends}
@@ -428,7 +420,7 @@ func UpdatePackages(rootDir string, syncDatabase bool, allowDowngrades bool, ins
 	}
 
 	// Check for new dependencies in updated packages
-	operation.ResolveDependencies(false, true, installOptionalDependencies)
+	operation.ResolveDependencies(true, installOptionalDependencies)
 	if len(operation.UnresolvedDepends) != 0 {
 		if !forceInstallation {
 			return nil, DependencyNotFoundErr{operation.UnresolvedDepends}
