@@ -132,10 +132,7 @@ func InstallPackages(rootDir string, forceInstallationReason InstallationReason,
 	}
 
 	// Resolve dependencies
-	err = operation.ResolveDependencies(reinstallMethod == ReinstallMethodAll, installRuntimeDependencies, installOptionalDependencies, verbose)
-	if err != nil {
-		return nil, fmt.Errorf("could not resolve dependencies: %s", err)
-	}
+	operation.ResolveDependencies(reinstallMethod == ReinstallMethodAll, installOptionalDependencies)
 	if len(operation.UnresolvedDepends) != 0 {
 		if !forceInstallation {
 			return nil, DependencyNotFoundErr{operation.UnresolvedDepends}
@@ -431,10 +428,7 @@ func UpdatePackages(rootDir string, syncDatabase bool, allowDowngrades bool, ins
 	}
 
 	// Check for new dependencies in updated packages
-	err = operation.ResolveDependencies(false, true, installOptionalDependencies, verbose)
-	if err != nil {
-		return nil, fmt.Errorf("could not resolve dependencies: %s", err)
-	}
+	operation.ResolveDependencies(false, installOptionalDependencies)
 	if len(operation.UnresolvedDepends) != 0 {
 		if !forceInstallation {
 			return nil, DependencyNotFoundErr{operation.UnresolvedDepends}

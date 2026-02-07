@@ -318,3 +318,63 @@ func (pkgInfo *PackageInfo) GetPackageOptionalDependants(rootDir string) (depend
 
 	return dependants
 }
+
+type ResolvedPackage struct {
+	DatabaseEntry      *BPMDatabaseEntry
+	InstallationReason InstallationReason
+}
+
+func ResolveDependencies(pkgInfo *PackageInfo, resolvedVirtualPackages map[string]string, includeOptionalDepends bool, rootDir string) (resolved []ResolvedPackage, unresolved []string) {
+	visited := make([]string, 0)
+
+	var dfs func(resolvedPkg *PackageInfo)
+	dfs = func(pkgInfo *PackageInfo) {
+		checkDependencies := func(dependencies []string, installationReason InstallationReason) {
+			for _, depend := range dependencies {
+				// Ignore if package is already installed
+				if IsPackageInstalled(depend, rootDir) {
+					continue
+				} else if providers := GetVirtualPackageInfo(depend, rootDir); len(providers) > 0 {
+					continue
+				}
+
+				// Find database entry for dependency
+				var dependEntry *BPMDatabaseEntry
+				if resolvedVpkg, ok := resolvedVirtualPackages[depend]; ok {
+					dependEntry, _, _ = GetDatabaseEntry(resolvedVpkg)
+				} else if entry, _, _ := GetDatabaseEntry(depend); entry != nil {
+					dependEntry = entry
+				} else if providers := GetDatabaseVirtualPackageEntry(depend); len(providers) > 0 {
+					dependEntry = providers[0]
+				}
+
+				if dependEntry == nil {
+					unresolved = append(unresolved, depend)
+					continue
+				}
+
+				if !slices.Contains(visited, dependEntry.Info.Name) {
+					dfs(dependEntry.Info)
+					resolved = append(resolved, ResolvedPackage{DatabaseEntry: dependEntry, InstallationReason: installationReason})
+				}
+			}
+		}
+
+		visited = append(visited, pkgInfo.Name)
+
+		checkDependencies(pkgInfo.Depends, InstallationReasonDependency)
+		if pkgInfo.Type == "binary" {
+			checkDependencies(pkgInfo.RuntimeDepends, InstallationReasonDependency)
+		} else if pkgInfo.Type == "source" {
+			checkDependencies(pkgInfo.MakeDepends, InstallationReasonMakeDependency)
+			checkDependencies(pkgInfo.CheckDepends, InstallationReasonMakeDependency)
+		}
+		if includeOptionalDepends {
+			checkDependencies(pkgInfo.OptionalDepends, InstallationReasonManual)
+		}
+	}
+
+	dfs(pkgInfo)
+
+	return resolved, unresolved
+}

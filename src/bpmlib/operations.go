@@ -131,9 +131,9 @@ func (operation *BPMOperation) GetFinalActionSize(rootDir string) int64 {
 	return ret
 }
 
-func (operation *BPMOperation) ResolveDependencies(reinstallDependencies, installRuntimeDependencies, installOptionalDependencies, verbose bool) error {
-	pos := 0
-	resolvedVirtualPkgs := make(map[string]string, 0)
+func (operation *BPMOperation) ResolveDependencies(reinstallDependencies, installOptionalDependencies bool) {
+	// Discover resolved virtual packages
+	resolvedVirtualPackages := make(map[string]string)
 	for _, value := range slices.Clone(operation.Actions) {
 		var pkgInfo *PackageInfo
 		if value.GetActionType() == "install" {
@@ -143,34 +143,55 @@ func (operation *BPMOperation) ResolveDependencies(reinstallDependencies, instal
 			action := value.(*FetchPackageAction)
 			pkgInfo = action.DatabaseEntry.Info
 		} else {
-			pos++
 			continue
 		}
 
-		resolved, unresolved := ResolveAllPackageDependenciesFromDatabases(pkgInfo, resolvedVirtualPkgs, pkgInfo.Type == "source", pkgInfo.Type == "source" && operation.RunChecks, installRuntimeDependencies, installOptionalDependencies, !reinstallDependencies, verbose, operation.RootDir)
+		for _, vpkg := range pkgInfo.Provides {
+			if _, ok := resolvedVirtualPackages[vpkg]; !ok {
+				resolvedVirtualPackages[vpkg] = pkgInfo.Name
+			}
+		}
+	}
 
+	// Discover all dependencies
+	pos := 0
+	for _, value := range slices.Clone(operation.Actions) {
+		var pkgInfo *PackageInfo
+		if value.GetActionType() == "install" {
+			action := value.(*InstallPackageAction)
+			pkgInfo = action.BpmPackage.PkgInfo
+		} else if value.GetActionType() == "fetch" {
+			action := value.(*FetchPackageAction)
+			pkgInfo = action.DatabaseEntry.Info
+		} else {
+			continue
+		}
+
+		resolved, unresolved := ResolveDependencies(pkgInfo, resolvedVirtualPackages, installOptionalDependencies, operation.RootDir)
+
+		// Append unresolved dependencies
 		operation.UnresolvedDepends = append(operation.UnresolvedDepends, unresolved...)
+		operation.UnresolvedDepends = removeDuplicates(operation.UnresolvedDepends)
 
 		for _, resolvedPkg := range resolved {
-			if !operation.ActionsContainPackage(resolvedPkg.PkgName) && resolvedPkg.PkgName != pkgInfo.Name {
-				if !reinstallDependencies && IsPackageInstalled(resolvedPkg.PkgName, operation.RootDir) {
-					continue
-				}
-				entry, _, err := GetDatabaseEntry(resolvedPkg.PkgName)
-				if err != nil {
-					return errors.New("could not get database entry for package (" + resolvedPkg.PkgName + ")")
-				}
+			if !operation.ActionsContainPackage(resolvedPkg.DatabaseEntry.Info.Name) && resolvedPkg.DatabaseEntry.Info.Name != pkgInfo.Name {
 				operation.InsertActionAt(pos, &FetchPackageAction{
 					InstallationReason: resolvedPkg.InstallationReason,
-					DatabaseEntry:      entry,
+					DatabaseEntry:      resolvedPkg.DatabaseEntry,
 				})
+
+				for _, vpkg := range resolvedPkg.DatabaseEntry.Info.Provides {
+					if _, ok := resolvedVirtualPackages[vpkg]; !ok {
+						resolvedVirtualPackages[vpkg] = resolvedPkg.DatabaseEntry.Info.Name
+					}
+				}
+
 				pos++
 			}
 		}
+
 		pos++
 	}
-
-	return nil
 }
 
 func (operation *BPMOperation) RemoveNeededPackages() error {
