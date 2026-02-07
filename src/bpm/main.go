@@ -1285,12 +1285,12 @@ func compilePackage() {
 			return
 		}
 
-		// Get direct common and make dependencies
+		// Get common, make and check dependencies
 		totalDepends := make([]string, 0)
-		for _, depend := range bpmpkg.PkgInfo.GetDependencies(true, !skipChecks, false, false) {
-			if !slices.Contains(totalDepends, depend.PkgName) {
-				totalDepends = append(totalDepends, depend.PkgName)
-			}
+		totalDepends = append(totalDepends, bpmpkg.PkgInfo.Depends...)
+		totalDepends = append(totalDepends, bpmpkg.PkgInfo.MakeDepends...)
+		if !skipChecks {
+			totalDepends = append(totalDepends, bpmpkg.PkgInfo.CheckDepends...)
 		}
 
 		// Get unmet dependencies
