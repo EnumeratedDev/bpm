@@ -236,6 +236,10 @@ func GetDatabaseVirtualPackageEntry(vpkg string) (providers []*BPMDatabaseEntry)
 		providers = append(providers, db.VirtualPackages[vpkg]...)
 	}
 
+	slices.SortFunc(providers, func(a, b *BPMDatabaseEntry) int {
+		return strings.Compare(a.Info.Name, b.Info.Name)
+	})
+
 	return providers
 }
 

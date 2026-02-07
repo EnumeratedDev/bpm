@@ -122,7 +122,12 @@ func GetVirtualPackageInfo(vpkg, rootDir string) []*PackageInfo {
 		return nil
 	}
 
-	return installedVirtualPackages[rootDir][vpkg]
+	providers := installedVirtualPackages[rootDir][vpkg]
+	slices.SortFunc(providers, func(a, b *PackageInfo) int {
+		return strings.Compare(a.Name, b.Name)
+	})
+
+	return providers
 }
 
 func GetPackageInfo(pkg string, rootDir string) *PackageInfo {
