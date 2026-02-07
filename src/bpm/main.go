@@ -1472,7 +1472,7 @@ func compareVersions() {
 func printUsage() {
 	fmt.Printf("Usage: %s <subcommand> [options]\n", os.Args[0])
 	fmt.Println("Description: Manage system packages")
-	fmt.Println("Subcommands:")
+	fmt.Println("Main subcommands:")
 	fmt.Println("  q, query     Show information on the specified packages")
 	fmt.Println("  l, list      List packages")
 	fmt.Println("  s, search    Search for packages in remote databases")
@@ -1482,8 +1482,11 @@ func printUsage() {
 	fmt.Println("  y, sync      Sync all databases")
 	fmt.Println("  u, update    Update installed packages")
 	fmt.Println("  o, owner     Show what packages own the specified paths")
+	fmt.Println("Developer subcommands:")
 	fmt.Println("  c, compile   Compile source packages and convert them to binary ones")
 	fmt.Println("  p, vercmp    Compare package version numbers")
+	fmt.Println("Maintenance subcommands:")
+	fmt.Println("  upgrade-persistent-data   Upgrade persistent data directory to the latest format")
 
 }
 
