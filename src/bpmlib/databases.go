@@ -17,12 +17,21 @@ import (
 	"gopkg.in/yaml.v3"
 )
 
+type VerificationLevel int
+
+const (
+	VerificationLevelNone VerificationLevel = iota
+	VerificationLevelAll
+	VerificationLevelTrusted
+)
+
 type BPMDatabase struct {
-	DatabaseVersion int                          `yaml:"database_version"`
-	Entries         map[string]*BPMDatabaseEntry `yaml:"entries"`
-	VirtualPackages map[string][]*BPMDatabaseEntry
-	Name            string
-	Source          string
+	DatabaseVersion   int                          `yaml:"database_version"`
+	Entries           map[string]*BPMDatabaseEntry `yaml:"entries"`
+	VirtualPackages   map[string][]*BPMDatabaseEntry
+	Name              string
+	VerificationLevel VerificationLevel
+	Source            string
 }
 
 type BPMDatabaseEntry struct {
@@ -61,6 +70,16 @@ func (db *configDatabase) ReadLocalDatabase() error {
 	// Initialize struct values
 	database.VirtualPackages = make(map[string][]*BPMDatabaseEntry)
 	database.Name = db.Name
+	switch db.VerificationLevel {
+	case "0", "none":
+		database.VerificationLevel = VerificationLevelNone
+	case "1", "all":
+		database.VerificationLevel = VerificationLevelAll
+	case "2", "trusted":
+		database.VerificationLevel = VerificationLevelTrusted
+	default:
+		database.VerificationLevel = VerificationLevelAll
+	}
 	database.Source = db.Source
 
 	for entryName, entry := range database.Entries {
@@ -257,12 +276,26 @@ func (db *BPMDatabase) FetchPackage(pkg string) (string, error) {
 	}
 
 	// Download package from url
-	err = downloadFile("Downloading "+entry.Info.Name, u, path.Join("/var/cache/bpm/fetched/", path.Base(entry.Filepath)), 0644)
+	filepath := path.Join("/var/cache/bpm/fetched/", path.Base(entry.Filepath))
+	err = downloadFile("Downloading "+entry.Info.Name, u, filepath, 0644)
 	if err != nil {
 		return "", err
 	}
 
-	return path.Join("/var/cache/bpm/fetched/", path.Base(entry.Filepath)), nil
+	// Download and verify signature if required
+	if db.VerificationLevel != VerificationLevelNone {
+		err = downloadFile("", u+".sig", filepath+".sig", 0644)
+		if err != nil {
+			return "", err
+		}
+
+		err := VerifySignature(filepath, filepath+".sig", db.VerificationLevel == VerificationLevelTrusted, "/")
+		if err != nil {
+			return "", fmt.Errorf("Could not verify signature for %s: %s", filepath, err)
+		}
+	}
+
+	return filepath, nil
 }
 
 func (entry *BPMDatabaseEntry) GetEntryDependants() (dependants []string) {

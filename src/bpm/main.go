@@ -176,6 +176,19 @@ func main() {
 		setupFlagsAndHelp(currentFlagSet, fmt.Sprintf("bpm %s <options>", subcommand), "Compare two version numbers", os.Args[2:])
 
 		compareVersions()
+	case "keyring":
+		currentFlagSet = flag.NewFlagSet("keyring", flag.ExitOnError)
+		currentFlagSet.StringP("root", "R", "/", "Operate on specified root directory")
+		currentFlagSet.BoolP("yes", "y", false, "Enter 'yes' in all prompts")
+		currentFlagSet.BoolP("init", "i", false, "Initialize keyring")
+		currentFlagSet.BoolP("populate", "p", false, "Populate keyring")
+		currentFlagSet.BoolP("add", "a", false, "Add the specified keys")
+		currentFlagSet.BoolP("remove", "r", false, "Remove the specified keys")
+		currentFlagSet.BoolP("list", "l", false, "List all keys")
+
+		setupFlagsAndHelp(currentFlagSet, fmt.Sprintf("bpm %s <options>", subcommand), "Manage the BPM keyring", os.Args[2:])
+
+		manageKeyring()
 	case "upgrade-persistent-data":
 		currentFlagSet = flag.NewFlagSet("upgrade-persistent-data", flag.ExitOnError)
 		currentFlagSet.StringP("root", "R", "/", "Operate on specified root directory")
@@ -1469,6 +1482,125 @@ func compareVersions() {
 	fmt.Println(bpmlib.CompareVersions(v1, v2))
 }
 
+func manageKeyring() {
+	// Get flags
+	rootDir, _ := currentFlagSet.GetString("root")
+	yesAll, _ := currentFlagSet.GetBool("yes")
+	initKeyring, _ := currentFlagSet.GetBool("init")
+	populateKeyring, _ := currentFlagSet.GetBool("populate")
+	addKeys, _ := currentFlagSet.GetBool("add")
+	removeKeys, _ := currentFlagSet.GetBool("remove")
+	listKeys, _ := currentFlagSet.GetBool("list")
+
+	// Check for required permissions
+	if os.Getuid() != 0 {
+		log.Printf("Error: this subcommand needs to be run with superuser permissions")
+		exitCode = 1
+		return
+	}
+
+	if initKeyring {
+		err := bpmlib.InitializeKeyring(rootDir)
+		if err != nil {
+			log.Printf("Error: could not populate keyring: %s", err)
+			exitCode = 1
+			return
+		}
+		fmt.Println("Keyring initialized successfully!")
+	} else if populateKeyring {
+		if !bpmlib.IsKeyringInitialized(rootDir) {
+			log.Printf("Error: keyring needs to be initialized first")
+			exitCode = 1
+			return
+		}
+
+		err := bpmlib.PopulateKeyring(rootDir)
+		if err != nil {
+			log.Printf("Error: could not populate keyring: %s", err)
+			exitCode = 1
+			return
+		}
+		fmt.Println("Keyring populated successfully!")
+	} else if addKeys {
+		gpgHomedir := path.Join(rootDir, "/var/lib/bpm/gpg")
+
+		if currentFlagSet.NArg() == 0 {
+			log.Printf("Error: no keys specified")
+			exitCode = 1
+			return
+		}
+
+		if !bpmlib.IsKeyringInitialized(rootDir) {
+			log.Printf("Error: keyring needs to be initialized first")
+			exitCode = 1
+			return
+		}
+
+		cmd := exec.Command("gpg", "--homedir="+gpgHomedir, "--import")
+		cmd.Args = append(cmd.Args, currentFlagSet.Args()...)
+		cmd.Stdout = os.Stdout
+		cmd.Stderr = os.Stderr
+
+		err := cmd.Run()
+		if err != nil {
+			log.Printf("Error: could not add keys: %s", err)
+			exitCode = 1
+			return
+		}
+	} else if removeKeys {
+		gpgHomedir := path.Join(rootDir, "/var/lib/bpm/gpg")
+
+		if currentFlagSet.NArg() == 0 {
+			log.Printf("Error: no keys specified")
+			exitCode = 1
+			return
+		}
+
+		if !bpmlib.IsKeyringInitialized(rootDir) {
+			log.Printf("Error: keyring needs to be initialized first")
+			exitCode = 1
+			return
+		}
+
+		cmd := exec.Command("gpg", "--homedir="+gpgHomedir, "--delete-secret-and-public-keys")
+		if yesAll {
+			cmd.Args = append(cmd.Args, "--batch", "--yes")
+		}
+		cmd.Args = append(cmd.Args, currentFlagSet.Args()...)
+		cmd.Stdin = os.Stdin
+		cmd.Stdout = os.Stdout
+		cmd.Stderr = os.Stderr
+
+		err := cmd.Run()
+		if err != nil {
+			log.Printf("Error: could not remove keys: %s", err)
+			exitCode = 1
+			return
+		}
+	} else if listKeys {
+		gpgHomedir := path.Join(rootDir, "/var/lib/bpm/gpg")
+
+		if !bpmlib.IsKeyringInitialized(rootDir) {
+			log.Printf("Error: keyring needs to be initialized first")
+			exitCode = 1
+			return
+		}
+
+		cmd := exec.Command("gpg", "--homedir="+gpgHomedir, "--list-keys")
+		cmd.Stdout = os.Stdout
+		cmd.Stderr = os.Stderr
+
+		err := cmd.Run()
+		if err != nil {
+			log.Printf("Error: could not list keys: %s", err)
+			exitCode = 1
+			return
+		}
+	} else {
+		currentFlagSet.Usage()
+	}
+}
+
 func printUsage() {
 	fmt.Printf("Usage: %s <subcommand> [options]\n", os.Args[0])
 	fmt.Println("Description: Manage system packages")
@@ -1486,6 +1618,7 @@ func printUsage() {
 	fmt.Println("  c, compile   Compile source packages and convert them to binary ones")
 	fmt.Println("  p, vercmp    Compare package version numbers")
 	fmt.Println("Maintenance subcommands:")
+	fmt.Println("  keyring                   Manage the BPM keyring")
 	fmt.Println("  upgrade-persistent-data   Upgrade persistent data directory to the latest format")
 
 }

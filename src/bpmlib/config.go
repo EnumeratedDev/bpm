@@ -14,9 +14,10 @@ type MainBPMConfigStruct struct {
 }
 
 type configDatabase struct {
-	Name     string `yaml:"name"`
-	Source   string `yaml:"source"`
-	Disabled *bool  `yaml:"disabled"`
+	Name              string `yaml:"name"`
+	Source            string `yaml:"source"`
+	VerificationLevel string `yaml:"verification_level"`
+	Disabled          *bool  `yaml:"disabled"`
 }
 
 type CompilationBPMConfigStruct struct {

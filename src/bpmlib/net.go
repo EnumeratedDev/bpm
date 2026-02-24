@@ -39,7 +39,7 @@ func downloadFile(barText, u, filepath string, perm os.FileMode) error {
 	defer file.Close()
 
 	// Create progress bar
-	bar := createProgressBar(resp.ContentLength, barText, false)
+	bar := createProgressBar(resp.ContentLength, barText, barText == "")
 	defer bar.Close()
 
 	// Copy data
