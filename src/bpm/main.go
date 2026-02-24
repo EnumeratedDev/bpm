@@ -358,20 +358,21 @@ func showPackageList() {
 		return
 	}
 
-	installedPackages := make([]struct {
+	type installedPackage struct {
 		pkgInfo       bpmlib.PackageInfo
 		installedSize int64
-	}, len(installedPackageNames))
+		localInfo     bpmlib.PackageLocalInfo
+	}
+
+	installedPackages := make([]installedPackage, len(installedPackageNames))
 	for i, pkgName := range installedPackageNames {
 		pkgInfo := *bpmlib.GetPackageInfo(pkgName, rootDir)
-		installedSize := bpmlib.GetPackage(pkgName, rootDir).GetInstalledSize()
+		bpmpkg := bpmlib.GetPackage(pkgName, rootDir)
 
-		installedPackages[i] = struct {
-			pkgInfo       bpmlib.PackageInfo
-			installedSize int64
-		}{
+		installedPackages[i] = installedPackage{
 			pkgInfo:       pkgInfo,
-			installedSize: installedSize,
+			installedSize: bpmpkg.GetInstalledSize(),
+			localInfo:     bpmpkg.LocalInfo,
 		}
 	}
 
@@ -382,24 +383,26 @@ func showPackageList() {
 
 	switch sortPackages {
 	case "", "name":
-		slices.SortFunc(installedPackages, func(a, b struct {
-			pkgInfo       bpmlib.PackageInfo
-			installedSize int64
-		}) int {
+		slices.SortFunc(installedPackages, func(a, b installedPackage) int {
 			return strings.Compare(a.pkgInfo.Name, b.pkgInfo.Name)
 		})
 		slices.SortFunc(databaseEntries, func(a, b *bpmlib.BPMDatabaseEntry) int {
 			return strings.Compare(a.Info.Name, b.Info.Name)
 		})
 	case "size":
-		slices.SortFunc(installedPackages, func(a, b struct {
-			pkgInfo       bpmlib.PackageInfo
-			installedSize int64
-		}) int {
+		slices.SortFunc(installedPackages, func(a, b installedPackage) int {
 			return int(b.installedSize - a.installedSize)
 		})
 		slices.SortFunc(databaseEntries, func(a, b *bpmlib.BPMDatabaseEntry) int {
 			return int(b.InstalledSize - a.InstalledSize)
+		})
+	case "installation-date":
+		slices.SortFunc(installedPackages, func(a, b installedPackage) int {
+			return int(b.localInfo.InstalledOn - a.localInfo.InstalledOn)
+		})
+	case "last-update-date":
+		slices.SortFunc(installedPackages, func(a, b installedPackage) int {
+			return int(b.localInfo.LastUpdatedOn - a.localInfo.LastUpdatedOn)
 		})
 	default:
 		log.Printf("Error: cannot sort by '%s'", sortPackages)
