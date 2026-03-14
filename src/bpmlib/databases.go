@@ -520,6 +520,16 @@ func (entry *BPMDatabaseEntry) CreateReadableInfo(rootDir string, showBytes bool
 		builder.WriteString("Installation reason: " + installationReasonString + "\n")
 	}
 
+	// Download size
+	downloadSize := entry.DownloadSize
+	var downloadSizeStr string
+	if showBytes {
+		downloadSizeStr = strconv.FormatInt(downloadSize, 10)
+	} else {
+		downloadSizeStr = BytesToHumanReadable(downloadSize)
+	}
+	builder.WriteString("Download size: " + downloadSizeStr + "\n")
+
 	// Installed size
 	if entry.Info.Type == "binary" {
 		installedSize := entry.InstalledSize
