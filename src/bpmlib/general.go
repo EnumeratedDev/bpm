@@ -12,7 +12,7 @@ import (
 )
 
 // InstallPackages installs the specified packages into the given root directory by fetching them from databases or directly from local bpm archives
-func InstallPackages(rootDir string, forceInstallationReason InstallationReason, reinstallPackages bool, installRuntimeDependencies, installOptionalDependencies, forceInstallation, runChecks bool, verbose bool, packages ...string) (operation *BPMOperation, err error) {
+func InstallPackages(rootDir string, forceInstallationReason InstallationReason, reinstallPackages bool, installRuntimeDependencies, forceInstallation, runChecks bool, verbose bool, packages ...string) (operation *BPMOperation, err error) {
 	// Setup operation struct
 	operation = &BPMOperation{
 		Actions:           make([]OperationAction, 0),
@@ -124,7 +124,7 @@ func InstallPackages(rootDir string, forceInstallationReason InstallationReason,
 	}
 
 	// Resolve dependencies
-	operation.ResolveDependencies(installRuntimeDependencies, installOptionalDependencies)
+	operation.ResolveDependencies(installRuntimeDependencies)
 	if len(operation.UnresolvedDepends) != 0 {
 		if !forceInstallation {
 			return nil, DependencyNotFoundErr{operation.UnresolvedDepends}
@@ -355,7 +355,7 @@ func CleanupCache(rootDir string, cleanupCompilationFiles, cleanupCompiledPackag
 }
 
 // UpdatePackages fetches the newest versions of all installed packages from
-func UpdatePackages(rootDir string, syncDatabase bool, allowDowngrades bool, installOptionalDependencies, forceInstallation, runChecks, verbose bool) (operation *BPMOperation, err error) {
+func UpdatePackages(rootDir string, syncDatabase, allowDowngrades, forceInstallation, runChecks, verbose bool) (operation *BPMOperation, err error) {
 	// Sync databases
 	if syncDatabase {
 		err := SyncDatabase(verbose)
@@ -420,7 +420,7 @@ func UpdatePackages(rootDir string, syncDatabase bool, allowDowngrades bool, ins
 	}
 
 	// Check for new dependencies in updated packages
-	operation.ResolveDependencies(true, installOptionalDependencies)
+	operation.ResolveDependencies(true)
 	if len(operation.UnresolvedDepends) != 0 {
 		if !forceInstallation {
 			return nil, DependencyNotFoundErr{operation.UnresolvedDepends}
