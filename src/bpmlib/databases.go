@@ -358,6 +358,35 @@ func (entry *BPMDatabaseEntry) GetEntryOptionalDependants() (dependants []string
 	return dependants
 }
 
+func (entry *BPMDatabaseEntry) GetEntryMakeDependants() (dependants []string) {
+	dependantsMap := make(map[string][]string)
+	for _, db := range BPMDatabases {
+		for _, e := range db.Entries {
+			if slices.Contains(e.Info.MakeDepends, entry.Info.Name) {
+				dependantsMap[e.Info.Name] = append(dependantsMap[e.Info.Name], e.Database.Name)
+			}
+		}
+	}
+
+	// Get keys
+	keySlice := slices.Collect(maps.Keys(dependantsMap))
+	slices.Sort(keySlice)
+
+	// Add all dependant entries to slice in alphabetical order
+	for _, entryName := range keySlice {
+		dbs := dependantsMap[entryName]
+		if len(dbs) > 1 {
+			for _, db := range dbs {
+				dependants = append(dependants, db+"/"+entryName)
+			}
+		} else {
+			dependants = append(dependants, entryName)
+		}
+	}
+
+	return dependants
+}
+
 func (entry *BPMDatabaseEntry) CreateReadableInfo(rootDir string, showBytes bool) string {
 	builder := strings.Builder{}
 	builderWriteStringNotEmpty := func(label string, value string) {
@@ -458,6 +487,7 @@ func (entry *BPMDatabaseEntry) CreateReadableInfo(rootDir string, showBytes bool
 	}
 	builderWriteArray("Dependant packages", entry.GetEntryDependants(), true)
 	builderWriteArray("Optionally dependant packages", entry.GetEntryOptionalDependants(), true)
+	builderWriteArray("Make dependant packages", entry.GetEntryMakeDependants(), true)
 
 	// Other package relations
 	builderWriteArray("Conflicting packages", entry.Info.Conflicts, true)
