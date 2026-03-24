@@ -152,7 +152,7 @@ func main() {
 		currentFlagSet.StringP("root", "R", "/", "Operate on specified root directory")
 		setupFlagsAndHelp(currentFlagSet, fmt.Sprintf("bpm %s <options>", subcommand), "Show what packages own the specified paths", os.Args[2:])
 
-		getFileOwner()
+		getPathOwners()
 	case "c", "compile":
 		// Setup flags and help
 		currentFlagSet = flag.NewFlagSet("compile", flag.ExitOnError)
@@ -1134,7 +1134,7 @@ func updatePackages() {
 	}
 }
 
-func getFileOwner() {
+func getPathOwners() {
 	// Get flags
 	rootDir, _ := currentFlagSet.GetString("root")
 
@@ -1157,7 +1157,7 @@ func getFileOwner() {
 		// Ensure file exists
 		stat, err := os.Lstat(path)
 		if os.IsNotExist(err) {
-			log.Printf("Error: file (%s) does not exist!\n", path)
+			log.Printf("Error: %s", err)
 			exitCode = 1
 			return
 		}
@@ -1170,57 +1170,21 @@ func getFileOwner() {
 			pathType = "Symlink"
 		}
 
-		// Get absolte path to path
-		absPath, err := filepath.Abs(path)
+		pathOwners, err := bpmlib.GetPathOwners(path, rootDir)
 		if err != nil {
-			log.Printf("Error: could not get absolute path of file (%s)\n", path)
+			log.Printf("Error: %s", err)
 			exitCode = 1
 			return
-		}
-
-		// Get path relative to rootDir
-		if !strings.HasPrefix(absPath, rootDir) {
-			log.Printf("Error: could not get path of file (%s) relative to root path", absPath)
-			exitCode = 1
-			return
-		}
-		absPath, err = filepath.Rel(rootDir, absPath)
-		if err != nil {
-			log.Printf("Error: could not get path of file (%s) relative to root path", absPath)
-			exitCode = 1
-			return
-		}
-
-		// Trim leading and trailing slashes
-		absPath = strings.TrimLeft(absPath, "/")
-		absPath = strings.TrimRight(absPath, "/")
-
-		// Get installed packages
-		pkgs, err := bpmlib.GetInstalledPackages(rootDir)
-		if err != nil {
-			log.Printf("Error: could not get installed packages: %s\n", err.Error())
-			exitCode = 1
-			return
-		}
-
-		// Add packages that own path to list
-		var pkgList []string
-		for _, pkg := range pkgs {
-			if slices.ContainsFunc(bpmlib.GetPackage(pkg, rootDir).PkgFiles, func(entry *bpmlib.PackageFileEntry) bool {
-				return entry.Path == absPath
-			}) {
-				pkgList = append(pkgList, pkg)
-			}
 		}
 
 		// Print packages
-		if len(pkgList) == 0 {
-			fmt.Printf("%s (%s) is not owned by any packages!\n", absPath, pathType)
+		if len(pathOwners) == 0 {
+			fmt.Printf("%s (%s) is not owned by any packages!\n", path, pathType)
 			exitCode = 1
 			return
 		} else {
-			fmt.Printf("%s (%s) is owned by the following packages:\n", absPath, pathType)
-			for _, pkg := range pkgList {
+			fmt.Printf("%s (%s) is owned by the following packages:\n", path, pathType)
+			for _, pkg := range pathOwners {
 				fmt.Println("- " + pkg)
 			}
 		}

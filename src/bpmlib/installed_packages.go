@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"os"
 	"path"
+	"path/filepath"
 	"slices"
 	"strconv"
 	"strings"
@@ -99,6 +100,41 @@ func GetInstalledPackages(rootDir string) (ret []string, err error) {
 
 	// Sort packages
 	slices.Sort(ret)
+
+	return ret, nil
+}
+
+func GetPathOwners(path, rootDir string) (ret []string, err error) {
+	// Get absolte path to path
+	path, err = filepath.Abs(path)
+	if err != nil {
+		return
+	}
+
+	path, err = filepath.Rel(rootDir, path)
+	if err != nil {
+		return
+	}
+
+	// Trim leading and trailing slashes
+	path = strings.TrimLeft(path, "/")
+	path = strings.TrimRight(path, "/")
+
+	// Get installed packages
+	pkgs, err := GetInstalledPackages(rootDir)
+	if err != nil {
+		return
+	}
+
+	// Add packages that own path to list
+	for _, pkg := range pkgs {
+		pkgFiles := getPackageFiles(pkg, rootDir)
+		if slices.ContainsFunc(pkgFiles, func(entry *PackageFileEntry) bool {
+			return entry.Path == path
+		}) {
+			ret = append(ret, pkg)
+		}
+	}
 
 	return ret, nil
 }
