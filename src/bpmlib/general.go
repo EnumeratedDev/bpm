@@ -416,16 +416,37 @@ func UpdatePackages(rootDir string, syncDatabase, allowDowngrades, forceInstalla
 					DatabaseEntry:      entry,
 				})
 			}
-		}
-	}
 
-	// Check for new dependencies in updated packages
-	operation.ResolveDependencies(true)
-	if len(operation.UnresolvedDepends) != 0 {
-		if !forceInstallation {
-			return nil, DependencyNotFoundErr{operation.UnresolvedDepends}
-		} else if verbose {
-			log.Printf("Warning: %s", DependencyNotFoundErr{operation.UnresolvedDepends})
+			// Check for new uninstalled dependencies
+			for _, dep := range entry.Info.Depends {
+				if !IsPackageInstalled(dep, rootDir) && len(GetVirtualPackageInfo(dep, rootDir)) == 0 {
+					// Find database entry for missing dependency
+					depEntry, _, err := GetDatabaseEntry(dep)
+					if err != nil {
+						return nil, err
+					}
+
+					operation.AppendAction(&FetchPackageAction{
+						InstallationReason: InstallationReasonDependency,
+						DatabaseEntry:      depEntry,
+					})
+				}
+			}
+			// Check for new uninstalled runtime dependencies
+			for _, dep := range entry.Info.RuntimeDepends {
+				if !IsPackageInstalled(dep, rootDir) && len(GetVirtualPackageInfo(dep, rootDir)) == 0 {
+					// Find database entry for missing dependency
+					depEntry, _, err := GetDatabaseEntry(dep)
+					if err != nil {
+						return nil, err
+					}
+
+					operation.AppendAction(&FetchPackageAction{
+						InstallationReason: InstallationReasonDependency,
+						DatabaseEntry:      depEntry,
+					})
+				}
+			}
 		}
 	}
 
