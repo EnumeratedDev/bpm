@@ -213,7 +213,7 @@ func RemovePackages(rootDir string, force, cleanupDependencies bool, packages ..
 		// Get packages and their dependants
 		packageDepndants := make(map[string][]string, 0)
 		for _, action := range operation.Actions {
-			// Skip package if ignored
+			// Skip package if ignored in config
 			if slices.Contains(MainBPMConfig.IgnorePackages, action.(*RemovePackageAction).BpmPackage.PkgInfo.Name) {
 				continue
 			}
@@ -393,6 +393,7 @@ func UpdatePackages(rootDir string, syncDatabase, allowDowngrades, forceInstalla
 	}
 
 	// Search for packages
+	pkgsNotFound := make([]string, 0)
 	for _, pkg := range pkgs {
 		if slices.Contains(MainBPMConfig.IgnorePackages, pkg) {
 			continue
@@ -417,37 +418,76 @@ func UpdatePackages(rootDir string, syncDatabase, allowDowngrades, forceInstalla
 				})
 			}
 
-			// Check for new uninstalled dependencies
+			// Check for missing dependencies
 			for _, dep := range entry.Info.Depends {
-				if !IsPackageInstalled(dep, rootDir) && len(GetVirtualPackageInfo(dep, rootDir)) == 0 {
-					// Find database entry for missing dependency
-					depEntry, _, err := GetDatabaseEntry(dep)
-					if err != nil {
-						return nil, err
+				if IsPackageInstalled(dep, rootDir) {
+					continue
+				}
+				if len(GetVirtualPackageInfo(dep, rootDir)) > 0 {
+					continue
+				}
+
+				// Find database entry for missing dependency
+				depEntry, _, err := GetDatabaseEntry(dep)
+				if err != nil {
+					providers := GetDatabaseVirtualPackageEntry(dep)
+					if len(providers) == 0 {
+						pkgsNotFound = append(pkgsNotFound, dep)
+						continue
 					}
 
-					operation.AppendAction(&FetchPackageAction{
-						InstallationReason: InstallationReasonDependency,
-						DatabaseEntry:      depEntry,
-					})
+					depEntry = providers[0]
 				}
+
+				// Skip dependency if ignored in config
+				if slices.Contains(MainBPMConfig.IgnorePackages, depEntry.Info.Name) {
+					continue
+				}
+
+				// Fetch dependency
+				operation.AppendAction(&FetchPackageAction{
+					InstallationReason: InstallationReasonDependency,
+					DatabaseEntry:      depEntry,
+				})
 			}
-			// Check for new uninstalled runtime dependencies
+			// Check for missing runtime dependencies
 			for _, dep := range entry.Info.RuntimeDepends {
-				if !IsPackageInstalled(dep, rootDir) && len(GetVirtualPackageInfo(dep, rootDir)) == 0 {
-					// Find database entry for missing dependency
-					depEntry, _, err := GetDatabaseEntry(dep)
-					if err != nil {
-						return nil, err
+				if IsPackageInstalled(dep, rootDir) {
+					continue
+				}
+				if len(GetVirtualPackageInfo(dep, rootDir)) > 0 {
+					continue
+				}
+
+				// Find database entry for missing dependency
+				depEntry, _, err := GetDatabaseEntry(dep)
+				if err != nil {
+					providers := GetDatabaseVirtualPackageEntry(dep)
+					if len(providers) == 0 {
+						pkgsNotFound = append(pkgsNotFound, dep)
+						continue
 					}
 
-					operation.AppendAction(&FetchPackageAction{
-						InstallationReason: InstallationReasonDependency,
-						DatabaseEntry:      depEntry,
-					})
+					depEntry = providers[0]
 				}
+
+				// Skip dependency if ignored in config
+				if slices.Contains(MainBPMConfig.IgnorePackages, depEntry.Info.Name) {
+					continue
+				}
+
+				// Fetch dependency
+				operation.AppendAction(&FetchPackageAction{
+					InstallationReason: InstallationReasonDependency,
+					DatabaseEntry:      depEntry,
+				})
 			}
 		}
+	}
+
+	// Return error if not all packages are found
+	if len(pkgsNotFound) != 0 {
+		return nil, PackageNotFoundErr{pkgsNotFound}
 	}
 
 	// Replace obsolete packages

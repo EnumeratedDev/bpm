@@ -129,6 +129,11 @@ func ResolveDependencies(pkgInfo *PackageInfo, resolvedVirtualPackages map[strin
 					continue
 				}
 
+				// Skip ignored packages in config
+				if slices.Contains(MainBPMConfig.IgnorePackages, dependEntry.Info.Name) {
+					continue
+				}
+
 				if !slices.Contains(visited, dependEntry.Info.Name) {
 					dfs(dependEntry.Info)
 					resolved = append(resolved, ResolvedPackage{DatabaseEntry: dependEntry, InstallationReason: installationReason})
