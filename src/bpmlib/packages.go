@@ -627,7 +627,7 @@ func (pkgInfo *PackageInfo) CreateReadableInfo(rootDir string) string {
 			builder.WriteString("\n")
 		}
 	}
-	builderWriteArray("Dependant packages", pkgInfo.GetPackageDependants(rootDir), true)
+	builderWriteArray("Dependant packages", pkgInfo.GetPackageDependants(rootDir, false), true)
 	builderWriteArray("Optionally dependant packages", pkgInfo.GetPackageOptionalDependants(rootDir), true)
 
 	// Other package relations

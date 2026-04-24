@@ -218,7 +218,7 @@ func RemovePackages(rootDir string, force, cleanupDependencies bool, packages ..
 				continue
 			}
 
-			dependants := action.(*RemovePackageAction).BpmPackage.PkgInfo.GetPackageDependants(rootDir)
+			dependants := action.(*RemovePackageAction).BpmPackage.PkgInfo.GetPackageDependants(rootDir, true)
 			packageDepndants[action.(*RemovePackageAction).BpmPackage.PkgInfo.Name] = dependants
 		}
 

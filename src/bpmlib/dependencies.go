@@ -5,7 +5,7 @@ import (
 	"strings"
 )
 
-func (pkgInfo *PackageInfo) GetPackageDependants(rootDir string) (dependants []string) {
+func (pkgInfo *PackageInfo) GetPackageDependants(rootDir string, skipMultipleProviders bool) (dependants []string) {
 	// Get installed package names
 	pkgs, ok := localPackageInformation[rootDir]
 	if !ok {
@@ -37,6 +37,10 @@ func (pkgInfo *PackageInfo) GetPackageDependants(rootDir string) (dependants []s
 
 		// Loop through each virtual package
 		for _, vpkg := range pkgInfo.Provides {
+			if skipMultipleProviders && len(GetVirtualPackageInfo(vpkg, rootDir)) > 1 {
+				continue
+			}
+
 			// Add installed package to list if its dependencies contain a provided virtual package
 			if slices.ContainsFunc(installedPkg.Depends, func(n string) bool {
 				return n == vpkg

@@ -194,30 +194,6 @@ func (operation *BPMOperation) ResolveDependencies(installRuntimeDepends bool) {
 	}
 }
 
-func (operation *BPMOperation) RemoveNeededPackages() error {
-	removeActions := make(map[string]*RemovePackageAction)
-	for _, action := range slices.Clone(operation.Actions) {
-		if action.GetActionType() == "remove" {
-			removeActions[action.(*RemovePackageAction).BpmPackage.PkgInfo.Name] = action.(*RemovePackageAction)
-		}
-	}
-
-	for pkg, action := range removeActions {
-		dependants := action.BpmPackage.PkgInfo.GetPackageDependants(operation.RootDir)
-		dependants = slices.DeleteFunc(dependants, func(d string) bool {
-			if _, ok := removeActions[d]; ok {
-				return true
-			}
-			return false
-		})
-		if len(dependants) != 0 {
-			operation.RemoveAction(pkg, action.GetActionType())
-		}
-	}
-
-	return nil
-}
-
 func (operation *BPMOperation) Cleanup(cleanupMakeDepends bool) error {
 	// Get all installed packages
 	installedPackageNames, err := GetInstalledPackages(operation.RootDir)
