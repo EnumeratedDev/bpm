@@ -2,6 +2,7 @@ package bpmlib
 
 import (
 	"fmt"
+	"slices"
 	"strings"
 )
 
@@ -10,6 +11,7 @@ type PackageNotFoundErr struct {
 }
 
 func (e PackageNotFoundErr) Error() string {
+	slices.Sort(e.packages)
 	return "The following packages were not found in any databases: " + strings.Join(e.packages, ", ")
 }
 
@@ -18,6 +20,7 @@ type DependencyNotFoundErr struct {
 }
 
 func (e DependencyNotFoundErr) Error() string {
+	slices.Sort(e.dependencies)
 	return "The following dependencies were not found in any databases: " + strings.Join(e.dependencies, ", ")
 }
 
@@ -27,6 +30,7 @@ type PackageConflictErr struct {
 }
 
 func (e PackageConflictErr) Error() string {
+	slices.Sort(e.conflicts)
 	return fmt.Sprintf("Package (%s) is in conflict with the following packages: %s", e.pkg, strings.Join(e.conflicts, ", "))
 
 }

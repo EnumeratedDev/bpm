@@ -765,6 +765,7 @@ func removePackages() {
 		return
 	} else if errors.As(err, &bpmlib.PackageRemovalDependencyErr{}) {
 		for pkg, dependants := range err.(bpmlib.PackageRemovalDependencyErr).RequiredPackages {
+			slices.Sort(dependants)
 			fmt.Printf("The following packages depend on package (%s): %s\n", pkg, strings.Join(dependants, ", "))
 		}
 
