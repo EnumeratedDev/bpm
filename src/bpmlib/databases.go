@@ -300,10 +300,48 @@ func (db *BPMDatabase) FetchPackage(pkg string) (string, error) {
 
 func (entry *BPMDatabaseEntry) GetEntryDependants() (dependants []string) {
 	dependantsMap := make(map[string][]string)
+
+	// Loop through all entries
 	for _, db := range BPMDatabases {
 		for _, e := range db.Entries {
-			if slices.Contains(e.Info.Depends, entry.Info.Name) {
-				dependantsMap[e.Info.Name] = append(dependantsMap[e.Info.Name], e.Database.Name)
+			// Skip iteration if comparing the same packages
+			if e.Info.Name == entry.Info.Name {
+				continue
+			}
+
+			// Add installed package to list if its dependencies include pkgName
+			if slices.ContainsFunc(e.Info.Depends, func(n string) bool {
+				return n == entry.Info.Name
+			}) {
+				dependantsMap[e.Info.Name] = append(dependantsMap[e.Info.Name], db.Name)
+				continue
+			}
+
+			// Add installed package to list if its runtime dependencies include pkgName
+			if slices.ContainsFunc(e.Info.RuntimeDepends, func(n string) bool {
+				return n == entry.Info.Name
+			}) {
+				dependantsMap[e.Info.Name] = append(dependantsMap[e.Info.Name], db.Name)
+				continue
+			}
+
+			// Loop through each virtual package
+			for _, vpkg := range entry.Info.Provides {
+				// Add installed package to list if its dependencies contain a provided virtual package
+				if slices.ContainsFunc(e.Info.Depends, func(n string) bool {
+					return n == vpkg
+				}) {
+					dependantsMap[e.Info.Name] = append(dependantsMap[e.Info.Name], db.Name)
+					break
+				}
+
+				// Add installed package to list if its runtime dependencies contain a provided virtual package
+				if slices.ContainsFunc(e.Info.RuntimeDepends, func(n string) bool {
+					return n == vpkg
+				}) {
+					dependantsMap[e.Info.Name] = append(dependantsMap[e.Info.Name], db.Name)
+					break
+				}
 			}
 		}
 	}
