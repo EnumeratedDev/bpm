@@ -439,6 +439,11 @@ func UpdatePackages(rootDir string, syncDatabase, allowDowngrades, forceInstalla
 					depEntry = providers[0]
 				}
 
+				// Skip dependency if action already exists
+				if operation.ActionsContainPackage(depEntry.Info.Name) {
+					continue
+				}
+
 				// Skip dependency if ignored in config
 				if slices.Contains(MainBPMConfig.IgnorePackages, depEntry.Info.Name) {
 					continue
