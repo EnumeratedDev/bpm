@@ -81,22 +81,31 @@ func InstallPackages(rootDir string, forceInstallationReason InstallationReason,
 				BpmPackage:         bpmpkg,
 			})
 		} else {
+			// Split package name and required version
+			pkgName, _, _ := SplitPkgNameAndVersion(pkg)
+
 			var entry *BPMDatabaseEntry
 
-			if e, _, err := GetDatabaseEntry(pkg); err == nil {
+			if e, _, err := GetDatabaseEntry(pkgName); err == nil {
 				entry = e
-			} else if providers := GetVirtualPackageInfo(pkg, rootDir); len(providers) > 0 {
+			} else if providers := GetVirtualPackageInfo(pkgName, rootDir); len(providers) > 0 {
 				entry, _, err = GetDatabaseEntry(providers[0].Name)
 				if err != nil {
 					pkgsNotFound = append(pkgsNotFound, pkg)
 					continue
 				}
-			} else if providers := GetDatabaseVirtualPackageEntry(pkg); len(providers) > 0 {
+			} else if providers := GetDatabaseVirtualPackageEntry(pkgName); len(providers) > 0 {
 				entry = providers[0]
 			} else {
 				pkgsNotFound = append(pkgsNotFound, pkg)
 				continue
 			}
+
+			if !EvaluateDependency(pkg, entry.Info.Version) {
+				pkgsNotFound = append(pkgsNotFound, pkg)
+				continue
+			}
+
 			if !reinstallPackages && IsPackageInstalled(entry.Info.Name, rootDir) && GetPackageInfo(entry.Info.Name, rootDir).GetFullVersion() == entry.Info.GetFullVersion() {
 				continue
 			}
@@ -419,72 +428,91 @@ func UpdatePackages(rootDir string, syncDatabase, allowDowngrades, forceInstalla
 			}
 
 			// Check for missing dependencies
-			for _, dep := range entry.Info.Depends {
-				if IsPackageInstalled(dep, rootDir) {
+			for _, depend := range entry.Info.Depends {
+				// Split package name and required version
+				dependName, _, _ := SplitPkgNameAndVersion(depend)
+
+				if IsPackageInstalled(dependName, rootDir) && EvaluateDependency(depend, GetPackageInfo(dependName, rootDir).Version) {
 					continue
 				}
-				if len(GetVirtualPackageInfo(dep, rootDir)) > 0 {
+				if len(GetVirtualPackageInfo(dependName, rootDir)) > 0 {
 					continue
 				}
 
 				// Find database entry for missing dependency
-				depEntry, _, err := GetDatabaseEntry(dep)
+				dependEntry, _, err := GetDatabaseEntry(dependName)
 				if err != nil {
-					providers := GetDatabaseVirtualPackageEntry(dep)
+					providers := GetDatabaseVirtualPackageEntry(dependName)
 					if len(providers) == 0 {
-						pkgsNotFound = append(pkgsNotFound, dep)
+						pkgsNotFound = append(pkgsNotFound, depend)
 						continue
 					}
 
-					depEntry = providers[0]
+					dependEntry = providers[0]
 				}
 
 				// Skip dependency if action already exists
-				if operation.ActionsContainPackage(depEntry.Info.Name) {
+				if operation.ActionsContainPackage(dependEntry.Info.Name) {
 					continue
 				}
 
 				// Skip dependency if ignored in config
-				if slices.Contains(MainBPMConfig.IgnorePackages, depEntry.Info.Name) {
+				if slices.Contains(MainBPMConfig.IgnorePackages, dependEntry.Info.Name) {
+					continue
+				}
+
+				// Ensure entry has required version
+				if !EvaluateDependency(depend, dependEntry.Info.Version) {
+					pkgsNotFound = append(pkgsNotFound, depend)
 					continue
 				}
 
 				// Fetch dependency
 				operation.AppendAction(&FetchPackageAction{
 					InstallationReason: InstallationReasonDependency,
-					DatabaseEntry:      depEntry,
+					DatabaseEntry:      dependEntry,
 				})
 			}
+
 			// Check for missing runtime dependencies
-			for _, dep := range entry.Info.RuntimeDepends {
-				if IsPackageInstalled(dep, rootDir) {
+			for _, depend := range entry.Info.RuntimeDepends {
+				// Split package name and required version
+				dependName, _, _ := SplitPkgNameAndVersion(depend)
+
+				if IsPackageInstalled(dependName, rootDir) && EvaluateDependency(depend, GetPackageInfo(dependName, rootDir).Version) {
 					continue
 				}
-				if len(GetVirtualPackageInfo(dep, rootDir)) > 0 {
+				if len(GetVirtualPackageInfo(dependName, rootDir)) > 0 {
 					continue
 				}
 
 				// Find database entry for missing dependency
-				depEntry, _, err := GetDatabaseEntry(dep)
+				dependEntry, _, err := GetDatabaseEntry(dependName)
 				if err != nil {
-					providers := GetDatabaseVirtualPackageEntry(dep)
+					providers := GetDatabaseVirtualPackageEntry(dependName)
 					if len(providers) == 0 {
-						pkgsNotFound = append(pkgsNotFound, dep)
+						pkgsNotFound = append(pkgsNotFound, depend)
 						continue
 					}
 
-					depEntry = providers[0]
+					dependEntry = providers[0]
 				}
 
 				// Skip dependency if ignored in config
-				if slices.Contains(MainBPMConfig.IgnorePackages, depEntry.Info.Name) {
+				if slices.Contains(MainBPMConfig.IgnorePackages, dependEntry.Info.Name) {
+					continue
+				}
+
+				// Ensure entry has required version
+				if !EvaluateDependency(depend, dependEntry.Info.Version) {
+					pkgsNotFound = append(pkgsNotFound, depend)
 					continue
 				}
 
 				// Fetch dependency
 				operation.AppendAction(&FetchPackageAction{
 					InstallationReason: InstallationReasonDependency,
-					DatabaseEntry:      depEntry,
+					DatabaseEntry:      dependEntry,
 				})
 			}
 		}

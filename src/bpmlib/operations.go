@@ -250,6 +250,9 @@ func (operation *BPMOperation) Cleanup(cleanupMakeDepends bool) error {
 
 			// Loop through all dependencies
 			for _, depend := range depends {
+				// Remove required version
+				depend, _, _ = SplitPkgNameAndVersion(depend)
+
 				// Resolve dependency
 				var dependPkgInfo *PackageInfo
 				if providers := GetVirtualPackageInfo(depend, operation.RootDir); len(providers) > 0 {
@@ -516,16 +519,24 @@ func (operation *BPMOperation) GetOptionalDependencies() (optionalDepends map[st
 		}
 
 		for _, depend := range pkgInfo.OptionalDepends {
+			// Get optional dependency name
 			dependSplit := strings.SplitN(depend, ":", 2)
+			dependName, _, _ := SplitPkgNameAndVersion(dependSplit[0])
 
 			// Skip if dependency is already installed
-			if IsPackageInstalled(dependSplit[0], operation.RootDir) {
+			if IsPackageInstalled(dependName, operation.RootDir) {
 				continue
 			}
 
 			// Skip if not a new dependency of the package
 			if installedPkg := GetPackage(pkgInfo.Name, operation.RootDir); installedPkg != nil && slices.ContainsFunc(installedPkg.PkgInfo.OptionalDepends, func(n string) bool {
-				return strings.SplitN(n, ":", 2)[0] == dependSplit[0]
+				// Remove optional dependency comment
+				n = strings.SplitN(n, ":", 2)[0]
+
+				// Remove required version
+				n, _, _ = SplitPkgNameAndVersion(n)
+
+				return n == dependName
 			}) {
 				continue
 			}
@@ -533,7 +544,7 @@ func (operation *BPMOperation) GetOptionalDependencies() (optionalDepends map[st
 			if len(dependSplit) == 2 {
 				optionalDepends[pkgInfo.Name] = append(optionalDepends[pkgInfo.Name], fmt.Sprintf("%s (%s)", dependSplit[0], dependSplit[1]))
 			} else {
-				optionalDepends[pkgInfo.Name] = append(optionalDepends[pkgInfo.Name], dependSplit[0])
+				optionalDepends[pkgInfo.Name] = append(optionalDepends[pkgInfo.Name], dependName)
 			}
 		}
 	}

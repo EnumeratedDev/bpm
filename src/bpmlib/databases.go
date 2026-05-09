@@ -311,6 +311,7 @@ func (entry *BPMDatabaseEntry) GetEntryDependants() (dependants []string) {
 
 			// Add installed package to list if its dependencies include pkgName
 			if slices.ContainsFunc(e.Info.Depends, func(n string) bool {
+				n, _, _ = SplitPkgNameAndVersion(n)
 				return n == entry.Info.Name
 			}) {
 				dependantsMap[e.Info.Name] = append(dependantsMap[e.Info.Name], db.Name)
@@ -319,6 +320,7 @@ func (entry *BPMDatabaseEntry) GetEntryDependants() (dependants []string) {
 
 			// Add installed package to list if its runtime dependencies include pkgName
 			if slices.ContainsFunc(e.Info.RuntimeDepends, func(n string) bool {
+				n, _, _ = SplitPkgNameAndVersion(n)
 				return n == entry.Info.Name
 			}) {
 				dependantsMap[e.Info.Name] = append(dependantsMap[e.Info.Name], db.Name)
@@ -329,6 +331,7 @@ func (entry *BPMDatabaseEntry) GetEntryDependants() (dependants []string) {
 			for _, vpkg := range entry.Info.Provides {
 				// Add installed package to list if its dependencies contain a provided virtual package
 				if slices.ContainsFunc(e.Info.Depends, func(n string) bool {
+					n, _, _ = SplitPkgNameAndVersion(n)
 					return n == vpkg
 				}) {
 					dependantsMap[e.Info.Name] = append(dependantsMap[e.Info.Name], db.Name)
@@ -337,6 +340,7 @@ func (entry *BPMDatabaseEntry) GetEntryDependants() (dependants []string) {
 
 				// Add installed package to list if its runtime dependencies contain a provided virtual package
 				if slices.ContainsFunc(e.Info.RuntimeDepends, func(n string) bool {
+					n, _, _ = SplitPkgNameAndVersion(n)
 					return n == vpkg
 				}) {
 					dependantsMap[e.Info.Name] = append(dependantsMap[e.Info.Name], db.Name)
@@ -370,7 +374,13 @@ func (entry *BPMDatabaseEntry) GetEntryOptionalDependants() (dependants []string
 	for _, db := range BPMDatabases {
 		for _, e := range db.Entries {
 			if slices.ContainsFunc(e.Info.OptionalDepends, func(n string) bool {
-				return strings.SplitN(n, ":", 2)[0] == entry.Info.Name
+				// Remove optional dependency comment
+				n = strings.SplitN(n, ":", 2)[0]
+
+				// Remove required version
+				n, _, _ = SplitPkgNameAndVersion(n)
+
+				return n == entry.Info.Name
 			}) {
 				dependantsMap[e.Info.Name] = append(dependantsMap[e.Info.Name], e.Database.Name)
 			}
@@ -400,7 +410,10 @@ func (entry *BPMDatabaseEntry) GetEntryMakeDependants() (dependants []string) {
 	dependantsMap := make(map[string][]string)
 	for _, db := range BPMDatabases {
 		for _, e := range db.Entries {
-			if slices.Contains(e.Info.MakeDepends, entry.Info.Name) {
+			if slices.ContainsFunc(e.Info.MakeDepends, func(n string) bool {
+				n, _, _ = SplitPkgNameAndVersion(n)
+				return n == entry.Info.Name
+			}) {
 				dependantsMap[e.Info.Name] = append(dependantsMap[e.Info.Name], e.Database.Name)
 			}
 		}
