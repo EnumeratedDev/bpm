@@ -17,7 +17,7 @@ func InstallPackages(rootDir string, forceInstallationReason InstallationReason,
 	operation = &BPMOperation{
 		Actions:           make([]OperationAction, 0),
 		UnresolvedDepends: make([]string, 0),
-		Changes:           make(map[string]string),
+		ModifiedFiles:     make(map[string]string),
 		RunChecks:         runChecks,
 		RootDir:           rootDir,
 		compiledPackages:  make(map[string]string),
@@ -189,7 +189,7 @@ func RemovePackages(rootDir string, force, cleanupDependencies bool, packages ..
 	operation = &BPMOperation{
 		Actions:           make([]OperationAction, 0),
 		UnresolvedDepends: make([]string, 0),
-		Changes:           make(map[string]string),
+		ModifiedFiles:     make(map[string]string),
 		RootDir:           rootDir,
 		compiledPackages:  make(map[string]string),
 	}
@@ -267,7 +267,7 @@ func CleanupPackages(cleanupMakeDepends bool, rootDir string) (operation *BPMOpe
 	operation = &BPMOperation{
 		Actions:           make([]OperationAction, 0),
 		UnresolvedDepends: make([]string, 0),
-		Changes:           make(map[string]string),
+		ModifiedFiles:     make(map[string]string),
 		RootDir:           rootDir,
 		compiledPackages:  make(map[string]string),
 	}
@@ -395,7 +395,7 @@ func UpdatePackages(rootDir string, syncDatabase, allowDowngrades, forceInstalla
 	operation = &BPMOperation{
 		Actions:           make([]OperationAction, 0),
 		UnresolvedDepends: make([]string, 0),
-		Changes:           make(map[string]string),
+		ModifiedFiles:     make(map[string]string),
 		RunChecks:         runChecks,
 		RootDir:           rootDir,
 		compiledPackages:  make(map[string]string),

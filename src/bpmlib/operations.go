@@ -14,7 +14,7 @@ import (
 type BPMOperation struct {
 	Actions           []OperationAction
 	UnresolvedDepends []string
-	Changes           map[string]string
+	ModifiedFiles     map[string]string
 	CompilationJobs   int
 	RunChecks         bool
 	RootDir           string
@@ -52,24 +52,6 @@ func (operation *BPMOperation) InsertActionAt(index int, action OperationAction)
 	} else {
 		operation.Actions = append(operation.Actions[:index+1], operation.Actions[index:]...) // index < len(a)
 		operation.Actions[index] = action
-	}
-
-	if action.GetActionType() == "install" {
-		pkgInfo := action.(*InstallPackageAction).BpmPackage.PkgInfo
-		if !IsPackageInstalled(pkgInfo.Name, operation.RootDir) {
-			operation.Changes[pkgInfo.Name] = "install"
-		} else {
-			operation.Changes[pkgInfo.Name] = "upgrade"
-		}
-	} else if action.GetActionType() == "fetch" {
-		pkgInfo := action.(*FetchPackageAction).DatabaseEntry.Info
-		if !IsPackageInstalled(pkgInfo.Name, operation.RootDir) {
-			operation.Changes[pkgInfo.Name] = "install"
-		} else {
-			operation.Changes[pkgInfo.Name] = "upgrade"
-		}
-	} else if action.GetActionType() == "remove" {
-		operation.Changes[action.(*RemovePackageAction).BpmPackage.PkgInfo.Name] = "remove"
 	}
 }
 
@@ -552,7 +534,7 @@ func (operation *BPMOperation) GetOptionalDependencies() (optionalDepends map[st
 	return
 }
 
-func (operation *BPMOperation) RunHooks(verbose bool) error {
+func (operation *BPMOperation) RunPreHooks(verbose bool) error {
 	// Return if hooks directory does not exist
 	if stat, err := os.Stat(path.Join(operation.RootDir, "var/lib/bpm/hooks")); err != nil || !stat.IsDir() {
 		return nil
@@ -572,7 +554,46 @@ func (operation *BPMOperation) RunHooks(verbose bool) error {
 				log.Printf("Error while reading hook (%s): %s", entry.Name(), err)
 			}
 
-			err = hook.Execute(operation.Changes, verbose, operation.RootDir)
+			if !hook.TriggerPreOperation {
+				continue
+			}
+
+			err = hook.Execute(operation.ModifiedFiles, false, verbose, operation.RootDir)
+			if err != nil {
+				log.Printf("Warning: could not execute hook (%s): %s\n", entry.Name(), err)
+				continue
+			}
+		}
+	}
+
+	return nil
+}
+
+func (operation *BPMOperation) RunPostHooks(verbose bool) error {
+	// Return if hooks directory does not exist
+	if stat, err := os.Stat(path.Join(operation.RootDir, "var/lib/bpm/hooks")); err != nil || !stat.IsDir() {
+		return nil
+	}
+
+	// Get directory entries in hooks directory
+	dirEntries, err := os.ReadDir(path.Join(operation.RootDir, "var/lib/bpm/hooks"))
+	if err != nil {
+		return err
+	}
+
+	// Find all hooks, validate and execute them
+	for _, entry := range dirEntries {
+		if entry.Type().IsRegular() && strings.HasSuffix(entry.Name(), ".bpmhook") {
+			hook, err := createHook(path.Join(operation.RootDir, "var/lib/bpm/hooks", entry.Name()))
+			if err != nil {
+				log.Printf("Error while reading hook (%s): %s", entry.Name(), err)
+			}
+
+			if hook.TriggerPreOperation {
+				continue
+			}
+
+			err = hook.Execute(operation.ModifiedFiles, false, verbose, operation.RootDir)
 			if err != nil {
 				log.Printf("Warning: could not execute hook (%s): %s\n", entry.Name(), err)
 				continue
@@ -656,7 +677,32 @@ func (operation *BPMOperation) FetchPackages() (err error) {
 	}
 
 	operation.hasFetchedPackages = true
+
 	return nil
+}
+
+func (operation *BPMOperation) GetModifiedFiles() {
+	// Get modified files
+	for _, action := range operation.Actions {
+		if action.GetActionType() == "install" {
+			installAction := action.(*InstallPackageAction)
+			isUpgrade := IsPackageInstalled(installAction.BpmPackage.PkgInfo.Name, operation.RootDir)
+
+			for _, pkgFile := range installAction.BpmPackage.PkgFiles {
+				operation.ModifiedFiles[pkgFile.Path] = "install"
+				if isUpgrade {
+					operation.ModifiedFiles[pkgFile.Path] = "upgrade"
+				}
+			}
+		}
+		if action.GetActionType() == "remove" {
+			removeAction := action.(*RemovePackageAction)
+
+			for _, pkgFile := range removeAction.BpmPackage.PkgFiles {
+				operation.ModifiedFiles[pkgFile.Path] = "remove"
+			}
+		}
+	}
 }
 
 func (operation *BPMOperation) Execute(verbose, force bool) (err error) {
@@ -751,7 +797,6 @@ func (operation *BPMOperation) Execute(verbose, force bool) (err error) {
 			}
 		}
 	}
-	fmt.Println("Operation complete!")
 
 	return nil
 }

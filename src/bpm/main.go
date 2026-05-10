@@ -662,6 +662,9 @@ func installPackages() {
 		return
 	}
 
+	// Get files that will be modifie during this operation
+	operation.GetModifiedFiles()
+
 	if bpmlib.MainBPMConfig.ShowSourcePackageContents == "always" || bpmlib.MainBPMConfig.ShowSourcePackageContents == "install-only" {
 		// Show source package contents
 		sourcePackagesShown, err := operation.ShowSourcePackageContent()
@@ -684,6 +687,15 @@ func installPackages() {
 	// Get optional dependencies
 	optionalDepends := operation.GetOptionalDependencies()
 
+	// Executing pre-operation hooks
+	fmt.Println("Running pre-operation hooks...")
+	err = operation.RunPreHooks(verbose)
+	if err != nil {
+		log.Printf("Error: could not run pre-operation hooks: %s\n", err)
+		exitCode = 1
+		return
+	}
+
 	// Execute operation
 	err = operation.Execute(verbose, force)
 	if err != nil {
@@ -692,14 +704,16 @@ func installPackages() {
 		return
 	}
 
-	// Executing hooks
-	fmt.Println("Running hooks...")
-	err = operation.RunHooks(verbose)
+	// Executing post-operation hooks
+	fmt.Println("Running post-operation hooks...")
+	err = operation.RunPostHooks(verbose)
 	if err != nil {
-		log.Printf("Error: could not run hooks: %s\n", err)
+		log.Printf("Error: could not run post-operation hooks: %s\n", err)
 		exitCode = 1
 		return
 	}
+
+	fmt.Println("Operation complete!")
 
 	// Show optional dependencies
 	if len(optionalDepends) != 0 {
@@ -801,6 +815,18 @@ func removePackages() {
 		}
 	}
 
+	// Get files that will be modifie during this operation
+	operation.GetModifiedFiles()
+
+	// Executing pre-operation hooks
+	fmt.Println("Running pre-operation hooks...")
+	err = operation.RunPreHooks(verbose)
+	if err != nil {
+		log.Printf("Error: could not run pre-operation hooks: %s\n", err)
+		exitCode = 1
+		return
+	}
+
 	// Execute operation
 	err = operation.Execute(verbose, force)
 	if err != nil {
@@ -809,14 +835,16 @@ func removePackages() {
 		return
 	}
 
-	// Executing hooks
-	fmt.Println("Running hooks...")
-	err = operation.RunHooks(verbose)
+	// Executing post-operation hooks
+	fmt.Println("Running post-operation hooks...")
+	err = operation.RunPostHooks(verbose)
 	if err != nil {
-		log.Printf("Error: could not run hooks: %s\n", err)
+		log.Printf("Error: could not run post-operation hooks: %s\n", err)
 		exitCode = 1
 		return
 	}
+
+	fmt.Println("Operation complete!")
 }
 
 func doCleanup() {
@@ -922,6 +950,18 @@ func doCleanup() {
 			}
 		}
 
+		// Get files that will be modifie during this operation
+		operation.GetModifiedFiles()
+
+		// Executing pre-operation hooks
+		fmt.Println("Running pre-operation hooks...")
+		err = operation.RunPreHooks(verbose)
+		if err != nil {
+			log.Printf("Error: could not run pre-operation hooks: %s\n", err)
+			exitCode = 1
+			return
+		}
+
 		// Execute operation
 		err = operation.Execute(verbose, force)
 		if err != nil {
@@ -930,14 +970,16 @@ func doCleanup() {
 			return
 		}
 
-		// Executing hooks
-		fmt.Println("Running hooks...")
-		err = operation.RunHooks(verbose)
+		// Executing post-operation hooks
+		fmt.Println("Running post-operation hooks...")
+		err = operation.RunPostHooks(verbose)
 		if err != nil {
-			log.Printf("Error: could not run hooks: %s\n", err)
+			log.Printf("Error: could not run post-operation hooks: %s\n", err)
 			exitCode = 1
 			return
 		}
+
+		fmt.Println("Operation complete!")
 	}
 }
 
@@ -1083,6 +1125,9 @@ func updatePackages() {
 		return
 	}
 
+	// Get files that will be modifie during this operation
+	operation.GetModifiedFiles()
+
 	if bpmlib.MainBPMConfig.ShowSourcePackageContents == "always" {
 		// Show source package contents
 		sourcePackagesShown, err := operation.ShowSourcePackageContent()
@@ -1105,6 +1150,15 @@ func updatePackages() {
 	// Get optional dependencies
 	optionalDepends := operation.GetOptionalDependencies()
 
+	// Executing pre-operation hooks
+	fmt.Println("Running pre-operation hooks...")
+	err = operation.RunPreHooks(verbose)
+	if err != nil {
+		log.Printf("Error: could not run pre-operation hooks: %s\n", err)
+		exitCode = 1
+		return
+	}
+
 	// Execute operation
 	err = operation.Execute(verbose, force)
 	if err != nil {
@@ -1113,14 +1167,16 @@ func updatePackages() {
 		return
 	}
 
-	// Executing hooks
-	fmt.Println("Running hooks...")
-	err = operation.RunHooks(verbose)
+	// Executing post-operation hooks
+	fmt.Println("Running post-operation hooks...")
+	err = operation.RunPostHooks(verbose)
 	if err != nil {
-		log.Printf("Error: could not run hooks: %s\n", err)
+		log.Printf("Error: could not run post-operation hooks: %s\n", err)
 		exitCode = 1
 		return
 	}
+
+	fmt.Println("Operation complete!")
 
 	// Show optional dependencies
 	if len(optionalDepends) != 0 {
