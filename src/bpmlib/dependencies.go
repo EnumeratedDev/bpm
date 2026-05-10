@@ -159,7 +159,7 @@ func ResolveDependencies(pkgInfo *PackageInfo, resolvedVirtualPackages map[strin
 				}
 
 				// Skip ignored packages in config
-				if slices.Contains(MainBPMConfig.IgnorePackages, dependEntry.Info.Name) {
+				if rootDir == "/" && slices.Contains(MainBPMConfig.IgnorePackages, dependEntry.Info.Name) {
 					continue
 				}
 

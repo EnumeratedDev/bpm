@@ -703,7 +703,7 @@ func extractPackage(bpmpkg *BPMPackage, verbose bool, filename, rootDir string) 
 			if ok := slices.ContainsFunc(MainBPMConfig.IgnorePaths, func(s string) bool {
 				matched, _ := filepath.Match(s, header.Name)
 				return matched
-			}); ok {
+			}); rootDir == "/" && ok {
 				if verbose {
 					fmt.Printf("Skipping Directory: %s (Path was ignored)\n", extractFilename)
 				}
@@ -741,7 +741,7 @@ func extractPackage(bpmpkg *BPMPackage, verbose bool, filename, rootDir string) 
 			if ok := slices.ContainsFunc(MainBPMConfig.IgnorePaths, func(s string) bool {
 				matched, _ := filepath.Match(s, header.Name)
 				return matched
-			}); ok {
+			}); rootDir == "/" && ok {
 				if verbose {
 					fmt.Printf("Skipping File: %s (Path was ignored)\n", extractFilename)
 				}
@@ -809,7 +809,7 @@ func extractPackage(bpmpkg *BPMPackage, verbose bool, filename, rootDir string) 
 			if ok := slices.ContainsFunc(MainBPMConfig.IgnorePaths, func(s string) bool {
 				matched, _ := filepath.Match(s, header.Name)
 				return matched
-			}); ok {
+			}); rootDir == "/" && ok {
 				if verbose {
 					fmt.Printf("Skipping Symlink: %s (Path was ignored)\n", extractFilename)
 				}
@@ -835,7 +835,7 @@ func extractPackage(bpmpkg *BPMPackage, verbose bool, filename, rootDir string) 
 			if ok := slices.ContainsFunc(MainBPMConfig.IgnorePaths, func(s string) bool {
 				matched, _ := filepath.Match(s, header.Name)
 				return matched
-			}); ok {
+			}); rootDir == "/" && ok {
 				if verbose {
 					fmt.Printf("Skipping Hard Link: %s (Path was ignored)\n", extractFilename)
 				}
@@ -930,7 +930,7 @@ func installPackage(filename string, installationReason InstallationReason, root
 			if ok := slices.ContainsFunc(MainBPMConfig.IgnorePaths, func(s string) bool {
 				matched, _ := filepath.Match(s, entry.Path)
 				return matched
-			}); ok {
+			}); rootDir == "/" && ok {
 				if verbose {
 					fmt.Printf("Skipping path: %s (Path was ignored)\n", finalPath)
 				}
@@ -1183,7 +1183,7 @@ func removePackage(pkg string, verbose bool, rootDir string) error {
 		if ok := slices.ContainsFunc(MainBPMConfig.IgnorePaths, func(s string) bool {
 			matched, _ := filepath.Match(s, entry.Path)
 			return matched
-		}); ok {
+		}); rootDir == "/" && ok {
 			if verbose {
 				fmt.Printf("Skipping path: %s (Path was ignored)\n", finalPath)
 			}

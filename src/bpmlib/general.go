@@ -223,7 +223,7 @@ func RemovePackages(rootDir string, force, cleanupDependencies bool, packages ..
 		packageDepndants := make(map[string][]string, 0)
 		for _, action := range operation.Actions {
 			// Skip package if ignored in config
-			if slices.Contains(MainBPMConfig.IgnorePackages, action.(*RemovePackageAction).BpmPackage.PkgInfo.Name) {
+			if rootDir == "/" && slices.Contains(MainBPMConfig.IgnorePackages, action.(*RemovePackageAction).BpmPackage.PkgInfo.Name) {
 				continue
 			}
 
@@ -243,7 +243,7 @@ func RemovePackages(rootDir string, force, cleanupDependencies bool, packages ..
 		// Remove dependant packages if ignored
 		for pkg, required := range packageDepndants {
 			required = slices.DeleteFunc(required, func(pkgName string) bool {
-				return slices.Contains(MainBPMConfig.IgnorePackages, pkgName)
+				return rootDir == "/" && slices.Contains(MainBPMConfig.IgnorePackages, pkgName)
 			})
 			packageDepndants[pkg] = required
 		}
@@ -404,7 +404,7 @@ func UpdatePackages(rootDir string, syncDatabase, allowDowngrades, forceInstalla
 	// Search for packages
 	pkgsNotFound := make([]string, 0)
 	for _, pkg := range pkgs {
-		if slices.Contains(MainBPMConfig.IgnorePackages, pkg) {
+		if rootDir == "/" && slices.Contains(MainBPMConfig.IgnorePackages, pkg) {
 			continue
 		}
 		var entry *BPMDatabaseEntry
@@ -457,7 +457,7 @@ func UpdatePackages(rootDir string, syncDatabase, allowDowngrades, forceInstalla
 				}
 
 				// Skip dependency if ignored in config
-				if slices.Contains(MainBPMConfig.IgnorePackages, dependEntry.Info.Name) {
+				if rootDir == "/" && slices.Contains(MainBPMConfig.IgnorePackages, dependEntry.Info.Name) {
 					continue
 				}
 
@@ -499,7 +499,7 @@ func UpdatePackages(rootDir string, syncDatabase, allowDowngrades, forceInstalla
 				}
 
 				// Skip dependency if ignored in config
-				if slices.Contains(MainBPMConfig.IgnorePackages, dependEntry.Info.Name) {
+				if rootDir == "/" && slices.Contains(MainBPMConfig.IgnorePackages, dependEntry.Info.Name) {
 					continue
 				}
 
