@@ -8,6 +8,7 @@ import (
 
 type MainBPMConfigStruct struct {
 	IgnorePackages            []string         `yaml:"ignore_packages"`
+	IgnorePaths               []string         `yaml:"ignore_paths"`
 	ShowSourcePackageContents string           `yaml:"show_source_package_contents"`
 	CleanupMakeDependencies   bool             `yaml:"cleanup_make_dependencies"`
 	Databases                 []configDatabase `yaml:"databases"`

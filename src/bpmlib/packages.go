@@ -10,6 +10,7 @@ import (
 	"os"
 	"os/exec"
 	"path"
+	"path/filepath"
 	"regexp"
 	"slices"
 	"sort"
@@ -698,6 +699,17 @@ func extractPackage(bpmpkg *BPMPackage, verbose bool, filename, rootDir string) 
 		extractFilename := path.Join(rootDir, header.Name)
 		switch header.Typeflag {
 		case tar.TypeDir:
+			// Check if path is set to be ignored
+			if ok := slices.ContainsFunc(MainBPMConfig.IgnorePaths, func(s string) bool {
+				matched, _ := filepath.Match(s, header.Name)
+				return matched
+			}); ok {
+				if verbose {
+					fmt.Printf("Skipping Directory: %s (Path was ignored)\n", extractFilename)
+				}
+				continue
+			}
+
 			if _, err := os.Stat(extractFilename); err == nil {
 				if verbose {
 					fmt.Printf("Skipping Directory: %s (Directory already exists)\n", extractFilename)
@@ -725,6 +737,17 @@ func extractPackage(bpmpkg *BPMPackage, verbose bool, filename, rootDir string) 
 			}
 			bar.Add64(header.Size)
 		case tar.TypeReg:
+			// Check if path is set to be ignored
+			if ok := slices.ContainsFunc(MainBPMConfig.IgnorePaths, func(s string) bool {
+				matched, _ := filepath.Match(s, header.Name)
+				return matched
+			}); ok {
+				if verbose {
+					fmt.Printf("Skipping File: %s (Path was ignored)\n", extractFilename)
+				}
+				continue
+			}
+
 			skip := false
 			if _, err := os.Stat(extractFilename); err == nil {
 				for _, k := range bpmpkg.PkgInfo.Keep {
@@ -782,6 +805,17 @@ func extractPackage(bpmpkg *BPMPackage, verbose bool, filename, rootDir string) 
 			}
 			bar.Add64(header.Size)
 		case tar.TypeSymlink:
+			// Check if path is set to be ignored
+			if ok := slices.ContainsFunc(MainBPMConfig.IgnorePaths, func(s string) bool {
+				matched, _ := filepath.Match(s, header.Name)
+				return matched
+			}); ok {
+				if verbose {
+					fmt.Printf("Skipping Symlink: %s (Path was ignored)\n", extractFilename)
+				}
+				continue
+			}
+
 			err := os.Remove(extractFilename)
 			if err != nil && !os.IsNotExist(err) {
 				return err
@@ -797,6 +831,17 @@ func extractPackage(bpmpkg *BPMPackage, verbose bool, filename, rootDir string) 
 			}
 			bar.Add64(header.Size)
 		case tar.TypeLink:
+			// Check if path is set to be ignored
+			if ok := slices.ContainsFunc(MainBPMConfig.IgnorePaths, func(s string) bool {
+				matched, _ := filepath.Match(s, header.Name)
+				return matched
+			}); ok {
+				if verbose {
+					fmt.Printf("Skipping Hard Link: %s (Path was ignored)\n", extractFilename)
+				}
+				continue
+			}
+
 			if verbose {
 				fmt.Println("Detected Hard Link: " + extractFilename + " -> " + path.Join(rootDir, strings.TrimPrefix(header.Linkname, "files/")))
 			}
@@ -872,26 +917,39 @@ func installPackage(filename string, installationReason InstallationReason, root
 			fmt.Printf("Removing old files for package (%s)...\n", bpmpkg.PkgInfo.Name)
 		}
 		for _, entry := range fileEntries {
-			file := path.Join(rootDir, entry.Path)
-			stat, err := os.Lstat(file)
+			finalPath := path.Join(rootDir, entry.Path)
+
+			stat, err := os.Lstat(finalPath)
 			if os.IsNotExist(err) {
 				continue
-			}
-			if err != nil {
+			} else if err != nil {
 				return err
 			}
-			if len(files[entry.Path]) != 0 {
+
+			// Check if path is set to be ignored
+			if ok := slices.ContainsFunc(MainBPMConfig.IgnorePaths, func(s string) bool {
+				matched, _ := filepath.Match(s, entry.Path)
+				return matched
+			}); ok {
 				if verbose {
-					fmt.Println("Skipping path: " + file + " (Path is managed by multiple packages)")
+					fmt.Printf("Skipping path: %s (Path was ignored)\n", finalPath)
 				}
 				continue
 			}
+
+			if len(files[entry.Path]) != 0 {
+				if verbose {
+					fmt.Println("Skipping path: " + finalPath + " (Path is managed by multiple packages)")
+				}
+				continue
+			}
+
 			shouldContinue := false
 			for _, value := range bpmpkg.PkgInfo.Keep {
 				if strings.HasSuffix(value, "/") {
 					if strings.HasPrefix(entry.Path, value) || entry.Path == strings.TrimSuffix(value, "/") {
 						if verbose {
-							fmt.Println("Skipping path: " + file + " (Path is set to be kept during reinstalls/updates)")
+							fmt.Println("Skipping path: " + finalPath + " (Path is set to be kept during reinstalls/updates)")
 						}
 						shouldContinue = true
 						continue
@@ -899,7 +957,7 @@ func installPackage(filename string, installationReason InstallationReason, root
 				} else {
 					if entry.Path == value {
 						if verbose {
-							fmt.Println("Skipping path: " + file + " (Path is set to be kept during reinstalls/updates)")
+							fmt.Println("Skipping path: " + finalPath + " (Path is set to be kept during reinstalls/updates)")
 						}
 						shouldContinue = true
 						continue
@@ -911,37 +969,37 @@ func installPackage(filename string, installationReason InstallationReason, root
 			}
 			if stat.Mode()&os.ModeSymlink != 0 {
 				if verbose {
-					fmt.Println("Removing: " + file)
+					fmt.Println("Removing: " + finalPath)
 				}
-				err := os.Remove(file)
+				err := os.Remove(finalPath)
 				if err != nil {
 					return err
 				}
 				continue
 			}
 			if stat.IsDir() {
-				dir, err := os.ReadDir(file)
+				dir, err := os.ReadDir(finalPath)
 				if err != nil {
 					return err
 				}
 				if len(dir) != 0 {
 					if verbose {
-						fmt.Println("Skipping non-empty directory: " + file)
+						fmt.Println("Skipping non-empty directory: " + finalPath)
 					}
 					continue
 				}
 				if verbose {
-					fmt.Println("Removing: " + file)
+					fmt.Println("Removing: " + finalPath)
 				}
-				err = os.Remove(file)
+				err = os.Remove(finalPath)
 				if err != nil {
 					return err
 				}
 			} else {
 				if verbose {
-					fmt.Println("Removing: " + file)
+					fmt.Println("Removing: " + finalPath)
 				}
-				err := os.Remove(file)
+				err := os.Remove(finalPath)
 				if err != nil {
 					return err
 				}
@@ -1111,31 +1169,44 @@ func removePackage(pkg string, verbose bool, rootDir string) error {
 	// Removing package files
 	for _, entry := range fileEntries {
 		bar.Add64(entry.SizeInBytes)
-		file := path.Join(rootDir, entry.Path)
-		lstat, err := os.Lstat(file)
+
+		finalPath := path.Join(rootDir, entry.Path)
+
+		lstat, err := os.Lstat(finalPath)
 		if os.IsNotExist(err) {
 			continue
-		}
-		if err != nil {
+		} else if err != nil {
 			return err
 		}
+
+		// Check if path is set to be ignored
+		if ok := slices.ContainsFunc(MainBPMConfig.IgnorePaths, func(s string) bool {
+			matched, _ := filepath.Match(s, entry.Path)
+			return matched
+		}); ok {
+			if verbose {
+				fmt.Printf("Skipping path: %s (Path was ignored)\n", finalPath)
+			}
+			continue
+		}
+
 		if len(files[entry.Path]) != 0 {
 			if verbose {
-				fmt.Println("Skipping path: " + file + "(Path is managed by multiple packages)")
+				fmt.Println("Skipping path: " + finalPath + "(Path is managed by multiple packages)")
 			}
 			continue
 		}
 		if lstat.Mode()&os.ModeSymlink != 0 {
 			if verbose {
-				fmt.Println("Removing: " + file)
+				fmt.Println("Removing: " + finalPath)
 			}
-			err := os.Remove(file)
+			err := os.Remove(finalPath)
 			if err != nil {
 				return err
 			}
 			continue
 		}
-		stat, err := os.Stat(file)
+		stat, err := os.Stat(finalPath)
 		if os.IsNotExist(err) {
 			continue
 		}
@@ -1143,28 +1214,28 @@ func removePackage(pkg string, verbose bool, rootDir string) error {
 			return err
 		}
 		if stat.IsDir() {
-			dir, err := os.ReadDir(file)
+			dir, err := os.ReadDir(finalPath)
 			if err != nil {
 				return err
 			}
 			if len(dir) != 0 {
 				if verbose {
-					fmt.Println("Skipping non-empty directory: " + file)
+					fmt.Println("Skipping non-empty directory: " + finalPath)
 				}
 				continue
 			}
 			if verbose {
-				fmt.Println("Removing: " + file)
+				fmt.Println("Removing: " + finalPath)
 			}
-			err = os.Remove(file)
+			err = os.Remove(finalPath)
 			if err != nil {
 				return err
 			}
 		} else {
 			if verbose {
-				fmt.Println("Removing: " + file)
+				fmt.Println("Removing: " + finalPath)
 			}
-			err := os.Remove(file)
+			err := os.Remove(finalPath)
 			if err != nil {
 				return err
 			}
