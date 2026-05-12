@@ -51,7 +51,7 @@ func InstallPackages(rootDir string, forceInstallationReason InstallationReason,
 						}
 					}
 
-					operation.AppendAction(&InstallPackageAction{
+					operation.Actions = append(operation.Actions, &InstallPackageAction{
 						File:                  pkg,
 						InstallationReason:    installationReason,
 						BpmPackage:            bpmpkg,
@@ -75,7 +75,7 @@ func InstallPackages(rootDir string, forceInstallationReason InstallationReason,
 				}
 			}
 
-			operation.AppendAction(&InstallPackageAction{
+			operation.Actions = append(operation.Actions, &InstallPackageAction{
 				File:               pkg,
 				InstallationReason: installationReason,
 				BpmPackage:         bpmpkg,
@@ -120,7 +120,7 @@ func InstallPackages(rootDir string, forceInstallationReason InstallationReason,
 				}
 			}
 
-			operation.AppendAction(&FetchPackageAction{
+			operation.Actions = append(operation.Actions, &FetchPackageAction{
 				InstallationReason: installationReason,
 				DatabaseEntry:      entry,
 			})
@@ -206,7 +206,7 @@ func RemovePackages(rootDir string, force, cleanupDependencies bool, packages ..
 		if bpmpkg == nil {
 			continue
 		}
-		operation.AppendAction(&RemovePackageAction{BpmPackage: bpmpkg})
+		operation.Actions = append(operation.Actions, &RemovePackageAction{BpmPackage: bpmpkg})
 	}
 
 	// Do package cleanup
@@ -421,7 +421,7 @@ func UpdatePackages(rootDir string, syncDatabase, allowDowngrades, forceInstalla
 		} else {
 			comparison := CompareVersions(entry.Info.GetFullVersion(), installedInfo.GetFullVersion())
 			if (!allowDowngrades && comparison > 0) || (allowDowngrades && comparison != 0) {
-				operation.AppendAction(&FetchPackageAction{
+				operation.Actions = append(operation.Actions, &FetchPackageAction{
 					InstallationReason: GetPackage(pkg, rootDir).LocalInfo.GetInstallationReason(),
 					DatabaseEntry:      entry,
 				})
@@ -452,7 +452,7 @@ func UpdatePackages(rootDir string, syncDatabase, allowDowngrades, forceInstalla
 				}
 
 				// Skip dependency if action already exists
-				if operation.ActionsContainPackage(dependEntry.Info.Name) {
+				if ActionSliceIndex(operation.Actions, dependEntry.Info.Name) != -1 {
 					continue
 				}
 
@@ -468,7 +468,7 @@ func UpdatePackages(rootDir string, syncDatabase, allowDowngrades, forceInstalla
 				}
 
 				// Fetch dependency
-				operation.AppendAction(&FetchPackageAction{
+				operation.Actions = append(operation.Actions, &FetchPackageAction{
 					InstallationReason: InstallationReasonDependency,
 					DatabaseEntry:      dependEntry,
 				})
@@ -510,7 +510,7 @@ func UpdatePackages(rootDir string, syncDatabase, allowDowngrades, forceInstalla
 				}
 
 				// Fetch dependency
-				operation.AppendAction(&FetchPackageAction{
+				operation.Actions = append(operation.Actions, &FetchPackageAction{
 					InstallationReason: InstallationReasonDependency,
 					DatabaseEntry:      dependEntry,
 				})

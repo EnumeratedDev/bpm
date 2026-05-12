@@ -23,54 +23,6 @@ type BPMOperation struct {
 	hasFetchedPackages bool
 }
 
-func (operation *BPMOperation) ActionsContainPackage(pkg string) bool {
-	for _, action := range operation.Actions {
-		if action.GetActionType() == "install" {
-			if action.(*InstallPackageAction).BpmPackage.PkgInfo.Name == pkg {
-				return true
-			}
-		} else if action.GetActionType() == "fetch" {
-			if action.(*FetchPackageAction).DatabaseEntry.Info.Name == pkg {
-				return true
-			}
-		} else if action.GetActionType() == "remove" {
-			if action.(*RemovePackageAction).BpmPackage.PkgInfo.Name == pkg {
-				return true
-			}
-		}
-	}
-	return false
-}
-
-func (operation *BPMOperation) AppendAction(action OperationAction) {
-	operation.InsertActionAt(len(operation.Actions), action)
-}
-
-func (operation *BPMOperation) InsertActionAt(index int, action OperationAction) {
-	if len(operation.Actions) == index { // nil or empty slice or after last element
-		operation.Actions = append(operation.Actions, action)
-	} else {
-		operation.Actions = append(operation.Actions[:index+1], operation.Actions[index:]...) // index < len(a)
-		operation.Actions[index] = action
-	}
-}
-
-func (operation *BPMOperation) RemoveAction(pkg, actionType string) {
-	operation.Actions = slices.DeleteFunc(operation.Actions, func(a OperationAction) bool {
-		if a.GetActionType() != actionType {
-			return false
-		}
-		if a.GetActionType() == "install" {
-			return a.(*InstallPackageAction).BpmPackage.PkgInfo.Name == pkg
-		} else if a.GetActionType() == "fetch" {
-			return a.(*FetchPackageAction).DatabaseEntry.Info.Name == pkg
-		} else if a.GetActionType() == "remove" {
-			return a.(*RemovePackageAction).BpmPackage.PkgInfo.Name == pkg
-		}
-		return false
-	})
-}
-
 func (operation *BPMOperation) GetTotalDownloadSize() int64 {
 	var ret int64 = 0
 	for _, action := range operation.Actions {
@@ -136,8 +88,8 @@ func (operation *BPMOperation) ResolveDependencies(installRuntimeDepends bool) {
 	}
 
 	// Discover all dependencies
-	pos := 0
-	for _, value := range slices.Clone(operation.Actions) {
+	newActions := make([]OperationAction, 0)
+	for _, value := range operation.Actions {
 		var pkgInfo *PackageInfo
 		if value.GetActionType() == "install" {
 			action := value.(*InstallPackageAction)
@@ -156,11 +108,12 @@ func (operation *BPMOperation) ResolveDependencies(installRuntimeDepends bool) {
 		operation.UnresolvedDepends = removeDuplicates(operation.UnresolvedDepends)
 
 		for _, resolvedPkg := range resolved {
-			if !operation.ActionsContainPackage(resolvedPkg.DatabaseEntry.Info.Name) && resolvedPkg.DatabaseEntry.Info.Name != pkgInfo.Name {
-				operation.InsertActionAt(pos, &FetchPackageAction{
+			if ActionSliceIndex(newActions, resolvedPkg.DatabaseEntry.Info.Name) == -1 { // Dependency not in actions slice
+				var action OperationAction = &FetchPackageAction{
 					InstallationReason: resolvedPkg.InstallationReason,
 					DatabaseEntry:      resolvedPkg.DatabaseEntry,
-				})
+				}
+				newActions = append(newActions, action)
 
 				for _, vpkg := range resolvedPkg.DatabaseEntry.Info.Provides {
 					if _, ok := resolvedVirtualPackages[vpkg]; !ok {
@@ -168,12 +121,19 @@ func (operation *BPMOperation) ResolveDependencies(installRuntimeDepends bool) {
 					}
 				}
 
-				pos++
+				// Check if can move original action
+				if i := ActionSliceIndex(operation.Actions, resolvedPkg.DatabaseEntry.Info.Name); i != -1 {
+					newActions[len(newActions)-1] = operation.Actions[i]
+				}
 			}
 		}
 
-		pos++
+		if ActionSliceIndex(newActions, pkgInfo.Name) == -1 {
+			newActions = append(newActions, value)
+		}
 	}
+
+	operation.Actions = newActions
 }
 
 func (operation *BPMOperation) Cleanup(cleanupMakeDepends bool) error {
@@ -289,10 +249,11 @@ func (operation *BPMOperation) ReplaceObsoletePackages() {
 		}
 
 		for _, r := range pkgInfo.Replaces {
-			if bpmpkg := GetPackage(r, operation.RootDir); bpmpkg != nil && !operation.ActionsContainPackage(bpmpkg.PkgInfo.Name) {
-				operation.InsertActionAt(0, &RemovePackageAction{
+			if bpmpkg := GetPackage(r, operation.RootDir); bpmpkg != nil && ActionSliceIndex(operation.Actions, bpmpkg.PkgInfo.Name) == -1 {
+				var action OperationAction = &RemovePackageAction{
 					BpmPackage: bpmpkg,
-				})
+				}
+				operation.Actions = slices.Insert(operation.Actions, 0, action)
 			}
 		}
 	}
@@ -831,4 +792,42 @@ type RemovePackageAction struct {
 
 func (action *RemovePackageAction) GetActionType() string {
 	return "remove"
+}
+
+func ActionSliceIndex(actions []OperationAction, pkg string) int {
+	for i, action := range actions {
+		if action.GetActionType() == "install" {
+			if action.(*InstallPackageAction).BpmPackage.PkgInfo.Name == pkg {
+				return i
+			}
+		} else if action.GetActionType() == "fetch" {
+			if action.(*FetchPackageAction).DatabaseEntry.Info.Name == pkg {
+				return i
+			}
+		} else if action.GetActionType() == "remove" {
+			if action.(*RemovePackageAction).BpmPackage.PkgInfo.Name == pkg {
+				return i
+			}
+		}
+	}
+
+	return -1
+}
+
+func ActionSliceRemove(actions []OperationAction, pkg, actionType string) []OperationAction {
+	actions = slices.DeleteFunc(actions, func(a OperationAction) bool {
+		if a.GetActionType() != actionType {
+			return false
+		}
+		if a.GetActionType() == "install" {
+			return a.(*InstallPackageAction).BpmPackage.PkgInfo.Name == pkg
+		} else if a.GetActionType() == "fetch" {
+			return a.(*FetchPackageAction).DatabaseEntry.Info.Name == pkg
+		} else if a.GetActionType() == "remove" {
+			return a.(*RemovePackageAction).BpmPackage.PkgInfo.Name == pkg
+		}
+		return false
+	})
+
+	return actions
 }
