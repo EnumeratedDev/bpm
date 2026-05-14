@@ -240,17 +240,24 @@ func showPackageInfo() {
 
 	for n, pkg := range packages {
 		if showDatabaseInfo {
-			var err error
-			var entry *bpmlib.BPMDatabaseEntry
-			entry, _, err = bpmlib.GetDatabaseEntry(pkg)
+			// Split package name and required version
+			pkgName, _, _ := bpmlib.SplitPkgNameAndVersion(pkg)
+
+			entry, _, err := bpmlib.GetDatabaseEntry(pkgName)
 			if err != nil {
-				if providers := bpmlib.GetDatabaseVirtualPackageEntry(pkg); len(providers) > 0 {
+				if providers := bpmlib.GetDatabaseVirtualPackageEntry(pkgName); len(providers) > 0 {
 					entry = providers[0]
 				} else {
 					log.Printf("Error: could not find package (%s) in any database\n", pkg)
 					exitCode = 1
 					return
 				}
+			}
+
+			if !bpmlib.EvaluateDependency(pkg, entry.Info.Version) {
+				log.Printf("Error: could not find package (%s) in any database\n", pkg)
+				exitCode = 1
+				continue
 			}
 
 			if n != 0 {
@@ -272,17 +279,28 @@ func showPackageInfo() {
 			}
 			isFile = true
 		} else {
-			if providers := bpmlib.GetVirtualPackageInfo(pkg, rootDir); len(providers) > 0 {
+			// Split package name and required version
+			pkgName, _, _ := bpmlib.SplitPkgNameAndVersion(pkg)
+
+			if providers := bpmlib.GetVirtualPackageInfo(pkgName, rootDir); len(providers) > 0 {
 				bpmpkg = bpmlib.GetPackage(providers[0].Name, rootDir)
 			} else {
-				bpmpkg = bpmlib.GetPackage(pkg, rootDir)
+				bpmpkg = bpmlib.GetPackage(pkgName, rootDir)
 			}
 		}
+
 		if bpmpkg == nil {
 			log.Printf("Error: package (%s) is not installed\n", pkg)
 			exitCode = 1
 			return
 		}
+
+		if !bpmlib.EvaluateDependency(pkg, bpmpkg.PkgInfo.Version) {
+			log.Printf("Error: package (%s) is not installed\n", pkg)
+			exitCode = 1
+			return
+		}
+
 		if n != 0 {
 			fmt.Println()
 		}
