@@ -649,10 +649,16 @@ func (operation *BPMOperation) GetModifiedFiles() {
 			installAction := action.(*InstallPackageAction)
 			isUpgrade := IsPackageInstalled(installAction.BpmPackage.PkgInfo.Name, operation.RootDir)
 
-			for _, pkgFile := range installAction.BpmPackage.PkgFiles {
-				operation.ModifiedFiles[pkgFile.Path] = "install"
-				if isUpgrade {
+			if isUpgrade {
+				for _, pkgFile := range installAction.BpmPackage.PkgFiles {
 					operation.ModifiedFiles[pkgFile.Path] = "upgrade"
+				}
+				for _, pkgFile := range GetPackage(installAction.BpmPackage.PkgInfo.Name, operation.RootDir).PkgFiles {
+					operation.ModifiedFiles[pkgFile.Path] = "upgrade"
+				}
+			} else {
+				for _, pkgFile := range installAction.BpmPackage.PkgFiles {
+					operation.ModifiedFiles[pkgFile.Path] = "install"
 				}
 			}
 		}
