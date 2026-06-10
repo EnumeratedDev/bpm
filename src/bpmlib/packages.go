@@ -163,7 +163,7 @@ func GetPackageInfoRaw(filename string) (string, error) {
 		if err != nil {
 			return "", err
 		}
-		if header.Name == "pkg.info" {
+		if header.Name == "info.yml" {
 			bs, _ := io.ReadAll(tr)
 			err := file.Close()
 			if err != nil {
@@ -172,7 +172,7 @@ func GetPackageInfoRaw(filename string) (string, error) {
 			return string(bs), nil
 		}
 	}
-	return "", errors.New("pkg.info not found in archive")
+	return "", errors.New("info.yml not found in archive")
 }
 
 func ReadPackage(filename string) (*BPMPackage, error) {
@@ -198,13 +198,13 @@ func ReadPackage(filename string) (*BPMPackage, error) {
 		if err != nil {
 			return nil, err
 		}
-		if header.Name == "pkg.info" {
+		if header.Name == "info.yml" {
 			bs, _ := io.ReadAll(tr)
 			pkgInfo, err = ReadPackageInfo(string(bs))
 			if err != nil {
 				return nil, err
 			}
-		} else if header.Name == "pkg.files" {
+		} else if header.Name == "files.txt" {
 			bs, _ := io.ReadAll(tr)
 			for _, line := range strings.Split(string(bs), "\n") {
 				if strings.TrimSpace(line) == "" {
@@ -212,7 +212,7 @@ func ReadPackage(filename string) (*BPMPackage, error) {
 				}
 				stringEntry := strings.Split(strings.TrimSpace(line), " ")
 				if len(stringEntry) < 5 {
-					return nil, errors.New("pkg.files is not formatted correctly")
+					return nil, errors.New("files.txt is not formatted correctly")
 				}
 				octalPerms, err := strconv.ParseUint(stringEntry[len(stringEntry)-4], 8, 32)
 				if err != nil {
@@ -242,7 +242,7 @@ func ReadPackage(filename string) (*BPMPackage, error) {
 	}
 
 	if pkgInfo == nil {
-		return nil, errors.New("pkg.info not found in archive")
+		return nil, errors.New("info.yml not found in archive")
 	}
 	return &BPMPackage{
 		PkgInfo:  pkgInfo,
@@ -1034,12 +1034,12 @@ func installPackage(filename string, installationReason InstallationReason, root
 		return err
 	}
 
-	f, err := os.Create(path.Join(pkgDir, "files"))
+	f, err := os.Create(path.Join(pkgDir, "files.txt"))
 	if err != nil {
 		return err
 	}
 
-	tarballFile, err := readTarballFile(filename, "pkg.files")
+	tarballFile, err := readTarballFile(filename, "files.txt")
 	if err != nil {
 		return err
 	}
@@ -1050,7 +1050,7 @@ func installPackage(filename string, installationReason InstallationReason, root
 		return err
 	}
 
-	f, err = os.Create(path.Join(pkgDir, "info"))
+	f, err = os.Create(path.Join(pkgDir, "info.yml"))
 	if err != nil {
 		return err
 	}

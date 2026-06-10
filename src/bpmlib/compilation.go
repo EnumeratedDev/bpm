@@ -96,8 +96,8 @@ func CompileSourcePackage(archiveFilename, outputDirectory string, compilationJo
 		return nil, err
 	}
 
-	// Extract source.sh file
-	err = extractTarballFile(archiveFilename, "source.sh", tempDirectory, uid, gid)
+	// Extract recipe.sh file
+	err = extractTarballFile(archiveFilename, "recipe.sh", tempDirectory, uid, gid)
 	if err != nil {
 		return nil, err
 	}
@@ -166,10 +166,10 @@ func CompileSourcePackage(archiveFilename, outputDirectory string, compilationJo
 	env = append(env, "CMAKE_BUILD_PARALLEL_LEVEL="+strconv.Itoa(compilationJobs))
 	env = append(env, "CARGO_BUILD_JOBS="+strconv.Itoa(compilationJobs))
 
-	// Execute prepare and build functions in source.sh script
+	// Execute prepare and build functions in recipe.sh script
 	cmd := exec.Command("bash", "-c",
-		"set -a\n"+ // Source and export functions and variables in source.sh script
-			". \"${BPM_WORKDIR}\"/source.sh\n"+
+		"set -a\n"+ // Source and export functions and variables in recipe.sh script
+			". \"${BPM_WORKDIR}\"/recipe.sh\n"+
 			"set +a\n"+
 			"[[ $(type -t prepare) == \"function\" ]] && { echo \"Running prepare() function...\"; bash -e -c 'cd \"$BPM_WORKDIR\" && prepare' || exit 1; }\n"+ // Run prepare() function if it exists
 			"[[ $(type -t build) == \"function\" ]] && { echo \"Running build() function...\"; bash -e -c 'cd \"$BPM_SOURCE\" && build'  || exit 1; }\n"+ // Run build() function if it exists
@@ -187,11 +187,11 @@ func CompileSourcePackage(archiveFilename, outputDirectory string, compilationJo
 		return nil, err
 	}
 
-	// Execute check function in source.sh script if not skipping checks
+	// Execute check function in recipe.sh script if not skipping checks
 	if !skipChecks {
 		cmd = exec.Command("bash", "-c",
-			"set -a\n"+ // Source and export functions and variables in source.sh script
-				". \"${BPM_WORKDIR}\"/source.sh\n"+
+			"set -a\n"+ // Source and export functions and variables in recipe.sh script
+				". \"${BPM_WORKDIR}\"/recipe.sh\n"+
 				"set +a\n"+
 				"[[ $(type -t check) == \"function\" ]] && { echo \"Running check() function...\"; bash -e -c 'cd \"$BPM_SOURCE\" && check' || exit 1; }\n"+ // Run check() function if it exists
 				"exit 0")
@@ -238,10 +238,10 @@ func CompileSourcePackage(archiveFilename, outputDirectory string, compilationJo
 			packageFunctionName = "package_" + pkg.Name
 		}
 
-		// Execute package function in source.sh script and generate package file list
+		// Execute package function in recipe.sh script and generate package file list
 		cmd = exec.Command("bash", "-c",
-			"set -a\n"+ // Source and export functions and variables in source.sh script
-				". \"${BPM_WORKDIR}\"/source.sh\n"+
+			"set -a\n"+ // Source and export functions and variables in recipe.sh script
+				". \"${BPM_WORKDIR}\"/recipe.sh\n"+
 				"set +a\n"+
 				"echo \"Running "+packageFunctionName+"() function...\"\n"+
 				"( cd \"$BPM_SOURCE\" && fakeroot -s \"$BPM_WORKDIR\"/fakeroot_file bash -e -c '"+packageFunctionName+"' ) || exit 1\n") // Run package() function
@@ -329,7 +329,7 @@ func CompileSourcePackage(archiveFilename, outputDirectory string, compilationJo
 
 		// Generate package file list
 		fmt.Println("Generating package file list...")
-		cmd = exec.Command("bash", "-c", "fakeroot -i \"$BPM_WORKDIR\"/fakeroot_file find \"$BPM_OUTPUT\" -mindepth 1 -printf \"%P %#m %U %G %s\\n\" > \"$BPM_WORKDIR\"/pkg.files")
+		cmd = exec.Command("bash", "-c", "fakeroot -i \"$BPM_WORKDIR\"/fakeroot_file find \"$BPM_OUTPUT\" -mindepth 1 -printf \"%P %#m %U %G %s\\n\" > \"$BPM_WORKDIR\"/files.txt")
 		cmd.Dir = tempDirectory
 		cmd.Stdout = os.Stdout
 		cmd.Stderr = os.Stderr
@@ -345,7 +345,15 @@ func CompileSourcePackage(archiveFilename, outputDirectory string, compilationJo
 
 		// Create gzip-compressed archive for the package files
 		fmt.Println("Generating compressed file archive...")
-		cmd = exec.Command("bash", "-c", fmt.Sprintf("find %s -printf \"%%P\\n\" | fakeroot -i %s/fakeroot_file tar -czf files.tar.gz --no-recursion -C %s -T -", "output_"+pkg.Name, tempDirectory, "output_"+pkg.Name))
+		cmd = exec.Command("bash", "-c", fmt.Sprintf(`find %s -printf "%%P\n" | fakeroot -i %s/fakeroot_file tar czf files.tar.gz \
+			--sort=name \
+			--pax-option=exthdr.name=%%d/PaxHeaders/%%f,delete=atime,delete=ctime \
+			--mtime="UTC 1970-01-01" \
+			--numeric-owner \
+			--no-recursion \
+			-C %s \
+			-T -`,
+			"output_"+pkg.Name, tempDirectory, "output_"+pkg.Name))
 		cmd.Dir = tempDirectory
 		cmd.Stdout = os.Stdout
 		cmd.Stderr = os.Stderr
@@ -380,26 +388,31 @@ func CompileSourcePackage(archiveFilename, outputDirectory string, compilationJo
 		}
 		pkgInfoBytes = append(pkgInfoBytes, '\n')
 
-		// Create pkg.info file
-		err = os.WriteFile(path.Join(tempDirectory, "pkg.info"), pkgInfoBytes, 0644)
+		// Create info.yml file
+		err = os.WriteFile(path.Join(tempDirectory, "info.yml"), pkgInfoBytes, 0644)
 		if err != nil {
 			return nil, err
 		}
 
-		// Change pkg.info file owner
-		err = os.Chown(path.Join(tempDirectory, "pkg.info"), uid, gid)
+		// Change info.yml file owner
+		err = os.Chown(path.Join(tempDirectory, "info.yml"), uid, gid)
 		if err != nil {
 			return nil, err
 		}
 
 		// Get files to include in BPM archive
 		bpmArchiveFiles := make([]string, 0)
-		bpmArchiveFiles = append(bpmArchiveFiles, "pkg.info", "pkg.files", "files.tar.gz") // Base files
+		bpmArchiveFiles = append(bpmArchiveFiles, "info.yml", "files.txt", "files.tar.gz") // Base files
 		bpmArchiveFiles = append(bpmArchiveFiles, packageScripts...)                       // Package scripts
 
 		// Create final BPM archive
 		fmt.Println("Generating final BPM archive...")
-		cmd = exec.Command("bash", "-c", "tar -cf final-archive.bpm --owner=0 --group=0 -C \"$BPM_WORKDIR\" "+strings.Join(bpmArchiveFiles, " "))
+		cmd = exec.Command("tar", "cf", "final-archive.bpm",
+			"--sort=name",
+			"--pax-option=exthdr.name=%d/PaxHeaders/%f,delete=atime,delete=ctime",
+			"--mtime=UTC 1970-01-01",
+			"--owner=0", "--group=0", "--numeric-owner")
+		cmd.Args = append(cmd.Args, bpmArchiveFiles...)
 		cmd.Dir = tempDirectory
 		cmd.Stdout = os.Stdout
 		cmd.Stderr = os.Stderr
@@ -417,8 +430,8 @@ func CompileSourcePackage(archiveFilename, outputDirectory string, compilationJo
 			return nil, fmt.Errorf("BPM archive could not be created: %s", err)
 		}
 
-		// Remove pkg.info file
-		err = os.Remove(path.Join(tempDirectory, "pkg.info"))
+		// Remove info.yml file
+		err = os.Remove(path.Join(tempDirectory, "info.yml"))
 		if err != nil {
 			return nil, err
 		}
@@ -725,8 +738,8 @@ func showPackageFiles(archiveFilename string) error {
 		return nil
 	}
 
-	// Print pkg.info content
-	err = printTarballContent("pkg.info")
+	// Print info.yml content
+	err = printTarballContent("info.yml")
 	if err != nil {
 		return err
 	}
@@ -748,8 +761,8 @@ func showPackageFiles(archiveFilename string) error {
 		}
 	}
 
-	// Print source.sh content
-	err = printTarballContent("source.sh")
+	// Print recipe.sh content
+	err = printTarballContent("recipe.sh")
 	if err != nil {
 		return err
 	}

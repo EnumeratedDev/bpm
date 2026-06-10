@@ -92,7 +92,7 @@ func main() {
 		currentFlagSet.String("installation-reason", "", "Specify the installation reason to use for the specified packages")
 		currentFlagSet.BoolP("reinstall", "r", false, "Reinstall the specified packages")
 		currentFlagSet.IntP("jobs", "j", bpmlib.CompilationBPMConfig.CompilationJobs, "Set the amount of concurrent processes to use for source package compilation")
-		currentFlagSet.BoolP("skip-checks", "s", false, "Skip the check function in source.sh scripts")
+		currentFlagSet.BoolP("skip-checks", "s", false, "Skip the check function in recipe.sh scripts")
 		setupFlagsAndHelp(currentFlagSet, fmt.Sprintf("bpm %s <options>", subcommand), "Install the specified packages", os.Args[2:])
 
 		installPackages()
@@ -141,7 +141,7 @@ func main() {
 		currentFlagSet.BoolP("yes", "y", false, "Enter 'yes' in all prompts")
 		currentFlagSet.BoolP("no-sync", "n", false, "Do not sync databases")
 		currentFlagSet.Bool("allow-downgrades", false, "Allow package downgrades")
-		currentFlagSet.BoolP("skip-checks", "s", false, "Skip the check function in source.sh scripts")
+		currentFlagSet.BoolP("skip-checks", "s", false, "Skip the check function in recipe.sh scripts")
 		currentFlagSet.IntP("jobs", "j", bpmlib.CompilationBPMConfig.CompilationJobs, "Set the amount of concurrent processes to use for source package compilation")
 		setupFlagsAndHelp(currentFlagSet, fmt.Sprintf("bpm %s <options>", subcommand), "Update installed packages", os.Args[2:])
 
@@ -161,7 +161,7 @@ func main() {
 		currentFlagSet.BoolP("force", "f", false, "Bypass warnings during package compilation")
 		currentFlagSet.BoolP("yes", "y", false, "Enter 'yes' in all prompts")
 		currentFlagSet.BoolP("depends", "d", false, "Install required dependencies for package compilation")
-		currentFlagSet.BoolP("skip-checks", "s", false, "Skip the check function in source.sh scripts")
+		currentFlagSet.BoolP("skip-checks", "s", false, "Skip the check function in recipe.sh scripts")
 		currentFlagSet.BoolP("keep", "k", false, "Keep compilation files after successful package compilation")
 		currentFlagSet.BoolP("output-directory", "o", false, "Set the output directory for the binary packages")
 		currentFlagSet.Int("output-fd", -1, "Set the file descriptor output package names will be written to")

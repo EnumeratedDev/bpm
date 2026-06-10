@@ -63,7 +63,7 @@ func InitializeLocalPackageInformation(rootDir string) (err error) {
 		}
 
 		// Read package info
-		infoData, err := os.ReadFile(path.Join(installedDir, item.Name(), "info"))
+		infoData, err := os.ReadFile(path.Join(installedDir, item.Name(), "info.yml"))
 		if err != nil {
 			return err
 		}
@@ -220,7 +220,7 @@ func getPackageFiles(pkg, rootDir string) []*PackageFileEntry {
 	var pkgFiles []*PackageFileEntry
 	installedDir := path.Join(rootDir, "var/lib/bpm/installed/")
 	pkgDir := path.Join(installedDir, pkg)
-	files := path.Join(pkgDir, "files")
+	files := path.Join(pkgDir, "files.txt")
 	if _, err := os.Stat(installedDir); os.IsNotExist(err) {
 		return nil
 	}
@@ -280,7 +280,7 @@ func getPackageLocalInfo(pkg, rootDir string) PackageLocalInfo {
 
 	installedDir := path.Join(rootDir, "var/lib/bpm/installed/")
 	pkgDir := path.Join(installedDir, pkg)
-	localInfoFile := path.Join(path.Join(pkgDir, "local"))
+	localInfoFile := path.Join(path.Join(pkgDir, "local.yml"))
 
 	if _, err := os.Stat(localInfoFile); os.IsNotExist(err) {
 		return localInfo
@@ -304,7 +304,7 @@ func SetPackageLocalInfo(pkg string, localInfo PackageLocalInfo, rootDir string)
 	installedDir := path.Join(rootDir, "var/lib/bpm/installed/")
 	pkgDir := path.Join(installedDir, pkg)
 
-	localFile, err := os.OpenFile(path.Join(pkgDir, "local"), os.O_WRONLY|os.O_CREATE, 0644)
+	localFile, err := os.OpenFile(path.Join(pkgDir, "local.yml"), os.O_WRONLY|os.O_CREATE, 0644)
 	if err != nil {
 		return err
 	}
@@ -332,10 +332,35 @@ func UpgradePersistentData(rootDir string) error {
 		for _, entry := range dirEntries {
 			pkgDir := path.Join(persistentDataDir, "installed", entry.Name())
 
+			// Rename 'info' file to 'info.yml'
+			if _, err := os.Stat(path.Join(pkgDir, "info")); err == nil {
+				fmt.Printf("Moving 'info' to 'info.yml' for package (%s)\n", entry.Name())
+				err := os.Rename(path.Join(pkgDir, "info"), path.Join(pkgDir, "info.yml"))
+				if err != nil {
+					return err
+				}
+			}
+
+			// Rename 'files' file to 'files.txt'
+			if _, err := os.Stat(path.Join(pkgDir, "files")); err == nil {
+				fmt.Printf("Moving 'files' to 'files.txt' for package (%s)\n", entry.Name())
+				err := os.Rename(path.Join(pkgDir, "files"), path.Join(pkgDir, "files.txt"))
+				if err != nil {
+					return err
+				}
+			}
+
+			// Rename 'local' file to 'local.yml'
+			if _, err := os.Stat(path.Join(pkgDir, "local")); err == nil {
+				fmt.Printf("Moving 'local' to 'local.yml' for package (%s)\n", entry.Name())
+				err := os.Rename(path.Join(pkgDir, "local"), path.Join(pkgDir, "local.yml"))
+				if err != nil {
+					return err
+				}
+			}
+
 			// Generate default local package information file
-			if _, err := os.Stat(path.Join(pkgDir, "local")); err != nil && !os.IsNotExist(err) {
-				return err
-			} else if os.IsNotExist(err) {
+			if _, err := os.Stat(path.Join(pkgDir, "local.yml")); os.IsNotExist(err) {
 				fmt.Printf("Generating local package information for package (%s)\n", entry.Name())
 
 				out, err := yaml.Marshal(PackageLocalInfo{
@@ -347,10 +372,12 @@ func UpgradePersistentData(rootDir string) error {
 					return err
 				}
 
-				err = os.WriteFile(path.Join(pkgDir, "local"), out, 0644)
+				err = os.WriteFile(path.Join(pkgDir, "local.yml"), out, 0644)
 				if err != nil {
 					return err
 				}
+			} else if err != nil {
+				return err
 			}
 
 			// Move installation reason to local package information file
@@ -359,7 +386,7 @@ func UpgradePersistentData(rootDir string) error {
 			} else if err == nil {
 				fmt.Printf("Moving installation reason to local package information for package (%s)\n", entry.Name())
 
-				data, err := os.ReadFile(path.Join(pkgDir, "local"))
+				data, err := os.ReadFile(path.Join(pkgDir, "local.yml"))
 				if err != nil {
 					return err
 				}
@@ -377,7 +404,7 @@ func UpgradePersistentData(rootDir string) error {
 					return err
 				}
 
-				err = os.WriteFile(path.Join(pkgDir, "local"), out, 0644)
+				err = os.WriteFile(path.Join(pkgDir, "local.yml"), out, 0644)
 				if err != nil {
 					return err
 				}
